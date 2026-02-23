@@ -796,16 +796,13 @@ label {
 .w-100 { width: 100%; }
 .fw-600 { font-weight: 600; }
 .fw-700 { font-weight: 700; }
+.fw-bold { font-weight: 700; }
 .fs-sm  { font-size: .82rem; }
 .rounded { border-radius: 8px; }
 .border  { border: 1px solid var(--wm-border); }
 
 /* ALTCHA widget theming */
-altcha-widget {
-    --altcha-border-radius: 7px;
-    --altcha-border-width: 1px;
-    --altcha-color-border: var(--wm-input-border);
-    --altcha-color-border-focus: var(--wm-input-focus);
-    --altcha-color-text: var(--wm-text);
-    --altcha-color-base: var(--wm-input-bg);
+.altcha-box {
+    background: var(--wm-input-bg);
+    border-color: var(--wm-input-border);
 }

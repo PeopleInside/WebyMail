@@ -105,6 +105,10 @@ $action = $_GET['action'] ?? 'inbox';
 
 // ── ALTCHA challenge endpoint (GET, public) ───────────────────────────────────
 if ($action === 'altcha_challenge') {
+    if (!Config::get('altcha_enabled', true)) {
+        http_response_code(404);
+        exit;
+    }
     $altcha    = new Altcha();
     $challenge = $altcha->createChallenge();
     header('Content-Type: application/json');
@@ -122,6 +126,7 @@ if ($action === 'login') {
 
     $error   = null;
     $needs2fa = isset($_SESSION['pending_2fa']) && time() < ($_SESSION['pending_2fa']['expires'] ?? 0);
+    $altchaEnabled = (bool) Config::get('altcha_enabled', true);
 
     // Pick up any flash error (e.g. from a failed 2FA attempt)
     $flashMsg = flashGet();
@@ -130,11 +135,17 @@ if ($action === 'login') {
     }
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Verify ALTCHA
-        $altcha  = new Altcha();
-        $payload = $_POST['altcha'] ?? '';
-        if (!$altcha->verify($payload)) {
-            $error = 'Security check failed. Please try again.';
-        } else {
+        $captchaCheckPassed  = !$altchaEnabled;
+        if ($altchaEnabled) {
+            $altcha  = new Altcha();
+            $payload = $_POST['altcha'] ?? '';
+            if ($altcha->verify($payload)) {
+                $captchaCheckPassed = true;
+            } else {
+                $error = 'Security check failed. Please try again.';
+            }
+        }
+        if ($captchaCheckPassed && $error === null) {
             $auth     = new Auth();
             $host     = trim($_POST['imap_host'] ?? Config::get('imap_host', ''));
             $port     = (int) ($_POST['imap_port'] ?? Config::get('imap_port', 993));
@@ -169,8 +180,13 @@ if ($action === 'login') {
         }
     }
 
-    $challenge = (new Altcha())->createChallenge();
-    render('login', ['error' => $error, 'needs2fa' => $needs2fa, 'challenge' => $challenge], false);
+    $challenge = $altchaEnabled ? (new Altcha())->createChallenge() : null;
+    render('login', [
+        'error' => $error,
+        'needs2fa' => $needs2fa,
+        'challenge' => $challenge,
+        'altchaEnabled' => $altchaEnabled,
+    ], false);
     exit;
 }
 

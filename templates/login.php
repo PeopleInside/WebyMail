@@ -1,7 +1,8 @@
 <?php
-/** @var array $challenge  ALTCHA challenge payload */
+/** @var array|null $challenge  ALTCHA challenge payload */
 /** @var string $error     Login error message */
 /** @var bool $needs2fa    Show 2FA step instead of password */
+/** @var bool $altchaEnabled */
 ?>
 <div class="wm-auth-page">
     <div class="wm-auth-box">
@@ -136,17 +137,23 @@
                     </details>
 
                     <!-- ALTCHA POW Captcha -->
-                    <div class="form-group">
-                        <altcha-widget
-                            id="altcha"
-                            challengeurl="?action=altcha_challenge"
-                            name="altcha"
-                            style="width:100%">
-                        </altcha-widget>
+                    <?php if ($altchaEnabled): ?>
+                    <div class="form-group" id="altcha-container" data-altcha-url="?action=altcha_challenge">
+                        <div class="altcha-box border rounded p-3">
+                            <div class="d-flex gap-3" style="justify-content:space-between;align-items:center">
+                                <div>
+                                    <div class="fw-bold">Security check</div>
+                                    <div class="fs-sm text-muted" data-altcha-status>Preparing challenge...</div>
+                                </div>
+                                <button type="button" class="btn btn-outline" data-altcha-retry style="display:none">Retry</button>
+                            </div>
+                        </div>
+                        <input type="hidden" name="altcha" value="">
                         <noscript>
                             <p class="form-hint text-danger">JavaScript is required to complete the security check.</p>
                         </noscript>
                     </div>
+                    <?php endif; ?>
 
                     <button type="submit" class="btn btn-primary w-100" style="margin-top:.25rem">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
@@ -183,5 +190,6 @@ document.getElementById('username')?.addEventListener('blur', function() {
 });
 </script>
 
-<!-- ALTCHA widget from CDN -->
-<script type="module" src="https://cdn.jsdelivr.net/npm/altcha/dist/altcha.min.js" crossorigin="anonymous"></script>
+<?php if ($altchaEnabled): ?>
+<script src="assets/js/altcha.js"></script>
+<?php endif; ?>
