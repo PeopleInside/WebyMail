@@ -583,7 +583,7 @@ if ($action === 'settings_save') {
 
         case 'appearance':
             $theme = $_POST['theme'] ?? 'system';
-            if (!in_array($theme, ['system', 'light', 'dark'], true)) {
+            if (!in_array($theme, Config::THEMES, true)) {
                 $theme = 'system';
             }
             $db->query('UPDATE users SET theme = ? WHERE id = ?', [$theme, $userId]);

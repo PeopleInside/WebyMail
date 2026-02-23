@@ -116,15 +116,12 @@ class Database
         ");
 
         // Lightweight migrations
-        $this->ensureColumnExists('users', 'theme', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'");
+        $this->ensureUsersColumnExists('theme', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'");
     }
 
-    private function ensureColumnExists(string $table, string $column, string $alterSql): void
+    private function ensureUsersColumnExists(string $column, string $alterSql): void
     {
-        // Only used for vetted internal tables; keep scope narrow to avoid injection via table/column names.
-        if ($table !== 'users') {
-            return;
-        }
+        // Scoped to the users table to keep migration surface minimal and avoid dynamic table names.
         $cols = $this->pdo->query("PRAGMA table_info(users)")->fetchAll();
         foreach ($cols as $col) {
             if (($col['name'] ?? '') === $column) {

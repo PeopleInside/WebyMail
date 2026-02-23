@@ -97,7 +97,8 @@ class Altcha
             }
         }
 
-        // Verify the signature (client computes SHA-256). Accept both documented formats:
+        // Verify the signature by re-computing the expected SHA-256 on the server.
+        // Accept both documented formats the client may send:
         // 1) "algorithm:challenge:number" (current ALTCHA docs)
         // 2) "salt:number" (legacy examples)
         $expectedA = hash('sha256', "{$algorithm}:{$challenge}:{$number}");
