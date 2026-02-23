@@ -14,12 +14,12 @@
         (function(){
             var serverTheme = null;
             <?php
-            $themeValue = (isset($session) && isset($session['theme']) && in_array($session['theme'], Config::THEMES, true))
+            $serverTheme = (isset($session) && isset($session['theme']) && in_array($session['theme'], Config::THEMES, true))
                 ? $session['theme']
                 : null;
             ?>
-            <?php if ($themeValue !== null): ?>
-            serverTheme = <?= json_encode($themeValue) ?>;
+            <?php if ($serverTheme !== null): ?>
+            serverTheme = <?= json_encode($serverTheme) ?>;
             <?php endif; ?>
             var t = localStorage.getItem('wm_theme') || serverTheme;
             if (serverTheme && !localStorage.getItem('wm_theme')) {

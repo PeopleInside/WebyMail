@@ -97,13 +97,17 @@ class Altcha
             }
         }
 
-        // Verify the signature by re-computing the expected SHA-256 on the server.
-        // Accept both documented formats the client may send:
+        // Verify the signature by re-computing the expected hash on the server.
+        // Accept both documented client formats (SHA-256) and the HMAC variant for added authenticity:
         // 1) "algorithm:challenge:number" (current ALTCHA docs)
         // 2) "salt:number" (legacy examples)
-        $expectedA = hash('sha256', "{$algorithm}:{$challenge}:{$number}");
-        $expectedB = hash('sha256', "{$salt}:{$number}");
-        if ($signature === '' || (!hash_equals($expectedA, $signature) && !hash_equals($expectedB, $signature))) {
+        // 3) HMAC(challenge:number, hmacKey) for backwards compatibility with earlier implementation
+        $expectedA   = hash('sha256', "{$algorithm}:{$challenge}:{$number}");
+        $expectedB   = hash('sha256', "{$salt}:{$number}");
+        $expectedHmac = hash_hmac('sha256', "{$challenge}:{$number}", $this->hmacKey);
+        if ($signature === '' || (!hash_equals($expectedA, $signature)
+            && !hash_equals($expectedB, $signature)
+            && !hash_equals($expectedHmac, $signature))) {
             return false;
         }
 

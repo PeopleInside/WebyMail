@@ -278,7 +278,6 @@ $tab = $tab ?? 'profile';
                     operating system's dark/light preference.
                 </p>
                 <form method="post" action="?action=settings_save&tab=appearance" id="theme-form">
-                    <input type="hidden" name="theme" id="theme-input" value="<?= htmlspecialchars($user['theme'] ?? 'system') ?>">
                     <div style="display:flex;gap:.75rem;flex-wrap:wrap">
                         <button type="submit" name="theme" value="system"
                                 onclick="return applyAndSubmitTheme('system')"
@@ -346,7 +345,6 @@ document.addEventListener('DOMContentLoaded', updateThemeCards);
 function applyAndSubmitTheme(theme) {
     ThemeManager.apply(theme);
     updateThemeCards();
-    document.getElementById('theme-input').value = theme;
     return true;
 }
 
