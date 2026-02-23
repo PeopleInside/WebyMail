@@ -75,12 +75,12 @@ class Altcha
         $number    = isset($data['number']) ? (int) $data['number'] : -1;
         $salt      = $data['salt']      ?? '';
         $signature = $data['signature'] ?? '';
-        $maxNumber = isset($data['maxnumber']) ? (int) $data['maxnumber'] : 0;
+        $max_number = isset($data['maxnumber']) ? (int) $data['maxnumber'] : 0;
 
         if ($algorithm !== 'SHA-256' || $challenge === '' || $number < 0 || $salt === '') {
             return false;
         }
-        if ($maxNumber > 0 && $number > $maxNumber) {
+        if ($max_number > 0 && $number > $max_number) {
             return false;
         }
 

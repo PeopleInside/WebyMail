@@ -119,6 +119,10 @@ class Database
         $this->ensureUsersColumnExists('theme', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'");
     }
 
+    /**
+     * Lightweight migration helper for the users table.
+     * Adds a column if it is missing by executing the provided ALTER TABLE statement.
+     */
     private function ensureUsersColumnExists(string $column, string $alterSql): void
     {
         // Scoped to the users table to keep migration surface minimal and avoid dynamic table names.
