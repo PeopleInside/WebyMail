@@ -56,6 +56,7 @@ class Config
             'app_name'        => 'WebyMail',
             'app_secret'      => bin2hex(random_bytes(32)),
             'altcha_hmac_key' => bin2hex(random_bytes(32)),
+            'altcha_enabled'  => true,
             'session_lifetime' => 15552000, // 6 months in seconds
             'imap_host'       => '',
             'imap_port'       => 993,

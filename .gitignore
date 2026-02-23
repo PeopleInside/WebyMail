@@ -1,0 +1,4 @@
+config/config.php
+data/*.db
+data/*.sqlite
+data/*.sqlite3
