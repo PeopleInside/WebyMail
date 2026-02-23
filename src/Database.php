@@ -70,6 +70,7 @@ class Database
                 totp_enabled  INTEGER NOT NULL DEFAULT 0,
                 recovery_codes TEXT,
                 signature     TEXT    NOT NULL DEFAULT '',
+                theme         TEXT    NOT NULL DEFAULT 'system',
                 created_at    INTEGER NOT NULL DEFAULT (strftime('%s','now')),
                 updated_at    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
             );
@@ -113,5 +114,19 @@ class Database
             CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
             CREATE INDEX IF NOT EXISTS idx_altcha_expires ON altcha_challenges(expires_at);
         ");
+
+        // Lightweight migrations
+        $this->ensureColumnExists('users', 'theme', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'");
+    }
+
+    private function ensureColumnExists(string $table, string $column, string $alterSql): void
+    {
+        $cols = $this->pdo->query("PRAGMA table_info({$table})")->fetchAll();
+        foreach ($cols as $col) {
+            if (($col['name'] ?? '') === $column) {
+                return;
+            }
+        }
+        $this->pdo->exec($alterSql);
     }
 }

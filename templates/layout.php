@@ -12,7 +12,11 @@
     -->
     <script>
         (function(){
-            var t = localStorage.getItem('wm_theme');
+            var serverTheme = <?= (isset($session) && isset($session['theme'])) ? json_encode($session['theme']) : 'null' ?>;
+            var t = localStorage.getItem('wm_theme') || serverTheme;
+            if (serverTheme && !localStorage.getItem('wm_theme')) {
+                localStorage.setItem('wm_theme', serverTheme);
+            }
             if (t && t !== 'system') document.documentElement.setAttribute('data-theme', t);
         })();
     </script>

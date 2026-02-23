@@ -581,6 +581,15 @@ if ($action === 'settings_save') {
             flashSet('success', 'Account removed.');
             redirect('?action=settings&tab=accounts');
 
+        case 'appearance':
+            $theme = $_POST['theme'] ?? 'system';
+            if (!in_array($theme, ['system', 'light', 'dark'], true)) {
+                $theme = 'system';
+            }
+            $db->query('UPDATE users SET theme = ? WHERE id = ?', [$theme, $userId]);
+            flashSet('success', 'Theme preference saved.');
+            redirect('?action=settings&tab=appearance');
+
         default:
             redirect('?action=settings');
     }

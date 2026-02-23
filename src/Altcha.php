@@ -75,8 +75,12 @@ class Altcha
         $number    = isset($data['number']) ? (int) $data['number'] : -1;
         $salt      = $data['salt']      ?? '';
         $signature = $data['signature'] ?? '';
+        $maxNumber = isset($data['maxnumber']) ? (int) $data['maxnumber'] : 0;
 
         if ($algorithm !== 'SHA-256' || $challenge === '' || $number < 0 || $salt === '') {
+            return false;
+        }
+        if ($maxNumber > 0 && $number > $maxNumber) {
             return false;
         }
 
@@ -93,9 +97,9 @@ class Altcha
             }
         }
 
-        // Verify the signature
-        $expectedSig = hash_hmac('sha256', "{$challenge}:{$number}", $this->hmacKey);
-        if (!hash_equals($expectedSig, $signature)) {
+        // Verify the signature (client computes plain SHA-256 of algorithm:challenge:number)
+        $expectedSig = hash('sha256', "{$algorithm}:{$challenge}:{$number}");
+        if ($signature === '' || !hash_equals($expectedSig, $signature)) {
             return false;
         }
 
