@@ -12,7 +12,15 @@
     -->
     <script>
         (function(){
-            var serverTheme = <?= (isset($session) && isset($session['theme'])) ? json_encode($session['theme']) : 'null' ?>;
+            var serverTheme = null;
+            <?php
+            $themeValue = (isset($session) && isset($session['theme']) && in_array($session['theme'], ['system','light','dark'], true))
+                ? $session['theme']
+                : null;
+            ?>
+            <?php if ($themeValue !== null): ?>
+            serverTheme = <?= json_encode($themeValue) ?>;
+            <?php endif; ?>
             var t = localStorage.getItem('wm_theme') || serverTheme;
             if (serverTheme && !localStorage.getItem('wm_theme')) {
                 localStorage.setItem('wm_theme', serverTheme);

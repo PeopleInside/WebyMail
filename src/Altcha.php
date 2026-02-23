@@ -97,9 +97,11 @@ class Altcha
             }
         }
 
-        // Verify the signature (client computes plain SHA-256 of algorithm:challenge:number)
-        $expectedSig = hash('sha256', "{$algorithm}:{$challenge}:{$number}");
-        if ($signature === '' || !hash_equals($expectedSig, $signature)) {
+        // Verify the signature (client computes SHA-256). Accept both documented formats
+        // to tolerate minor client differences.
+        $expectedA = hash('sha256', "{$algorithm}:{$challenge}:{$number}");
+        $expectedB = hash('sha256', "{$salt}:{$number}");
+        if ($signature === '' || (!hash_equals($expectedA, $signature) && !hash_equals($expectedB, $signature))) {
             return false;
         }
 

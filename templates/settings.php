@@ -281,19 +281,19 @@ $tab = $tab ?? 'profile';
                     <input type="hidden" name="theme" id="theme-input" value="<?= htmlspecialchars($user['theme'] ?? 'system') ?>">
                     <div style="display:flex;gap:.75rem;flex-wrap:wrap">
                         <button type="submit" name="theme" value="system"
-                                onclick="return submitTheme('system')"
+                                onclick="return applyAndSubmitTheme('system')"
                                 id="theme-system" class="wm-theme-card">
                             <div class="wm-theme-preview" style="background:linear-gradient(135deg,#fff 50%,#0d1117 50%)"></div>
                             <span>System (auto)</span>
                         </button>
                         <button type="submit" name="theme" value="light"
-                                onclick="return submitTheme('light')"
+                                onclick="return applyAndSubmitTheme('light')"
                                 id="theme-light" class="wm-theme-card">
                             <div class="wm-theme-preview" style="background:#f0f4f8"></div>
                             <span>Light</span>
                         </button>
                         <button type="submit" name="theme" value="dark"
-                                onclick="return submitTheme('dark')"
+                                onclick="return applyAndSubmitTheme('dark')"
                                 id="theme-dark" class="wm-theme-card">
                             <div class="wm-theme-preview" style="background:#0d1117"></div>
                             <span>Dark</span>
@@ -343,7 +343,7 @@ function updateThemeCards() {
 }
 document.addEventListener('DOMContentLoaded', updateThemeCards);
 
-function submitTheme(theme) {
+function applyAndSubmitTheme(theme) {
     ThemeManager.apply(theme);
     updateThemeCards();
     document.getElementById('theme-input').value = theme;

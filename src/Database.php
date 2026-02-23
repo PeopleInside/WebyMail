@@ -121,6 +121,9 @@ class Database
 
     private function ensureColumnExists(string $table, string $column, string $alterSql): void
     {
+        if (!in_array($table, ['users'], true)) {
+            return;
+        }
         $cols = $this->pdo->query("PRAGMA table_info({$table})")->fetchAll();
         foreach ($cols as $col) {
             if (($col['name'] ?? '') === $column) {
