@@ -1,0 +1,22 @@
+Options -Indexes
+RewriteEngine On
+
+# Route all requests through index.php except assets and existing files
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php [QSA,L]
+
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob:; font-src 'self' https://cdn.jsdelivr.net; connect-src 'self'"
+</IfModule>
+
+# Deny access to sensitive directories
+RedirectMatch 404 ^/data/.*$
+RedirectMatch 404 ^/config/.*$
+RedirectMatch 404 ^/src/.*$
+RedirectMatch 404 ^/templates/.*$
