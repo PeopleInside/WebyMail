@@ -12,6 +12,7 @@
     -->
     <script>
         (function(){
+            var serverTheme = null;
             <?php
             $serverTheme = (isset($session) && isset($session['theme']) && in_array($session['theme'], Config::THEMES, true))
                 ? $session['theme']

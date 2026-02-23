@@ -98,7 +98,7 @@ class Altcha
         }
 
         // Verify the signature by re-computing the expected hash on the server.
-        // Accept both documented client formats (SHA-256) and the HMAC variant for added authenticity:
+        // Accept three formats for compatibility:
         // 1) "algorithm:challenge:number" (current ALTCHA docs)
         // 2) "salt:number" (legacy examples)
         // 3) HMAC(challenge:number, hmacKey) for backwards compatibility with earlier implementation
