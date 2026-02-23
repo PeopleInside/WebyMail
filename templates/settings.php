@@ -352,8 +352,9 @@ function applyAndSubmitTheme(theme) {
 
 // Sync current theme with server preference on load
 (function() {
+    var allowed = <?= json_encode(Config::THEMES) ?>;
     var serverTheme = <?= json_encode($user['theme'] ?? 'system') ?>;
-    if (['system','light','dark'].indexOf(serverTheme) !== -1) {
+    if (allowed.indexOf(serverTheme) !== -1) {
         ThemeManager.apply(serverTheme);
     }
 })();

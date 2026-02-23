@@ -14,7 +14,7 @@
         (function(){
             var serverTheme = null;
             <?php
-            $themeValue = (isset($session) && isset($session['theme']) && in_array($session['theme'], ['system','light','dark'], true))
+            $themeValue = (isset($session) && isset($session['theme']) && in_array($session['theme'], Config::THEMES, true))
                 ? $session['theme']
                 : null;
             ?>

@@ -121,10 +121,11 @@ class Database
 
     private function ensureColumnExists(string $table, string $column, string $alterSql): void
     {
-        if (!in_array($table, ['users'], true)) {
+        // Only used for vetted internal tables; keep scope narrow to avoid injection via table/column names.
+        if ($table !== 'users') {
             return;
         }
-        $cols = $this->pdo->query("PRAGMA table_info({$table})")->fetchAll();
+        $cols = $this->pdo->query("PRAGMA table_info(users)")->fetchAll();
         foreach ($cols as $col) {
             if (($col['name'] ?? '') === $column) {
                 return;
