@@ -64,7 +64,7 @@ class Session
         }
 
         $row = $this->db->fetch(
-            'SELECT s.*, u.email, u.display_name, u.totp_enabled, u.signature
+            'SELECT s.*, u.email, u.display_name, u.totp_enabled, u.signature, u.theme
              FROM sessions s
              JOIN users u ON u.id = s.user_id
              WHERE s.token = ? AND s.expires_at > ?',

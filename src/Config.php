@@ -6,6 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
+    public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
     private static string $configFile = __DIR__ . '/../config/config.php';
 

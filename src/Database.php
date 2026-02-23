@@ -70,6 +70,7 @@ class Database
                 totp_enabled  INTEGER NOT NULL DEFAULT 0,
                 recovery_codes TEXT,
                 signature     TEXT    NOT NULL DEFAULT '',
+                theme         TEXT    NOT NULL DEFAULT 'system',
                 created_at    INTEGER NOT NULL DEFAULT (strftime('%s','now')),
                 updated_at    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
             );
@@ -113,5 +114,24 @@ class Database
             CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
             CREATE INDEX IF NOT EXISTS idx_altcha_expires ON altcha_challenges(expires_at);
         ");
+
+        // Lightweight migrations
+        $this->ensureUsersColumnExists('theme', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'");
+    }
+
+    /**
+     * Lightweight migration helper for the users table.
+     * Adds a column if it is missing by executing the provided ALTER TABLE statement.
+     */
+    private function ensureUsersColumnExists(string $column, string $alterSql): void
+    {
+        // Scoped to the users table to keep migration surface minimal and avoid dynamic table names.
+        $cols = $this->pdo->query("PRAGMA table_info(users)")->fetchAll();
+        foreach ($cols as $col) {
+            if (($col['name'] ?? '') === $column) {
+                return;
+            }
+        }
+        $this->pdo->exec($alterSql);
     }
 }

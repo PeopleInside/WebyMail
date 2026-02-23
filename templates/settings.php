@@ -277,23 +277,28 @@ $tab = $tab ?? 'profile';
                     Choose how WebyMail looks. <strong>System</strong> automatically follows your
                     operating system's dark/light preference.
                 </p>
-                <div style="display:flex;gap:.75rem;flex-wrap:wrap">
-                    <button onclick="ThemeManager.apply('system'); updateThemeCards()"
-                            id="theme-system" class="wm-theme-card">
-                        <div class="wm-theme-preview" style="background:linear-gradient(135deg,#fff 50%,#0d1117 50%)"></div>
-                        <span>System (auto)</span>
-                    </button>
-                    <button onclick="ThemeManager.apply('light'); updateThemeCards()"
-                            id="theme-light" class="wm-theme-card">
-                        <div class="wm-theme-preview" style="background:#f0f4f8"></div>
-                        <span>Light</span>
-                    </button>
-                    <button onclick="ThemeManager.apply('dark'); updateThemeCards()"
-                            id="theme-dark" class="wm-theme-card">
-                        <div class="wm-theme-preview" style="background:#0d1117"></div>
-                        <span>Dark</span>
-                    </button>
-                </div>
+                <form method="post" action="?action=settings_save&tab=appearance" id="theme-form">
+                    <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+                        <button type="submit" name="theme" value="system"
+                                onclick="return applyAndSubmitTheme('system')"
+                                id="theme-system" class="wm-theme-card">
+                            <div class="wm-theme-preview" style="background:linear-gradient(135deg,#fff 50%,#0d1117 50%)"></div>
+                            <span>System (auto)</span>
+                        </button>
+                        <button type="submit" name="theme" value="light"
+                                onclick="return applyAndSubmitTheme('light')"
+                                id="theme-light" class="wm-theme-card">
+                            <div class="wm-theme-preview" style="background:#f0f4f8"></div>
+                            <span>Light</span>
+                        </button>
+                        <button type="submit" name="theme" value="dark"
+                                onclick="return applyAndSubmitTheme('dark')"
+                                id="theme-dark" class="wm-theme-card">
+                            <div class="wm-theme-preview" style="background:#0d1117"></div>
+                            <span>Dark</span>
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
         <?php endif; ?>
@@ -336,4 +341,19 @@ function updateThemeCards() {
     if (active) active.classList.add('active');
 }
 document.addEventListener('DOMContentLoaded', updateThemeCards);
+
+function applyAndSubmitTheme(theme) {
+    ThemeManager.apply(theme);
+    updateThemeCards();
+    return true;
+}
+
+// Sync current theme with server preference on load
+(function() {
+    var allowed = <?= json_encode(Config::THEMES) ?>;
+    var serverTheme = <?= json_encode($user['theme'] ?? 'system') ?>;
+    if (allowed.indexOf(serverTheme) !== -1) {
+        ThemeManager.apply(serverTheme);
+    }
+})();
 </script>

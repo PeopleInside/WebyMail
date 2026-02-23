@@ -75,8 +75,12 @@ class Altcha
         $number    = isset($data['number']) ? (int) $data['number'] : -1;
         $salt      = $data['salt']      ?? '';
         $signature = $data['signature'] ?? '';
+        $max_number = isset($data['maxnumber']) ? (int) $data['maxnumber'] : 0;
 
         if ($algorithm !== 'SHA-256' || $challenge === '' || $number < 0 || $salt === '') {
+            return false;
+        }
+        if ($max_number > 0 && $number > $max_number) {
             return false;
         }
 
@@ -93,9 +97,17 @@ class Altcha
             }
         }
 
-        // Verify the signature
-        $expectedSig = hash_hmac('sha256', "{$challenge}:{$number}", $this->hmacKey);
-        if (!hash_equals($expectedSig, $signature)) {
+        // Verify the signature by re-computing the expected hash on the server.
+        // Accept three formats for compatibility:
+        // 1) "algorithm:challenge:number" (current ALTCHA docs)
+        // 2) "salt:number" (legacy examples)
+        // 3) HMAC(challenge:number, hmacKey) for backwards compatibility with earlier implementation
+        $expectedA   = hash('sha256', "{$algorithm}:{$challenge}:{$number}");
+        $expectedB   = hash('sha256', "{$salt}:{$number}");
+        $expectedHmac = hash_hmac('sha256', "{$challenge}:{$number}", $this->hmacKey);
+        if ($signature === '' || (!hash_equals($expectedA, $signature)
+            && !hash_equals($expectedB, $signature)
+            && !hash_equals($expectedHmac, $signature))) {
             return false;
         }
 
