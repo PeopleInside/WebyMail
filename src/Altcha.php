@@ -93,20 +93,6 @@ class Altcha
             }
         }
 
-        // Verify the PoW: SHA256("SHA-256:challenge:number") must equal the expected hash
-        $hash     = hash('sha256', "SHA-256:{$challenge}:{$number}");
-        $expected = hash('sha256', "SHA-256:{$challenge}:{$number}", false);
-        // The widget checks that the resulting hash is lower than the threshold;
-        // we simply verify the signature which encodes the solution.
-        unset($hash, $expected);
-
-        // Verify the solution hash exists (re-compute and compare)
-        $solutionHash  = hash('sha256', "{$algorithm}:{$challenge}:{$number}");
-        $checkHash     = hash('sha256', "{$algorithm}:{$challenge}:{$number}");
-        if (!hash_equals($solutionHash, $checkHash)) {
-            // This comparison is always true; actual PoW check is via signature below.
-        }
-
         // Verify the signature
         $expectedSig = hash_hmac('sha256', "{$challenge}:{$number}", $this->hmacKey);
         if (!hash_equals($expectedSig, $signature)) {

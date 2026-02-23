@@ -103,7 +103,7 @@
                             <div>
                                 <label>
                                     <input type="checkbox" name="imap_ssl" value="1"
-                                           <?= (!isset($_POST['imap_ssl']) || $_POST['imap_ssl']) ? 'checked' : '' ?>>
+                                           <?= (!isset($_POST['imap_ssl']) || !empty($_POST['imap_ssl'])) ? 'checked' : '' ?>>
                                     Use SSL/TLS
                                 </label>
                             </div>

@@ -111,15 +111,15 @@ class SmtpClient
         $recipients = $this->parseRecipients($msg);
         foreach ($recipients as $addr) {
             $this->cmd("RCPT TO:<{$addr}>");
-            $this->expect('25');
+            $this->expect('250');
         }
 
         $this->cmd('DATA');
         $this->expect('354');
 
         $raw = $this->buildRaw($from, $msg);
-        // Dot-stuffing: lines starting with '.' need an extra '.'
-        $raw = preg_replace('/^\./', '..', $raw);
+        // Dot-stuffing: lines starting with '.' need an extra '.' (RFC 5321)
+        $raw = preg_replace('/^\./m', '..', $raw);
         $this->write($raw . "\r\n.\r\n");
         $this->expect('250');
     }

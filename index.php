@@ -123,6 +123,11 @@ if ($action === 'login') {
     $error   = null;
     $needs2fa = isset($_SESSION['pending_2fa']) && time() < ($_SESSION['pending_2fa']['expires'] ?? 0);
 
+    // Pick up any flash error (e.g. from a failed 2FA attempt)
+    $flashMsg = flashGet();
+    if ($flashMsg !== null) {
+        $error = $flashMsg['message'];
+    }
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Verify ALTCHA
         $altcha  = new Altcha();
@@ -181,7 +186,7 @@ if ($action === 'login2fa') {
             redirect('?action=inbox');
         } else {
             // Redirect back to login with 2FA step still pending
-            $_SESSION['login_error'] = $result['error'];
+            flashSet('danger', $result['error']);
             redirect('?action=login');
         }
     }
