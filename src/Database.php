@@ -20,6 +20,7 @@ class Database
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $this->pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
         $this->pdo->exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
+        $this->secureDatabaseFile($path);
         $this->initialize();
     }
 
@@ -79,6 +80,7 @@ class Database
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 label        TEXT    NOT NULL,
+                sender_name  TEXT    NOT NULL DEFAULT '',
                 email        TEXT    NOT NULL,
                 imap_host    TEXT    NOT NULL,
                 imap_port    INTEGER NOT NULL DEFAULT 993,
@@ -117,6 +119,7 @@ class Database
 
         // Lightweight migrations
         $this->ensureUsersColumnExists('theme', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'");
+        $this->ensureAccountsColumnExists('sender_name', "ALTER TABLE accounts ADD COLUMN sender_name TEXT NOT NULL DEFAULT ''");
     }
 
     /**
@@ -133,5 +136,29 @@ class Database
             }
         }
         $this->pdo->exec($alterSql);
+    }
+
+    /**
+     * Lightweight migration helper for the accounts table.
+     */
+    private function ensureAccountsColumnExists(string $column, string $alterSql): void
+    {
+        $cols = $this->pdo->query("PRAGMA table_info(accounts)")->fetchAll();
+        foreach ($cols as $col) {
+            if (($col['name'] ?? '') === $column) {
+                return;
+            }
+        }
+        $this->pdo->exec($alterSql);
+    }
+
+    /**
+     * Best-effort filesystem hardening for the SQLite database file.
+     */
+    private function secureDatabaseFile(string $path): void
+    {
+        if (is_file($path)) {
+            chmod($path, 0600);
+        }
     }
 }

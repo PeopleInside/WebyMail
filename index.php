@@ -103,14 +103,14 @@ function requireAuth(): array
 
 $action = $_GET['action'] ?? 'inbox';
 
-// ── ALTCHA challenge endpoint (GET, public) ───────────────────────────────────
-if ($action === 'altcha_challenge') {
+// ── Proof-of-Work captcha challenge endpoint (GET, public) ─────────────────────
+if ($action === 'pow_challenge') {
     if (!Config::get('altcha_enabled', true)) {
         http_response_code(404);
         exit;
     }
-    $altcha    = new Altcha();
-    $challenge = $altcha->createChallenge();
+    $captcha   = new Captcha();
+    $challenge = $captcha->issue();
     header('Content-Type: application/json');
     echo json_encode($challenge);
     exit;
@@ -126,7 +126,8 @@ if ($action === 'login') {
 
     $error   = null;
     $needs2fa = isset($_SESSION['pending_2fa']) && time() < ($_SESSION['pending_2fa']['expires'] ?? 0);
-    $altchaEnabled = (bool) Config::get('altcha_enabled', true);
+    $captchaEnabled = (bool) Config::get('altcha_enabled', true);
+    $captcha = new Captcha();
 
     // Pick up any flash error (e.g. from a failed 2FA attempt)
     $flashMsg = flashGet();
@@ -134,12 +135,12 @@ if ($action === 'login') {
         $error = $flashMsg['message'];
     }
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        // Verify ALTCHA
-        $captchaCheckPassed  = !$altchaEnabled;
-        if ($altchaEnabled) {
-            $altcha  = new Altcha();
-            $payload = $_POST['altcha'] ?? '';
-            if ($altcha->verify($payload)) {
+        // Verify proof-of-work captcha
+        $captchaCheckPassed = !$captchaEnabled;
+        if ($captchaEnabled) {
+            $powSolution = $_POST['pow_solution'] ?? '';
+            $powToken    = $_POST['pow_token'] ?? '';
+            if ($captcha->verify($powSolution, $powToken)) {
                 $captchaCheckPassed = true;
             } else {
                 $error = 'Security check failed. Please try again.';
@@ -180,12 +181,11 @@ if ($action === 'login') {
         }
     }
 
-    $challenge = $altchaEnabled ? (new Altcha())->createChallenge() : null;
+    $challenge = $captchaEnabled ? $captcha->issue() : null;
     render('login', [
         'error' => $error,
         'needs2fa' => $needs2fa,
         'challenge' => $challenge,
-        'altchaEnabled' => $altchaEnabled,
     ], false);
     exit;
 }
@@ -300,8 +300,9 @@ if ($action === 'view') {
     // Detect external images / URLs in HTML body
     $hasExternal = false;
     if (!empty($message['body_html'])) {
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
         $hasExternal = (bool) preg_match(
-            '/\b(src|href)\s*=\s*["\']https?:\/\/(?!' . preg_quote($_SERVER['HTTP_HOST'] ?? '', '/') . ')/i',
+            '/\b(src|href)\s*=\s*["\']https?:\/\/(?!' . preg_quote($host, '/') . ')/i',
             $message['body_html']
         );
     }
@@ -475,6 +476,15 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $smtp   = new SmtpClient();
     $params = $accountMgr->smtpParams($fromAccountId);
     $user   = Database::getInstance()->fetch('SELECT display_name FROM users WHERE id = ?', [$userId]);
+    $accountFrom = $accountMgr->get($fromAccountId);
+
+    $fromName = ($accountFrom['sender_name'] ?? '');
+    if ($fromName === '' && ($user['display_name'] ?? '') !== '') {
+        $fromName = $user['display_name'];
+    }
+    if ($fromName === '' && ($accountFrom['label'] ?? '') !== '') {
+        $fromName = $accountFrom['label'];
+    }
 
     $message = [
         'to'          => $_POST['to']       ?? '',
@@ -484,7 +494,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'reply_to'    => $_POST['reply_to'] ?? '',
         'in_reply_to' => $_POST['in_reply_to'] ?? '',
         'body_html'   => $_POST['body_html'] ?? '',
-        'from_name'   => $user['display_name'] ?? '',
+        'from_name'   => $fromName,
     ];
 
     if ($smtp->send($params, $message)) {
@@ -577,6 +587,7 @@ if ($action === 'settings_save') {
             $mgr = new Account();
             $mgr->add($userId, [
                 'label'         => trim($_POST['label']      ?? ''),
+                'sender_name'   => trim($_POST['sender_name'] ?? ''),
                 'email'         => trim($_POST['email']      ?? ''),
                 'imap_host'     => trim($_POST['imap_host']  ?? ''),
                 'imap_port'     => (int) ($_POST['imap_port'] ?? 993),

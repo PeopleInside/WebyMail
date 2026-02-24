@@ -1,8 +1,7 @@
 <?php
-/** @var array|null $challenge  ALTCHA challenge payload */
+/** @var array|null $challenge  POW captcha challenge payload */
 /** @var string $error     Login error message */
 /** @var bool $needs2fa    Show 2FA step instead of password */
-/** @var bool $altchaEnabled */
 ?>
 <div class="wm-auth-page">
     <div class="wm-auth-box">
@@ -139,21 +138,20 @@
                         </div>
                     </details>
 
-                    <!-- ALTCHA POW Captcha -->
-                    <?php if ($altchaEnabled): ?>
-                    <div class="form-group" id="altcha-container"
-                         data-altcha-url="?action=altcha_challenge"
-                         data-altcha-payload="<?= htmlspecialchars(base64_encode(json_encode($challenge))) ?>">
-                        <div class="altcha-box border rounded p-3">
-                            <div class="d-flex gap-3" style="justify-content:space-between;align-items:center">
-                                <div>
-                                    <div class="fw-bold">Security check</div>
-                                    <div class="fs-sm text-muted" data-altcha-status>Preparing challenge...</div>
-                                </div>
-                                <button type="button" class="btn btn-outline" data-altcha-retry style="display:none">Retry</button>
+                    <!-- Self-hosted proof-of-work captcha -->
+                    <?php if (!empty($challenge)): ?>
+                    <div class="form-group" id="pow-widget"
+                         data-challenge='<?= htmlspecialchars(json_encode($challenge), ENT_QUOTES, 'UTF-8') ?>'
+                         data-endpoint="?action=pow_challenge">
+                        <div class="pow-box border rounded p-3" style="display:flex;gap:1rem;justify-content:space-between;align-items:center">
+                            <div>
+                                <div class="fw-bold">Security check</div>
+                                <div class="fs-sm text-muted" data-pow-status>Preparing challenge...</div>
                             </div>
+                            <button type="button" class="btn btn-outline btn-sm" data-pow-refresh>Refresh</button>
                         </div>
-                        <input type="hidden" name="altcha" value="">
+                        <input type="hidden" name="pow_solution" id="pow-solution" value="">
+                        <input type="hidden" name="pow_token" id="pow-token" value="">
                         <noscript>
                             <p class="form-hint text-danger">JavaScript is required to complete the security check.</p>
                         </noscript>
@@ -194,7 +192,4 @@ document.getElementById('username')?.addEventListener('blur', function() {
     if (smtpHost && !smtpHost.value) smtpHost.value = 'mail.' + domain;
 });
 </script>
-
-<?php if ($altchaEnabled): ?>
-<script src="assets/js/altcha.js"></script>
-<?php endif; ?>
+<script src="assets/js/pow.js"></script>
