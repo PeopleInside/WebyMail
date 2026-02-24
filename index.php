@@ -502,7 +502,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $attachments = [];
     if (!empty($_FILES['attachments']) && is_array($_FILES['attachments']['name'])) {
-        $maxSize = 10 * 1024 * 1024; // 10 MB
+        $maxSize = 50 * 1024 * 1024; // 50 MB
         foreach ($_FILES['attachments']['name'] as $i => $name) {
             if (($_FILES['attachments']['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
                 continue;
@@ -529,7 +529,44 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $message['attachments'] = $attachments;
     }
 
+    $isDraft = !empty($_POST['save_draft']);
+
+    if ($isDraft) {
+        $raw = $smtp->buildRaw($accountFrom['email'], $message);
+        try {
+            $imap = $accountMgr->imapConnect($fromAccountId);
+            $drafts = 'Drafts';
+            foreach ($imap->getFolders() as $f) {
+                if (strcasecmp($f['display'], 'Drafts') === 0 || strcasecmp($f['name'], 'Drafts') === 0) {
+                    $drafts = $f['name'];
+                    break;
+                }
+            }
+            $imap->appendToFolder($drafts, $raw);
+            $imap->disconnect();
+            flashSet('success', 'Draft saved.');
+        } catch (RuntimeException $e) {
+            flashSet('danger', 'Could not save draft: ' . $e->getMessage());
+        }
+        redirect('?action=inbox');
+    }
+
     if ($smtp->send($params, $message)) {
+        $raw = $smtp->getLastRaw() ?: $smtp->buildRaw($accountFrom['email'], $message);
+        try {
+            $imap = $accountMgr->imapConnect($fromAccountId);
+            $sent = 'Sent';
+            foreach ($imap->getFolders() as $f) {
+                if (strcasecmp($f['display'], 'Sent') === 0 || strcasecmp($f['name'], 'Sent') === 0 || strcasecmp($f['name'], 'Sent Items') === 0) {
+                    $sent = $f['name'];
+                    break;
+                }
+            }
+            $imap->appendToFolder($sent, $raw);
+            $imap->disconnect();
+        } catch (RuntimeException) {
+            // Non-fatal: still consider email sent
+        }
         flashSet('success', 'Message sent successfully.');
         redirect('?action=inbox');
     } else {

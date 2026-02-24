@@ -11,6 +11,7 @@ class SmtpClient
     /** @var resource|false */
     private mixed $socket = false;
     private string $log   = '';
+    private ?string $lastRaw = null;
 
     public function send(array $account, array $message): bool
     {
@@ -38,6 +39,11 @@ class SmtpClient
     public function getLog(): string
     {
         return $this->log;
+    }
+
+    public function getLastRaw(): ?string
+    {
+        return $this->lastRaw;
     }
 
     // -------------------------------------------------------------------------
@@ -124,7 +130,7 @@ class SmtpClient
         $this->expect('250');
     }
 
-    private function buildRaw(string $from, array $msg): string
+    public function buildRaw(string $from, array $msg): string
     {
         $date     = date('r');
         $msgId    = '<' . bin2hex(random_bytes(16)) . '@webymail>';
@@ -200,7 +206,8 @@ class SmtpClient
             $body .= "--{$boundaryMixed}--\r\n";
         }
 
-        return $headers . "\r\n" . $body;
+        $this->lastRaw = $headers . "\r\n" . $body;
+        return $this->lastRaw;
     }
 
     private function parseRecipients(array $msg): array

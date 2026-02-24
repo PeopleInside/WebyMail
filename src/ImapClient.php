@@ -294,6 +294,13 @@ class ImapClient
         return base64_decode($raw);
     }
 
+    public function appendToFolder(string $folder, string $raw): bool
+    {
+        $this->assertConnected();
+        $folderRaw = $this->host . mb_convert_encoding($folder, 'UTF7-IMAP', 'UTF-8');
+        return (bool) imap_append($this->conn, $folderRaw, $raw, "\\Seen");
+    }
+
     private function isAttachment(object $part): bool
     {
         if (isset($part->disposition) && strtolower($part->disposition) === 'attachment') {
