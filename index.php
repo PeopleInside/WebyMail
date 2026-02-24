@@ -30,15 +30,10 @@ spl_autoload_register(function (string $class): void {
 });
 
 require_once __DIR__ . '/src/Config.php';
-require_once __DIR__ . '/src/AppConfig.php';
-
-// Apply configured timezone (defaults to Europe/Rome)
-date_default_timezone_set(AppConfig::get('timezone', 'Europe/Rome'));
 
 function appName(): string
 {
-    $interfaceName = (string) AppConfig::get('interfaceName', '');
-    return $interfaceName !== '' ? $interfaceName : (string) Config::get('app_name', 'WebyMail');
+    return (string) Config::get('app_name', 'WebyMail');
 }
 
 function pageTitle(string $section = ''): string
