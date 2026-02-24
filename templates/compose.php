@@ -89,7 +89,12 @@ $signature = $signature ?? '';
             <div class="wm-compose-field">
                 <label for="attachments">Attachments</label>
                 <input type="file" id="attachments" name="attachments[]" multiple
-                       style="background:var(--wm-surface-2);border:1px solid var(--wm-border);padding:.4rem .55rem;border-radius:7px;color:var(--wm-text);">
+                       style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);border:0;padding:0;">
+                <button type="button" class="btn btn-outline btn-sm" id="attachment-trigger" aria-label="Add attachments">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3.5 3.5 0 114.95 4.95l-8.48 8.48a2 2 0 01-2.83-2.83l7.78-7.78"/></svg>
+                    Add attachments
+                </button>
+                <span id="attachment-label" style="font-size:.85rem;color:var(--wm-text-muted);margin-left:.35rem">No files selected</span>
             </div>
         </div>
 
@@ -154,7 +159,9 @@ $signature = $signature ?? '';
     var initialHtml = <?= json_encode($prefill['body_html'] ?? '') ?>;
     var signature   = <?= json_encode($signature) ?>;
     var defaultColor = '';
-    var resizeTarget = null;
+    var imgOverlay = null;
+    var dragState = null;
+    var MIN_IMG_SIZE = 30;
 
     function buildInitialContent() {
         var content = '';
@@ -169,6 +176,31 @@ $signature = $signature ?? '';
     editorEl.innerHTML = buildInitialContent() || '<p><br></p>';
     defaultColor = getComputedStyle(editorEl).color;
     try { document.execCommand('enableObjectResizing', false, true); } catch (e) {}
+
+    // Lightweight image resize handles (4 corners)
+    var resizeDirs = {
+        tl: {x:-1, y:-1},
+        tr: {x: 1, y:-1},
+        bl: {x:-1, y: 1},
+        br: {x: 1, y: 1},
+    };
+
+    (function setupImageOverlay() {
+        var style = document.createElement('style');
+        style.textContent = '#img-resize-overlay{position:absolute;border:1px dashed var(--wm-primary);pointer-events:none;z-index:10}#img-resize-overlay .handle{width:10px;height:10px;background:var(--wm-primary);border:2px solid #fff;box-shadow:0 0 0 1px var(--wm-primary);position:absolute;pointer-events:auto;cursor:nwse-resize;border-radius:3px}#img-resize-overlay .handle.br{cursor:nwse-resize;right:-6px;bottom:-6px}#img-resize-overlay .handle.bl{cursor:nesw-resize;left:-6px;bottom:-6px}#img-resize-overlay .handle.tr{cursor:nesw-resize;right:-6px;top:-6px}#img-resize-overlay .handle.tl{cursor:nwse-resize;left:-6px;top:-6px}';
+        document.head.appendChild(style);
+
+        imgOverlay = document.createElement('div');
+        imgOverlay.id = 'img-resize-overlay';
+        imgOverlay.style.display = 'none';
+        ['tl','tr','bl','br'].forEach(function(pos) {
+            var h = document.createElement('div');
+            h.className = 'handle ' + pos;
+            h.dataset.dir = pos;
+            imgOverlay.appendChild(h);
+        });
+        document.body.appendChild(imgOverlay);
+    })();
 
     if (toolbar) {
         toolbar.querySelectorAll('button[data-cmd]').forEach(function(btn) {
@@ -209,31 +241,6 @@ $signature = $signature ?? '';
         });
     }
 
-    // Image resize control
-    var resizeBox = document.createElement('div');
-    resizeBox.id = 'img-resizer';
-    resizeBox.style.display = 'none';
-    resizeBox.style.gap = '.35rem';
-    resizeBox.style.alignItems = 'center';
-    resizeBox.style.marginLeft = '.5rem';
-    resizeBox.innerHTML = '<label style="font-size:.8rem;color:var(--wm-text);display:flex;align-items:center;gap:.35rem">Width % <input type="number" id="img-resize-input" min="10" max="200" step="5" value="100" style="width:70px"></label><button type="button" class="btn btn-outline btn-sm" id="img-resize-apply">Apply</button><button type="button" class="btn btn-ghost btn-sm" id="img-resize-close">Close</button>';
-    toolbar?.appendChild(resizeBox);
-    var resizeInput = resizeBox.querySelector('#img-resize-input');
-    resizeBox.querySelector('#img-resize-apply')?.addEventListener('click', function() {
-        if (resizeTarget && resizeInput) {
-            var val = resizeInput.value;
-            if (val) {
-                resizeTarget.style.width = val + '%';
-                resizeTarget.style.height = 'auto';
-            }
-            resizeBox.style.display = 'none';
-        }
-    });
-    resizeBox.querySelector('#img-resize-close')?.addEventListener('click', function() {
-        resizeTarget = null;
-        resizeBox.style.display = 'none';
-    });
-
     // Explicit apply buttons for color/highlight
     document.getElementById('apply-color')?.addEventListener('click', function() {
         var picker = document.getElementById('editor-color-picker');
@@ -272,22 +279,109 @@ $signature = $signature ?? '';
         });
     }
 
+    // Attachment picker helper
+    var attachInput = document.getElementById('attachments');
+    var attachBtn   = document.getElementById('attachment-trigger');
+    var attachLabel = document.getElementById('attachment-label');
+    if (attachBtn && attachInput) {
+        if (attachLabel) attachLabel.textContent = 'No files selected';
+        attachBtn.addEventListener('click', function() {
+            attachInput.click();
+        });
+        attachInput.addEventListener('change', function() {
+            if (!attachLabel) return;
+            var files = Array.from(attachInput.files || []).map(function(f) { return f.name; });
+            attachLabel.textContent = files.length ? files.join(', ') : 'No files selected';
+        });
+    }
+
+    // Image resize overlay logic
+    function hideOverlay() {
+        if (imgOverlay) {
+            imgOverlay.style.display = 'none';
+            imgOverlay._target = null;
+        }
+        dragState = null;
+    }
+    function showOverlay(target) {
+        if (!imgOverlay || !target) return;
+        var rect = target.getBoundingClientRect();
+        imgOverlay._target = target;
+        imgOverlay.style.display = 'block';
+        imgOverlay.style.width  = rect.width + 'px';
+        imgOverlay.style.height = rect.height + 'px';
+        imgOverlay.style.left   = window.scrollX + rect.left + 'px';
+        imgOverlay.style.top    = window.scrollY + rect.top + 'px';
+    }
+    function startDrag(e, dir) {
+        var target = imgOverlay?._target;
+        if (!target) return;
+        e.preventDefault();
+        dragState = {
+            target: target,
+            startX: e.clientX,
+            startY: e.clientY,
+            startW: target.getBoundingClientRect().width,
+            startH: target.getBoundingClientRect().height,
+            dir: dir
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    }
+    function onMove(e) {
+        if (!dragState) return;
+        e.preventDefault();
+        var dx = e.clientX - dragState.startX;
+        var dy = e.clientY - dragState.startY;
+        var dir = dragState.dir;
+        var newW = dragState.startW + dx * (dir.x || 0);
+        var newH = dragState.startH + dy * (dir.y || 0);
+        newW = Math.max(MIN_IMG_SIZE, newW);
+        newH = Math.max(MIN_IMG_SIZE, newH);
+        dragState.target.style.width = newW + 'px';
+        dragState.target.style.height = newH + 'px';
+        showOverlay(dragState.target);
+    }
+    function onUp() {
+        dragState = null;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+    }
+    if (imgOverlay) {
+        imgOverlay.addEventListener('mousedown', function(e) {
+            var dirKey = e.target.dataset.dir;
+            if (!dirKey) return;
+            var dir = resizeDirs[dirKey];
+            if (dir) startDrag(e, dir);
+        });
+    }
+
+    // Show handles on image click
+    editorEl.addEventListener('click', function(e) {
+        var target = e.target;
+        if (target && target.tagName === 'IMG') {
+            showOverlay(target);
+        } else {
+            hideOverlay();
+        }
+    });
+
+    var scrollTick = false;
+    window.addEventListener('scroll', function() {
+        if (!imgOverlay || !imgOverlay._target || scrollTick) return;
+        scrollTick = true;
+        requestAnimationFrame(function() {
+            if (imgOverlay && imgOverlay._target) {
+                showOverlay(imgOverlay._target);
+            }
+            scrollTick = false;
+        });
+    });
+
     form.addEventListener('submit', function() {
         hidden.value = editorEl.innerHTML;
     });
 
-    // Simple image resize: show inline controls on click
-    editorEl.addEventListener('click', function(e) {
-        var target = e.target;
-        if (target && target.tagName === 'IMG') {
-            resizeTarget = target;
-            var current = target.style.width || target.getAttribute('width');
-            var widthPercent = parseInt(current, 10);
-            if (!isFinite(widthPercent)) widthPercent = 100;
-            if (resizeInput) resizeInput.value = widthPercent;
-            if (resizeBox) resizeBox.style.display = 'inline-flex';
-        }
-    });
 })();
 </script>
 

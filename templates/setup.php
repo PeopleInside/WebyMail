@@ -15,7 +15,13 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
         </div>
 
         <div class="wm-auth-logo">
-            <h1><?= htmlspecialchars($brandName) ?></h1>
+            <h1>
+                <?php if ($brandName === 'WebyMail'): ?>
+                    Weby<span>Mail</span>
+                <?php else: ?>
+                    <?= htmlspecialchars($brandName) ?>
+                <?php endif; ?>
+            </h1>
             <p>Initial Setup Wizard</p>
         </div>
 
