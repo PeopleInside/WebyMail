@@ -322,6 +322,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
         <?php endif; ?>
 
         <?php foreach ($accounts as $acc): ?>
+        <?php $isEditing = isset($_GET['edit_account']) && (int)$_GET['edit_account'] === (int)$acc['id']; ?>
         <div class="wm-card" style="margin-bottom:1rem">
             <div class="wm-card-header" style="justify-content:space-between">
                 <span>
@@ -329,27 +330,91 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                         <?= strtoupper(substr($acc['email'], 0, 1)) ?>
                     </div>
                     <?= htmlspecialchars($acc['label']) ?>
-                    <?php if ($acc['is_primary']): ?><span class="badge badge-primary" style="font-size:.65rem">Primary</span><?php endif; ?>
+                    <?php if ($acc['is_primary']): ?>
+                    <span title="Primary account" style="display:inline-flex;align-items:center;gap:.2rem;font-size:.75rem;color:var(--wm-primary)">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+                        <?= htmlspecialchars($acc['email']) ?>
+                    </span>
+                    <?php endif; ?>
                 </span>
-                <?php if (!$acc['is_primary']): ?>
-                <form method="post" action="?action=settings_save&tab=delete_account"
-                      onsubmit="return confirm('Remove this account?')">
-                    <input type="hidden" name="account_id" value="<?= (int)$acc['id'] ?>">
-                    <button class="btn btn-ghost btn-sm text-danger" title="Remove">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-                    </button>
-                </form>
-                <?php endif; ?>
+                <span style="display:flex;gap:.25rem">
+                    <a href="?action=settings&tab=accounts<?= $isEditing ? '' : '&edit_account=' . (int)$acc['id'] ?>"
+                       class="btn btn-ghost btn-sm" title="<?= $isEditing ? 'Close' : 'Edit' ?>">
+                        <?php if ($isEditing): ?>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        <?php else: ?>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        <?php endif; ?>
+                    </a>
+                    <?php if (!$acc['is_primary']): ?>
+                    <form method="post" action="?action=settings_save&tab=delete_account"
+                          onsubmit="return confirm('Remove this account?')">
+                        <input type="hidden" name="account_id" value="<?= (int)$acc['id'] ?>">
+                        <button class="btn btn-ghost btn-sm text-danger" title="Remove">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                        </button>
+                    </form>
+                    <?php endif; ?>
+                </span>
             </div>
-                    <div class="wm-card-body" style="padding:.75rem 1.25rem">
-                        <div style="font-size:.82rem;color:var(--wm-text-muted);display:flex;flex-wrap:wrap;gap:.25rem 1.5rem">
-                            <span><?= htmlspecialchars($acc['email']) ?></span>
-                            <?php if (!empty($acc['sender_name'])): ?>
-                            <span>From name: <?= htmlspecialchars($acc['sender_name']) ?></span>
-                            <?php endif; ?>
-                            <span>IMAP: <?= htmlspecialchars($acc['imap_host']) ?>:<?= (int)$acc['imap_port'] ?></span>
-                            <span>SMTP: <?= htmlspecialchars($acc['smtp_host']) ?>:<?= (int)$acc['smtp_port'] ?></span>
+            <div class="wm-card-body" style="padding:.75rem 1.25rem">
+                <?php if ($isEditing): ?>
+                <form method="post" action="?action=settings_save&tab=edit_account">
+                    <input type="hidden" name="account_id" value="<?= (int)$acc['id'] ?>">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+                        <div class="form-group">
+                            <label>Label</label>
+                            <input type="text" name="label" class="form-control" value="<?= htmlspecialchars($acc['label']) ?>" required>
                         </div>
+                        <div class="form-group">
+                            <label>Email address</label>
+                            <input type="email" name="email" class="form-control" value="<?= htmlspecialchars($acc['email']) ?>" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Sender name (From)</label>
+                            <input type="text" name="sender_name" class="form-control" value="<?= htmlspecialchars($acc['sender_name'] ?? '') ?>">
+                        </div>
+                        <div class="form-group">
+                            <label>Username (IMAP/SMTP)</label>
+                            <input type="text" name="username" class="form-control" value="<?= htmlspecialchars($acc['username'] ?? '') ?>" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Password <small style="color:var(--wm-text-muted)">(leave blank to keep current)</small></label>
+                            <input type="password" name="password" class="form-control" placeholder="••••••••">
+                        </div>
+                    </div>
+                    <fieldset style="border:1px solid var(--wm-border);border-radius:8px;padding:1rem;margin-bottom:1rem">
+                        <legend style="font-size:.78rem;font-weight:600;color:var(--wm-text-muted);padding:0 .5rem">IMAP</legend>
+                        <div style="display:grid;grid-template-columns:1fr 90px;gap:.5rem">
+                            <div><label>Host</label><input type="text" name="imap_host" class="form-control" value="<?= htmlspecialchars($acc['imap_host']) ?>" required></div>
+                            <div><label>Port</label><input type="number" name="imap_port" class="form-control" value="<?= (int)$acc['imap_port'] ?>"></div>
+                        </div>
+                        <label style="margin-top:.5rem"><input type="checkbox" name="imap_ssl" value="1" <?= $acc['imap_ssl'] ? 'checked' : '' ?>> SSL/TLS</label>
+                    </fieldset>
+                    <fieldset style="border:1px solid var(--wm-border);border-radius:8px;padding:1rem;margin-bottom:1rem">
+                        <legend style="font-size:.78rem;font-weight:600;color:var(--wm-text-muted);padding:0 .5rem">SMTP</legend>
+                        <div style="display:grid;grid-template-columns:1fr 90px;gap:.5rem">
+                            <div><label>Host</label><input type="text" name="smtp_host" class="form-control" value="<?= htmlspecialchars($acc['smtp_host']) ?>" required></div>
+                            <div><label>Port</label><input type="number" name="smtp_port" class="form-control" data-smtp-port value="<?= (int)$acc['smtp_port'] ?>"></div>
+                        </div>
+                        <div style="display:flex;gap:1.5rem;margin-top:.5rem">
+                            <label><input type="checkbox" name="smtp_ssl" value="1" data-smtp-ssl <?= $acc['smtp_ssl'] ? 'checked' : '' ?>> SSL</label>
+                            <label><input type="checkbox" name="smtp_starttls" value="1" data-smtp-starttls <?= $acc['smtp_starttls'] ? 'checked' : '' ?>> STARTTLS</label>
+                        </div>
+                    </fieldset>
+                    <button class="btn btn-primary btn-sm">Save changes</button>
+                    <a href="?action=settings&tab=accounts" class="btn btn-outline btn-sm">Cancel</a>
+                </form>
+                <?php else: ?>
+                <div style="font-size:.82rem;color:var(--wm-text-muted);display:flex;flex-wrap:wrap;gap:.25rem 1.5rem">
+                    <span><?= htmlspecialchars($acc['email']) ?></span>
+                    <?php if (!empty($acc['sender_name'])): ?>
+                    <span>From name: <?= htmlspecialchars($acc['sender_name']) ?></span>
+                    <?php endif; ?>
+                    <span>IMAP: <?= htmlspecialchars($acc['imap_host']) ?>:<?= (int)$acc['imap_port'] ?></span>
+                    <span>SMTP: <?= htmlspecialchars($acc['smtp_host']) ?>:<?= (int)$acc['smtp_port'] ?></span>
+                </div>
+                <?php endif; ?>
             </div>
         </div>
         <?php endforeach; ?>

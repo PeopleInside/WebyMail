@@ -47,8 +47,7 @@ $signature = $signature ?? '';
                 <label for="to">To</label>
                 <input type="text" id="to" name="to" autocomplete="off"
                        value="<?= htmlspecialchars($prefill['to'] ?? '') ?>"
-                       placeholder="recipient@example.com"
-                       required>
+                       placeholder="recipient@example.com">
                 <button type="button" id="show-cc"  class="btn btn-ghost btn-sm" style="font-size:.75rem">Cc</button>
                 <button type="button" id="show-bcc" class="btn btn-ghost btn-sm" style="font-size:.75rem">Bcc</button>
             </div>
@@ -86,15 +85,15 @@ $signature = $signature ?? '';
                 <?php endif; ?>
             </div>
 
-            <div class="wm-compose-field">
-                <label for="attachments">Attachments</label>
+            <div class="wm-compose-field" style="flex-wrap:wrap;gap:.35rem">
+                <label for="attachment-trigger-btn">Attachments</label>
                 <input type="file" id="attachments" name="attachments[]" multiple
                        style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);border:0;padding:0;">
                 <button type="button" class="btn btn-outline btn-sm" id="attachment-trigger" aria-label="Add attachments">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3.5 3.5 0 114.95 4.95l-8.48 8.48a2 2 0 01-2.83-2.83l7.78-7.78"/></svg>
-                    Add attachments
+                    Add attachment
                 </button>
-                <span id="attachment-label" style="font-size:.85rem;color:var(--wm-text-muted);margin-left:.35rem">No files selected</span>
+                <div id="attachment-list" style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center"></div>
             </div>
         </div>
 
@@ -135,6 +134,12 @@ $signature = $signature ?? '';
                     <button type="button" class="ql-indent" data-cmd="outdent" title="Outdent">◀</button>
                     <button type="button" class="ql-indent" data-cmd="indent" title="Indent">▶</button>
                 </div>
+                <div class="wm-editor-group">
+                    <button type="button" data-cmd="justifyLeft" title="Align left">⬅</button>
+                    <button type="button" data-cmd="justifyCenter" title="Align center">↔</button>
+                    <button type="button" data-cmd="justifyRight" title="Align right">➡</button>
+                    <button type="button" data-cmd="justifyFull" title="Justify">☰</button>
+                </div>
                     <div class="wm-editor-group">
                         <button type="button" class="ql-link" data-cmd="createLink" title="Insert link">🔗</button>
                         <button type="button" class="ql-image-url" data-cmd="insertImage" title="Insert image from URL" aria-label="Insert image from URL">🖼️ URL</button>
@@ -163,11 +168,18 @@ $signature = $signature ?? '';
     var dragState = null;
     var MIN_IMG_SIZE = 30;
 
+    // Accumulated attachment file list
+    var pendingFiles = [];
+    // Hidden inputs container for accumulated attachments
+    var attachContainer = document.createElement('div');
+    attachContainer.style.display = 'none';
+    form.appendChild(attachContainer);
+
     function buildInitialContent() {
         var content = '';
         if (initialHtml) content += initialHtml;
         if (signature) {
-            content += '<br><hr style="border:none;border-top:1px solid #ccc;margin:8px 0">' + signature;
+            content += '<br><br>' + signature;
         }
         return content;
     }
@@ -211,6 +223,21 @@ $signature = $signature ?? '';
                 if (cmd === 'createLink') {
                     val = prompt('Enter URL');
                     if (!val) return;
+                    // If an image is selected in the overlay, wrap it in a link
+                    var overlayTarget = imgOverlay && imgOverlay._target;
+                    if (overlayTarget) {
+                        var existing = overlayTarget.parentNode;
+                        if (existing && existing.tagName === 'A') {
+                            existing.href = val;
+                        } else {
+                            var a = document.createElement('a');
+                            a.href = val;
+                            overlayTarget.parentNode.insertBefore(a, overlayTarget);
+                            a.appendChild(overlayTarget);
+                        }
+                        editorEl.focus();
+                        return;
+                    }
                 }
                 if (cmd === 'insertImage') {
                     val = prompt('Image URL');
@@ -279,19 +306,74 @@ $signature = $signature ?? '';
         });
     }
 
-    // Attachment picker helper
+    // Delete selected image via keyboard (Delete or Backspace) when overlay is active
+    document.addEventListener('keydown', function(e) {
+        if ((e.key === 'Delete' || e.key === 'Backspace') && imgOverlay && imgOverlay._target) {
+            var target = imgOverlay._target;
+            hideOverlay();
+            target.parentNode && target.parentNode.removeChild(target);
+            editorEl.focus();
+            e.preventDefault();
+        }
+    });
+
+    // Attachment picker – accumulate files one by one
     var attachInput = document.getElementById('attachments');
     var attachBtn   = document.getElementById('attachment-trigger');
-    var attachLabel = document.getElementById('attachment-label');
+    var attachList  = document.getElementById('attachment-list');
+
+    function renderAttachList() {
+        if (!attachList) return;
+        attachList.innerHTML = '';
+        pendingFiles.forEach(function(file, idx) {
+            var tag = document.createElement('span');
+            tag.style.cssText = 'display:inline-flex;align-items:center;gap:.2rem;background:var(--wm-surface-2);border:1px solid var(--wm-border);border-radius:5px;padding:.15rem .45rem;font-size:.8rem';
+            var name = document.createTextNode(file.name);
+            var rm = document.createElement('button');
+            rm.type = 'button';
+            rm.textContent = '×';
+            rm.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--wm-danger);font-size:1rem;line-height:1;padding:0 .1rem';
+            rm.title = 'Remove';
+            rm.addEventListener('click', (function(i) {
+                return function() {
+                    pendingFiles.splice(i, 1);
+                    renderAttachList();
+                    syncAttachInputs();
+                };
+            })(idx));
+            tag.appendChild(name);
+            tag.appendChild(rm);
+            attachList.appendChild(tag);
+        });
+    }
+
+    function syncAttachInputs() {
+        // We cannot reconstruct a FileList; instead we'll use a DataTransfer to
+        // set the single file input's files, or just hidden markers.
+        // Build a DataTransfer to create an aggregated FileList on the real input.
+        try {
+            var dt = new DataTransfer();
+            pendingFiles.forEach(function(f) { dt.items.add(f); });
+            attachInput.files = dt.files;
+        } catch (err) {
+            // DataTransfer not supported – fallback: files already tracked in pendingFiles
+        }
+    }
+
     if (attachBtn && attachInput) {
-        if (attachLabel) attachLabel.textContent = 'No files selected';
         attachBtn.addEventListener('click', function() {
+            attachInput.value = '';
             attachInput.click();
         });
         attachInput.addEventListener('change', function() {
-            if (!attachLabel) return;
-            var files = Array.from(attachInput.files || []).map(function(f) { return f.name; });
-            attachLabel.textContent = files.length ? files.join(', ') : 'No files selected';
+            if (!attachInput.files) return;
+            Array.from(attachInput.files).forEach(function(f) {
+                // Avoid duplicates by name
+                var exists = pendingFiles.some(function(p) { return p.name === f.name && p.size === f.size; });
+                if (!exists) pendingFiles.push(f);
+            });
+            renderAttachList();
+            syncAttachInputs();
         });
     }
 
@@ -378,8 +460,14 @@ $signature = $signature ?? '';
         });
     });
 
-    form.addEventListener('submit', function() {
+    // Require "to" field only when actually sending (not saving draft)
+    var toField = document.getElementById('to');
+    form.addEventListener('submit', function(e) {
         hidden.value = editorEl.innerHTML;
+        var isSaveDraft = (e.submitter && e.submitter.name === 'save_draft');
+        if (toField) {
+            toField.required = !isSaveDraft;
+        }
     });
 
 })();

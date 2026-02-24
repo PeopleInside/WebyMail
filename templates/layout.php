@@ -88,8 +88,8 @@
                 <div class="wm-account-avatar" style="width:28px;height:28px;font-size:.75rem">
                     <?= strtoupper(substr($activeLabel ?: $activeEmail ?: 'U', 0, 1)) ?>
                 </div>
-                <span style="font-size:.82rem;max-width:120px;overflow:hidden;text-overflow:ellipsis">
-                    <?= htmlspecialchars($activeLabel ?: $activeEmail) ?>
+                <span style="font-size:.82rem;max-width:140px;overflow:hidden;text-overflow:ellipsis">
+                    <?= htmlspecialchars($activeEmail ?: $activeLabel) ?>
                 </span>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <polyline points="6 9 12 15 18 9"/>
