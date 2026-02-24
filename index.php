@@ -101,6 +101,7 @@ function findFolderName(array $folders, array $candidates, string $fallback): st
 }
 
 const TRASH_FOLDER_VARIANTS = ['Trash', 'Deleted', 'Deleted Items'];
+const SPAM_FOLDER_VARIANTS  = ['Spam', 'Junk', 'Junk E-mail', 'Junk Mail'];
 
 function resolveTrashFolder(ImapClient $imap): string
 {
@@ -111,6 +112,11 @@ function resolveTrashFolder(ImapClient $imap): string
      * @return string
      */
     return findFolderName($imap->getFolders(), TRASH_FOLDER_VARIANTS, 'Trash');
+}
+
+function resolveSpamFolder(ImapClient $imap): string
+{
+    return findFolderName($imap->getFolders(), SPAM_FOLDER_VARIANTS, 'Spam');
 }
 
 function isTrashFolderEquivalent(string $folder, string $trash): bool
@@ -578,6 +584,38 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         flashSet('danger', 'Delete failed: ' . $e->getMessage());
     }
     redirect('?action=inbox&folder=' . urlencode($folder));
+}
+
+// ── Mark as spam ──────────────────────────────────────────────────────────────
+if ($action === 'spam' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $msgNo  = (int) ($_GET['msg']    ?? 0);
+    $folder = $_GET['folder'] ?? 'INBOX';
+
+    try {
+        $imap = $accountMgr->imapConnect($accountId);
+        $spam = resolveSpamFolder($imap);
+        $imap->moveMessage($folder, $msgNo, $spam);
+        $imap->disconnect();
+        flashSet('success', 'Message moved to Spam.');
+    } catch (RuntimeException $e) {
+        flashSet('danger', 'Could not move to Spam: ' . $e->getMessage());
+    }
+    redirect('?action=inbox&folder=' . urlencode($folder));
+}
+
+// ── Email headers (raw) ───────────────────────────────────────────────────────
+if ($action === 'email_headers' && isAjax()) {
+    $msgNo  = (int) ($_GET['msg']    ?? 0);
+    $folder = $_GET['folder'] ?? 'INBOX';
+
+    try {
+        $imap    = $accountMgr->imapConnect($accountId);
+        $headers = $imap->getRawHeaders($folder, $msgNo);
+        $imap->disconnect();
+        jsonResponse(['ok' => true, 'headers' => $headers]);
+    } catch (RuntimeException $e) {
+        jsonResponse(['ok' => false, 'error' => $e->getMessage()]);
+    }
 }
 
 // ── Bulk actions ──────────────────────────────────────────────────────────────
