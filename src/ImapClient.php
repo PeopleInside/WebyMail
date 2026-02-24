@@ -288,6 +288,12 @@ class ImapClient
         return $attachments;
     }
 
+    public function getRawHeaders(string $folder, int $msgNo): string
+    {
+        $this->reopenFolder($folder);
+        return imap_fetchheader($this->conn, $msgNo) ?: '';
+    }
+
     public function fetchAttachment(int $msgNo, string $section): string
     {
         $raw = imap_fetchbody($this->conn, $msgNo, $section);

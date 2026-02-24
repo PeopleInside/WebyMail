@@ -9,6 +9,7 @@ $folder    = $folder ?? 'INBOX';
 $folderEnc = urlencode($folder);
 $msgNo     = (int) ($message['msg_no'] ?? 0);
 $hasHtml   = !empty($message['body_html']);
+$isInbox   = strtoupper($folder) === 'INBOX';
 ?>
 
 <!-- Toolbar -->
@@ -34,6 +35,20 @@ $hasHtml   = !empty($message['body_html']);
     </a>
 
     <div class="wm-topbar-spacer"></div>
+
+    <button class="btn btn-ghost btn-sm" id="show-headers-btn" title="View original headers">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        Headers
+    </button>
+
+    <?php if ($isInbox): ?>
+    <form method="post" action="?action=spam&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" style="display:inline">
+        <button class="btn btn-ghost btn-sm text-danger" title="Mark as spam">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+            Spam
+        </button>
+    </form>
+    <?php endif; ?>
 
     <form method="post" action="?action=delete&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" style="display:inline"
           onsubmit="return confirm('Delete this message?')">
@@ -115,3 +130,51 @@ $hasHtml   = !empty($message['body_html']);
     </div>
     <?php endif; ?>
 </div>
+
+<!-- Headers modal -->
+<div id="headers-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
+    <div style="background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:10px;box-shadow:var(--wm-shadow);width:min(720px,96vw);max-height:80vh;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;border-bottom:1px solid var(--wm-border)">
+            <span style="font-weight:600;font-size:.95rem">Original Email Headers</span>
+            <button id="headers-modal-close" class="btn btn-ghost btn-icon" title="Close">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div style="overflow:auto;padding:1rem">
+            <pre id="headers-content" aria-live="polite" aria-busy="true" style="font-family:monospace;font-size:.8rem;line-height:1.6;white-space:pre-wrap;word-break:break-all;margin:0;color:var(--wm-text)">Loading…</pre>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var btn   = document.getElementById('show-headers-btn');
+    var modal = document.getElementById('headers-modal');
+    var close = document.getElementById('headers-modal-close');
+    var pre   = document.getElementById('headers-content');
+    var loaded = false;
+
+    if (!btn || !modal) return;
+
+    btn.addEventListener('click', function() {
+        modal.style.display = 'flex';
+        if (loaded) return;
+        fetch('?action=email_headers&folder=' + <?= json_encode($folderEnc) ?> + '&msg=<?= $msgNo ?>', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            loaded = true;
+            pre.setAttribute('aria-busy', 'false');
+            pre.textContent = data.ok ? data.headers : ('Error: ' + (data.error || 'Unknown error'));
+        })
+        .catch(function(err) { pre.setAttribute('aria-busy', 'false'); pre.textContent = 'Failed to load headers.'; });
+    });
+
+    close.addEventListener('click', function() { modal.style.display = 'none'; });
+
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) modal.style.display = 'none';
+    });
+})();
+</script>
