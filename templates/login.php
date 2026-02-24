@@ -3,6 +3,15 @@
 /** @var string $error     Login error message */
 /** @var bool $needs2fa    Show 2FA step instead of password */
 $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'WebyMail');
+
+// Determine SMTP defaults: if port 465 is configured, default to SSL mode
+$cfgSmtpPort     = (int) Config::get('smtp_port', 587);
+$cfgSmtpSsl      = (bool) Config::get('smtp_ssl', false);
+$cfgSmtpStarttls = (bool) Config::get('smtp_starttls', true);
+if ($cfgSmtpPort === 465) {
+    $cfgSmtpSsl      = true;
+    $cfgSmtpStarttls = false;
+}
 ?>
 <div class="wm-auth-page">
     <div class="wm-auth-box">
@@ -83,6 +92,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                     </div>
 
                     <!-- Collapsible server settings -->
+                    <?php if (!AppConfig::get('hideLoginOptions', false)): ?>
                     <details style="margin-bottom:1rem">
                         <summary style="font-size:.82rem;color:var(--wm-text-muted);cursor:pointer;padding:.3rem 0">
                             ▸ Server settings (auto-detect or customise)
@@ -119,25 +129,35 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                                     <label for="smtp_port">Port</label>
                                     <input type="number" id="smtp_port" name="smtp_port" class="form-control"
                                            data-smtp-port
-                                           value="<?= htmlspecialchars($_POST['smtp_port'] ?? Config::get('smtp_port', '587')) ?>">
+                                           value="<?= htmlspecialchars((string)($_POST['smtp_port'] ?? $cfgSmtpPort)) ?>">
                                 </div>
                             </div>
                             <div style="display:flex;gap:1.5rem;flex-wrap:wrap">
                                 <label>
                                     <input type="checkbox" name="smtp_ssl" value="1"
                                             data-smtp-ssl
-                                            <?= (!empty($_POST['smtp_ssl'])) ? 'checked' : '' ?>>
+                                            <?= (!empty($_POST['smtp_ssl']) || (!isset($_POST['smtp_ssl']) && $cfgSmtpSsl)) ? 'checked' : '' ?>>
                                     SSL (port 465)
                                 </label>
                                 <label>
                                     <input type="checkbox" name="smtp_starttls" value="1"
                                             data-smtp-starttls
-                                            <?= (!isset($_POST['smtp_starttls']) || $_POST['smtp_starttls']) ? 'checked' : '' ?>>
+                                            <?= (!empty($_POST['smtp_starttls']) || (!isset($_POST['smtp_starttls']) && $cfgSmtpStarttls)) ? 'checked' : '' ?>>
                                     STARTTLS (port 587)
                                 </label>
                             </div>
                         </div>
                     </details>
+                    <?php else: ?>
+                    <!-- Server settings hidden by admin configuration (hideLoginOptions = true) -->
+                    <input type="hidden" name="imap_host" value="<?= htmlspecialchars(Config::get('imap_host', '')) ?>">
+                    <input type="hidden" name="imap_port" value="<?= htmlspecialchars((string) Config::get('imap_port', 993)) ?>">
+                    <input type="hidden" name="imap_ssl"  value="<?= Config::get('imap_ssl', true) ? '1' : '' ?>">
+                    <input type="hidden" name="smtp_host" value="<?= htmlspecialchars(Config::get('smtp_host', '')) ?>">
+                    <input type="hidden" name="smtp_port" value="<?= htmlspecialchars((string) $cfgSmtpPort) ?>">
+                    <input type="hidden" name="smtp_ssl"  value="<?= $cfgSmtpSsl ? '1' : '' ?>">
+                    <input type="hidden" name="smtp_starttls" value="<?= $cfgSmtpStarttls ? '1' : '' ?>">
+                    <?php endif; ?>
 
                     <!-- Self-hosted proof-of-work captcha -->
                     <?php if (!empty($challenge)): ?>
@@ -170,6 +190,14 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
 
         <p style="text-align:center;font-size:.75rem;color:var(--wm-text-muted);margin-top:1.25rem">
             WebyMail &mdash; Secure PHP Web Mail Client
+            <?php
+            // customFooterText is trusted admin-controlled HTML (e.g. links). It is rendered
+            // unescaped intentionally; only administrators can set this value via setup.php.
+            $customFooter = AppConfig::get('customFooterText', '');
+            if ($customFooter !== ''):
+            ?>
+            <br><?= $customFooter ?>
+            <?php endif; ?>
         </p>
     </div>
 </div>
