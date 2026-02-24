@@ -300,8 +300,9 @@ if ($action === 'view') {
     // Detect external images / URLs in HTML body
     $hasExternal = false;
     if (!empty($message['body_html'])) {
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
         $hasExternal = (bool) preg_match(
-            '/\b(src|href)\s*=\s*["\']https?:\/\/(?!' . preg_quote($_SERVER['HTTP_HOST'] ?? '', '/') . ')/i',
+            '/\b(src|href)\s*=\s*["\']https?:\/\/(?!' . preg_quote($host, '/') . ')/i',
             $message['body_html']
         );
     }
@@ -475,6 +476,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $smtp   = new SmtpClient();
     $params = $accountMgr->smtpParams($fromAccountId);
     $user   = Database::getInstance()->fetch('SELECT display_name FROM users WHERE id = ?', [$userId]);
+    $accountFrom = $accountMgr->get($fromAccountId);
 
     $message = [
         'to'          => $_POST['to']       ?? '',
@@ -484,7 +486,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'reply_to'    => $_POST['reply_to'] ?? '',
         'in_reply_to' => $_POST['in_reply_to'] ?? '',
         'body_html'   => $_POST['body_html'] ?? '',
-        'from_name'   => $user['display_name'] ?? '',
+        'from_name'   => ($accountFrom['sender_name'] ?? '') !== '' ? $accountFrom['sender_name'] : (($user['display_name'] ?? '') !== '' ? $user['display_name'] : ($accountFrom['label'] ?? '')),
     ];
 
     if ($smtp->send($params, $message)) {
@@ -577,6 +579,7 @@ if ($action === 'settings_save') {
             $mgr = new Account();
             $mgr->add($userId, [
                 'label'         => trim($_POST['label']      ?? ''),
+                'sender_name'   => trim($_POST['sender_name'] ?? ''),
                 'email'         => trim($_POST['email']      ?? ''),
                 'imap_host'     => trim($_POST['imap_host']  ?? ''),
                 'imap_port'     => (int) ($_POST['imap_port'] ?? 993),

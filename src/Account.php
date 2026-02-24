@@ -30,7 +30,7 @@ class Account
     public function getForUser(int $userId): array
     {
         return $this->db->fetchAll(
-            'SELECT id, user_id, label, email, imap_host, imap_port, imap_ssl,
+            'SELECT id, user_id, label, sender_name, email, imap_host, imap_port, imap_ssl,
                     smtp_host, smtp_port, smtp_ssl, smtp_starttls, username, is_primary, created_at
              FROM accounts WHERE user_id = ? ORDER BY is_primary DESC, id ASC',
             [$userId]
@@ -41,12 +41,13 @@ class Account
     {
         $this->db->query(
             'INSERT INTO accounts
-                (user_id, label, email, imap_host, imap_port, imap_ssl,
+                (user_id, label, sender_name, email, imap_host, imap_port, imap_ssl,
                  smtp_host, smtp_port, smtp_ssl, smtp_starttls, username, password, is_primary)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)',
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)',
             [
                 $userId,
                 $data['label'],
+                $data['sender_name'] ?? '',
                 $data['email'],
                 $data['imap_host'],
                 (int) $data['imap_port'],
@@ -64,7 +65,7 @@ class Account
 
     public function update(int $id, int $userId, array $data): bool
     {
-        $fields = ['label', 'email', 'imap_host', 'imap_port', 'imap_ssl',
+        $fields = ['label', 'sender_name', 'email', 'imap_host', 'imap_port', 'imap_ssl',
                    'smtp_host', 'smtp_port', 'smtp_ssl', 'smtp_starttls', 'username'];
         $set    = implode(', ', array_map(fn($f) => "{$f} = ?", $fields));
         $values = array_map(fn($f) => $data[$f], $fields);

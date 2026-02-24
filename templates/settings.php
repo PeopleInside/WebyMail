@@ -203,6 +203,10 @@ $tab = $tab ?? 'profile';
                         <input type="email" name="email" class="form-control" required>
                     </div>
                     <div class="form-group">
+                        <label>Sender name (From)</label>
+                        <input type="text" name="sender_name" class="form-control" placeholder="Shown in recipients' inbox">
+                    </div>
+                    <div class="form-group">
                         <label>Username (IMAP/SMTP)</label>
                         <input type="text" name="username" class="form-control" required>
                     </div>
@@ -256,12 +260,15 @@ $tab = $tab ?? 'profile';
                 </form>
                 <?php endif; ?>
             </div>
-            <div class="wm-card-body" style="padding:.75rem 1.25rem">
-                <div style="font-size:.82rem;color:var(--wm-text-muted);display:flex;flex-wrap:wrap;gap:.25rem 1.5rem">
-                    <span><?= htmlspecialchars($acc['email']) ?></span>
-                    <span>IMAP: <?= htmlspecialchars($acc['imap_host']) ?>:<?= (int)$acc['imap_port'] ?></span>
-                    <span>SMTP: <?= htmlspecialchars($acc['smtp_host']) ?>:<?= (int)$acc['smtp_port'] ?></span>
-                </div>
+                    <div class="wm-card-body" style="padding:.75rem 1.25rem">
+                        <div style="font-size:.82rem;color:var(--wm-text-muted);display:flex;flex-wrap:wrap;gap:.25rem 1.5rem">
+                            <span><?= htmlspecialchars($acc['email']) ?></span>
+                            <?php if (!empty($acc['sender_name'])): ?>
+                            <span>From name: <?= htmlspecialchars($acc['sender_name']) ?></span>
+                            <?php endif; ?>
+                            <span>IMAP: <?= htmlspecialchars($acc['imap_host']) ?>:<?= (int)$acc['imap_port'] ?></span>
+                            <span>SMTP: <?= htmlspecialchars($acc['smtp_host']) ?>:<?= (int)$acc['smtp_port'] ?></span>
+                        </div>
             </div>
         </div>
         <?php endforeach; ?>
