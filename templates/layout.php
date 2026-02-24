@@ -45,6 +45,15 @@
 
     <link rel="stylesheet" href="assets/css/style.css">
 
+    <?php
+    $faviconPath = Config::get('favicon_path', '');
+    if ($faviconPath !== '' && strncmp($faviconPath, 'assets/', 7) === 0) {
+        $faviconExt  = strtolower(pathinfo($faviconPath, PATHINFO_EXTENSION));
+        $faviconMime = $faviconExt === 'svg' ? 'image/svg+xml' : 'image/x-icon';
+        echo '<link rel="icon" type="' . htmlspecialchars($faviconMime) . '" href="' . htmlspecialchars($faviconPath) . '">' . "\n    ";
+    }
+    ?>
+
     <?php if (!empty($extraHead)) echo $extraHead; ?>
 </head>
 <body>

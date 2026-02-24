@@ -48,6 +48,12 @@ if (!Config::isSetup()) {
     exit;
 }
 
+// ── Timezone ──────────────────────────────────────────────────────────────────
+$configTz = (string) Config::get('timezone', 'Europe/Rome');
+if ($configTz !== '') {
+    @date_default_timezone_set($configTz);
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
