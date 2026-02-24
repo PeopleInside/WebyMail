@@ -66,11 +66,12 @@ class Auth
         if ($account === null) {
             $this->db->query(
                 'INSERT INTO accounts
-                    (user_id, label, sender_name, email, imap_host, imap_port, imap_ssl,
+                    (user_id, label, sender_name, signature, email, imap_host, imap_port, imap_ssl,
                      smtp_host, smtp_port, smtp_ssl, smtp_starttls, username, password, is_primary)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
                 [
-                    $userId, 'Primary', $username, $username,
+                    $userId, 'Primary', $username, '',
+                    $username,
                     $host, $port, (int) $ssl,
                     $smtpHost, $smtpPort, (int) $smtpSsl, (int) $smtpStarttls,
                     $username, $this->encryptPassword($password),

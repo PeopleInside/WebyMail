@@ -120,6 +120,7 @@ class Database
         // Lightweight migrations
         $this->ensureUsersColumnExists('theme', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'");
         $this->ensureAccountsColumnExists('sender_name', "ALTER TABLE accounts ADD COLUMN sender_name TEXT NOT NULL DEFAULT ''");
+        $this->ensureAccountsColumnExists('signature', "ALTER TABLE accounts ADD COLUMN signature TEXT NOT NULL DEFAULT ''");
     }
 
     /**
