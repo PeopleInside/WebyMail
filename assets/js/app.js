@@ -8,6 +8,9 @@
    Theme management
    dark / light / system  –  persisted in localStorage
    ============================================================= */
+const SMTP_SSL_PORT = '465';
+const SMTP_STARTTLS_PORT = '587';
+
 const ThemeManager = (() => {
     const KEY   = 'wm_theme';
     const MODES = ['system', 'light', 'dark'];
@@ -232,9 +235,6 @@ function initSmtpPortSync(container) {
     const ssl     = root.querySelector('[data-smtp-ssl]');
     const starttl = root.querySelector('[data-smtp-starttls]');
     if (!port || !ssl || !starttl) return;
-
-    const SMTP_SSL_PORT     = '465';
-    const SMTP_STARTTLS_PORT = '587';
 
     const sync = () => {
         if (ssl.checked) {

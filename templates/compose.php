@@ -144,7 +144,7 @@ $signature = $signature ?? '';
     var editorEl   = document.getElementById('quill-editor');
     var hidden     = document.getElementById('body-html-hidden');
     var initialized = false;
-    var GRACE_MS    = 500; // Allow deferred script time to load before falling back
+    var QUILL_LOAD_GRACE_MS = 500; // Allow deferred script time to load before falling back
     var initialHtml = <?= json_encode($prefill['body_html'] ?? '') ?>;
     var signature   = <?= json_encode($signature) ?>;
 
@@ -214,7 +214,7 @@ $signature = $signature ?? '';
         } else {
             initFallback(content);
         }
-    }, GRACE_MS);
+    }, QUILL_LOAD_GRACE_MS);
 })();
 </script>
 
