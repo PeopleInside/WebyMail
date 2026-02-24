@@ -417,7 +417,7 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
-        $trash = findFolderName($imap->getFolders(), ['Trash', 'Deleted', 'Deleted Items'], 'Trash');
+        $trash = findFolderName($imap->getFolders(), ['Trash', 'Deleted', 'Deleted Items'], 'Trash') ?: 'Trash';
         if (strcasecmp($folder, $trash) === 0) {
             $imap->deleteMessage($folder, $msgNo);
         } else {
@@ -441,7 +441,7 @@ if ($action === 'bulk' && isAjax()) {
     try {
         $imap = $accountMgr->imapConnect($accountId);
         $trash = $act === 'delete'
-            ? findFolderName($imap->getFolders(), ['Trash', 'Deleted', 'Deleted Items'], 'Trash')
+            ? (findFolderName($imap->getFolders(), ['Trash', 'Deleted', 'Deleted Items'], 'Trash') ?: 'Trash')
             : null;
         foreach ($uids as $uid) {
             match ($act) {
