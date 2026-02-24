@@ -105,7 +105,16 @@ function trashFolder(ImapClient $imap): string
     /**
      * Resolve the Trash folder name across common variants, falling back to "Trash".
      */
-    return findFolderName($imap->getFolders(), ['Trash', 'Deleted', 'Deleted Items'], 'Trash') ?: 'Trash';
+    return findFolderName($imap->getFolders(), ['Trash', 'Deleted', 'Deleted Items'], 'Trash');
+}
+
+function deleteOrTrash(ImapClient $imap, string $folder, int $msgNo, string $trash): void
+{
+    if (strcasecmp($folder, $trash) === 0) {
+        $imap->deleteMessage($folder, $msgNo);
+    } else {
+        $imap->moveMessage($folder, $msgNo, $trash);
+    }
 }
 
 function parseIniSize(string $value): int
@@ -426,11 +435,7 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $imap = $accountMgr->imapConnect($accountId);
         $trash = trashFolder($imap);
-        if (strcasecmp($folder, $trash) === 0) {
-            $imap->deleteMessage($folder, $msgNo);
-        } else {
-            $imap->moveMessage($folder, $msgNo, $trash);
-        }
+        deleteOrTrash($imap, $folder, $msgNo, $trash);
         $imap->disconnect();
         flashSet('success', 'Message deleted.');
     } catch (RuntimeException $e) {
@@ -453,14 +458,13 @@ if ($action === 'bulk' && isAjax()) {
             $trash = trashFolder($imap);
         }
         foreach ($uids as $uid) {
-            match ($act) {
-                'delete' => strcasecmp($folder, $trash) === 0
-                    ? $imap->deleteMessage($folder, $uid)
-                    : $imap->moveMessage($folder, $uid, $trash),
-                'read'   => $imap->markRead($folder, $uid, true),
-                'unread' => $imap->markRead($folder, $uid, false),
-                default  => null,
-            };
+            if ($act === 'delete') {
+                deleteOrTrash($imap, $folder, $uid, $trash);
+            } elseif ($act === 'read') {
+                $imap->markRead($folder, $uid, true);
+            } elseif ($act === 'unread') {
+                $imap->markRead($folder, $uid, false);
+            }
         }
         $imap->disconnect();
         jsonResponse(['ok' => true]);
