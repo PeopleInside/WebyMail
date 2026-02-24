@@ -8,14 +8,9 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
     <div class="wm-auth-box">
         <!-- Logo -->
         <div class="wm-auth-logo">
-            <h1>
-                <?php if ($brandName === 'WebyMail'): ?>
-                    Weby<span>Mail</span>
-                <?php else: ?>
-                    <?= htmlspecialchars($brandName) ?>
-                <?php endif; ?>
-            </h1>
-            <p><?= htmlspecialchars($brandName === 'WebyMail' ? 'Secure Web Mail Client' : $brandName) ?></p>
+            <img src="https://private-user-images.githubusercontent.com/5006150/553710664-2b7010aa-0f26-444d-b681-95d2a447bb88.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NzE5NDMzOTcsIm5iZiI6MTc3MTk0MzA5NywicGF0aCI6Ii81MDA2MTUwLzU1MzcxMDY2NC0yYjcwMTBhYS0wZjI2LTQ0NGQtYjY4MS05NWQyYTQ0N2JiODgucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI2MDIyNCUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNjAyMjRUMTQyNDU3WiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9YjQ4YmFkODVjYmNiY2I5YTUxYTRjNjBmZGRhYWI4NDA5NzI2OGM4NjJiOWI0YzAyMjNlZDQwOGM0MzZlZmRkZSZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.VQVSFSRXbtKJjOO7841GPxh-nIyS473GcG2LIg5_lTo"
+                 alt="<?= htmlspecialchars($brandName) ?>">
+            <p><?= htmlspecialchars($brandName) ?></p>
         </div>
 
         <!-- Theme toggle (top-right of card) -->

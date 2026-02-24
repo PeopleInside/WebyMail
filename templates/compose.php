@@ -96,6 +96,7 @@ $signature = $signature ?? '';
                 </button>
                 <span id="attachment-label" style="font-size:.85rem;color:var(--wm-text-muted);margin-left:.35rem">No files selected</span>
             </div>
+            <div id="attachment-chips" class="wm-attachment-chips"></div>
         </div>
 
         <!-- Quill HTML editor -->
@@ -283,15 +284,47 @@ $signature = $signature ?? '';
     var attachInput = document.getElementById('attachments');
     var attachBtn   = document.getElementById('attachment-trigger');
     var attachLabel = document.getElementById('attachment-label');
+    var attachChips = document.getElementById('attachment-chips');
+    var attachStore = attachInput ? new DataTransfer() : null;
     if (attachBtn && attachInput) {
         if (attachLabel) attachLabel.textContent = 'No files selected';
         attachBtn.addEventListener('click', function() {
             attachInput.click();
         });
         attachInput.addEventListener('change', function() {
-            if (!attachLabel) return;
-            var files = Array.from(attachInput.files || []).map(function(f) { return f.name; });
-            attachLabel.textContent = files.length ? files.join(', ') : 'No files selected';
+            if (!attachStore) return;
+            Array.from(attachInput.files || []).forEach(function(f) { attachStore.items.add(f); });
+            attachInput.files = attachStore.files;
+            attachInput.value = '';
+            renderAttachmentChips();
+        });
+    }
+
+    function renderAttachmentChips() {
+        if (!attachStore) return;
+        var files = Array.from(attachStore.files);
+        if (attachLabel) attachLabel.textContent = files.length ? files.map(function(f){return f.name;}).join(', ') : 'No files selected';
+        if (!attachChips) return;
+        attachChips.innerHTML = '';
+        files.forEach(function(file, idx) {
+            var chip = document.createElement('span');
+            chip.className = 'wm-attachment-chip';
+            chip.textContent = file.name;
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.setAttribute('aria-label', 'Remove attachment ' + file.name);
+            btn.textContent = '×';
+            btn.addEventListener('click', function() {
+                var next = new DataTransfer();
+                Array.from(attachStore.files).forEach(function(f, i) {
+                    if (i !== idx) next.items.add(f);
+                });
+                attachStore = next;
+                attachInput.files = attachStore.files;
+                renderAttachmentChips();
+            });
+            chip.appendChild(btn);
+            attachChips.appendChild(chip);
         });
     }
 

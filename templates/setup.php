@@ -15,14 +15,9 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
         </div>
 
         <div class="wm-auth-logo">
-            <h1>
-                <?php if ($brandName === 'WebyMail'): ?>
-                    Weby<span>Mail</span>
-                <?php else: ?>
-                    <?= htmlspecialchars($brandName) ?>
-                <?php endif; ?>
-            </h1>
-            <p>Initial Setup Wizard</p>
+            <img src="https://private-user-images.githubusercontent.com/5006150/553710664-2b7010aa-0f26-444d-b681-95d2a447bb88.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NzE5NDMwMTYsIm5iZiI6MTc3MTk0MjcxNiwicGF0aCI6Ii81MDA2MTUwLzU1MzcxMDY2NC0yYjcwMTBhYS0wZjI2LTQ0NGQtYjY4MS05NWQyYTQ0N2JiODgucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI2MDIyNCUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNjAyMjRUMTQxODM2WiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9ZDU2YWU4NWVjODk3YzcwZTdiMjljOWZlNGE1MGQ0NmUzZWE2MGFiYmRjZTg4YjFiZTMyZmJlNjhhNGZiNTEwOCZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.W5qc55zKq0xnHPQ8FP5Vxb8jz4XVkKq4UJKr-k4ycFE"
+                 alt="<?= htmlspecialchars($brandName) ?>">
+            <p><?= htmlspecialchars($brandName === 'WebyMail' ? 'Initial Setup Wizard' : $brandName) ?></p>
         </div>
 
         <!-- Steps indicator -->
