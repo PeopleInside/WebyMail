@@ -42,6 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $smtpPort  = (int) ($_POST['smtp_port'] ?? 587);
         $smtpSsl   = !empty($_POST['smtp_ssl']);
         $smtpTls   = !empty($_POST['smtp_starttls']);
+        $altchaOn  = !empty($_POST['altcha_enabled']);
 
         Config::set('app_name',       $appName);
         Config::set('imap_host',      $imapHost);
@@ -51,6 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Config::set('smtp_port',      $smtpPort);
         Config::set('smtp_ssl',       $smtpSsl);
         Config::set('smtp_starttls',  $smtpTls);
+        Config::set('altcha_enabled', $altchaOn);
         Config::set('setup_complete', true);
 
         // Ensure data directory is writable

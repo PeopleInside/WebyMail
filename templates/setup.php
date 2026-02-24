@@ -112,11 +112,11 @@
                         </label>
                     </fieldset>
 
-                    <fieldset style="border:1px solid var(--wm-border);border-radius:8px;padding:1rem;margin-bottom:1rem">
-                        <legend style="font-size:.82rem;font-weight:600;padding:0 .5rem;color:var(--wm-text-muted)">SMTP (outgoing)</legend>
-                        <div style="display:grid;grid-template-columns:1fr 90px;gap:.75rem">
-                            <div class="form-group" style="margin:0">
-                                <label>Host</label>
+                     <fieldset style="border:1px solid var(--wm-border);border-radius:8px;padding:1rem;margin-bottom:1rem">
+                         <legend style="font-size:.82rem;font-weight:600;padding:0 .5rem;color:var(--wm-text-muted)">SMTP (outgoing)</legend>
+                         <div style="display:grid;grid-template-columns:1fr 90px;gap:.75rem">
+                             <div class="form-group" style="margin:0">
+                                 <label>Host</label>
                                 <input type="text" name="smtp_host" class="form-control"
                                        placeholder="mail.example.com"
                                        value="<?= htmlspecialchars($_POST['smtp_host'] ?? '') ?>">
@@ -124,22 +124,37 @@
                             <div class="form-group" style="margin:0">
                                 <label>Port</label>
                                 <input type="number" name="smtp_port" class="form-control"
+                                       data-smtp-port
                                        value="<?= htmlspecialchars($_POST['smtp_port'] ?? '587') ?>">
                             </div>
                         </div>
                         <div style="display:flex;gap:1.5rem;margin-top:.5rem;flex-wrap:wrap">
-                            <label>
-                                <input type="checkbox" name="smtp_ssl" value="1"
-                                       <?= !empty($_POST['smtp_ssl']) ? 'checked' : '' ?>>
-                                SSL (port 465)
-                            </label>
-                            <label>
-                                <input type="checkbox" name="smtp_starttls" value="1"
-                                       <?= empty($_POST) || !empty($_POST['smtp_starttls']) ? 'checked' : '' ?>>
-                                STARTTLS (port 587)
-                            </label>
-                        </div>
-                    </fieldset>
+                                 <label>
+                                     <input type="checkbox" name="smtp_ssl" value="1"
+                                            data-smtp-ssl
+                                            <?= !empty($_POST['smtp_ssl']) ? 'checked' : '' ?>>
+                                     SSL (port 465)
+                                 </label>
+                                 <label>
+                                     <input type="checkbox" name="smtp_starttls" value="1"
+                                            data-smtp-starttls
+                                            <?= empty($_POST) || !empty($_POST['smtp_starttls']) ? 'checked' : '' ?>>
+                                     STARTTLS (port 587)
+                                 </label>
+                             </div>
+                     </fieldset>
+
+                    <div class="form-group" style="margin-top:1rem">
+                        <label style="font-weight:600">Login protection</label><br>
+                        <label style="font-size:.85rem;color:var(--wm-text-muted)">
+                            <input type="checkbox" name="altcha_enabled" value="1"
+                                   <?= empty($_POST) || !empty($_POST['altcha_enabled']) ? 'checked' : '' ?>>
+                            Require proof-of-work captcha on login
+                        </label>
+                        <p class="form-hint" style="font-size:.78rem;color:var(--wm-text-muted);margin:.35rem 0 0">
+                            Disable if the captcha causes trouble; you can re-enable later by editing <code>config/config.php</code>.
+                        </p>
+                    </div>
 
                     <button type="submit" class="btn btn-primary w-100">Save & Finish →</button>
                 </form>

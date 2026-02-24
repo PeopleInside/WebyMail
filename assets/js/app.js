@@ -8,6 +8,9 @@
    Theme management
    dark / light / system  –  persisted in localStorage
    ============================================================= */
+const SMTP_SSL_PORT = '465';
+const SMTP_STARTTLS_PORT = '587';
+
 const ThemeManager = (() => {
     const KEY   = 'wm_theme';
     const MODES = ['system', 'light', 'dark'];
@@ -224,6 +227,31 @@ function initCopyButtons() {
 }
 
 /* =============================================================
+   SMTP port helpers – keep 465/587 in sync with SSL/STARTTLS
+   ============================================================= */
+function initSmtpPortSync(container) {
+    const root = container || document;
+    const port    = root.querySelector('[data-smtp-port]');
+    const ssl     = root.querySelector('[data-smtp-ssl]');
+    const starttl = root.querySelector('[data-smtp-starttls]');
+    if (!port || !ssl || !starttl) return;
+
+    const sync = () => {
+        if (ssl.checked) {
+            port.value = SMTP_SSL_PORT;
+        } else if (starttl.checked) {
+            port.value = SMTP_STARTTLS_PORT;
+        } else if (!port.value) {
+            port.value = SMTP_STARTTLS_PORT;
+        }
+    };
+
+    ssl.addEventListener('change', sync);
+    starttl.addEventListener('change', sync);
+    sync();
+}
+
+/* =============================================================
    Bootstrap
    ============================================================= */
 document.addEventListener('DOMContentLoaded', () => {
@@ -236,6 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initAccountSwitcher();
     initAlerts();
     initCopyButtons();
+    initSmtpPortSync();
 });
 
 // Expose for inline use

@@ -134,40 +134,87 @@ $signature = $signature ?? '';
     </form>
 </div>
 
-<!-- Quill from CDN -->
-<link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css">
-<script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"></script>
+<!-- Quill from CDN (if reachable); graceful fallback to contenteditable -->
+<link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css" onerror="this.disabled=true">
+<script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js" id="quill-script" defer></script>
 <script>
 (function() {
-    var quill = new Quill('#quill-editor', {
-        theme:   'snow',
-        modules: { toolbar: '#quill-toolbar' },
-    });
-
-    // Pre-populate with reply quote + signature
+    var form       = document.getElementById('compose-form');
+    var toolbar    = document.getElementById('quill-toolbar');
+    var editorEl   = document.getElementById('quill-editor');
+    var hidden     = document.getElementById('body-html-hidden');
+    var initialized = false;
+    var QUILL_LOAD_GRACE_MS = 500; // Allow deferred script time to load before falling back
     var initialHtml = <?= json_encode($prefill['body_html'] ?? '') ?>;
     var signature   = <?= json_encode($signature) ?>;
 
-    var content = '';
-    if (initialHtml) {
-        content += initialHtml;
-    }
-    if (signature) {
-        content += '<br><hr style="border:none;border-top:1px solid #ccc;margin:8px 0">' + signature;
-    }
-    if (content) {
-        quill.clipboard.dangerouslyPasteHTML(0, content);
+    function buildInitialContent() {
+        var content = '';
+        if (initialHtml) content += initialHtml;
+        if (signature) {
+            content += '<br><hr style="border:none;border-top:1px solid #ccc;margin:8px 0">' + signature;
+        }
+        return content;
     }
 
-    // Move cursor to top for replies/forwards
-    <?php if ($isReply): ?>
-    quill.setSelection(0, 0);
-    <?php endif; ?>
+    function initFallback(content) {
+        if (initialized) return;
+        initialized = true;
+        if (toolbar) toolbar.style.display = 'none';
+        editorEl.contentEditable = 'true';
+        editorEl.style.border = '1px solid var(--wm-border)';
+        editorEl.style.padding = '.75rem';
+        editorEl.style.borderRadius = '0 0 10px 10px';
+        editorEl.innerHTML = content || '<p><br></p>';
+        form.addEventListener('submit', function() {
+            hidden.value = editorEl.innerHTML;
+        });
+    }
 
-    // Sync on submit
-    document.getElementById('compose-form').addEventListener('submit', function() {
-        document.getElementById('body-html-hidden').value = quill.root.innerHTML;
-    });
+    function initQuill(content) {
+        if (initialized) return;
+        if (!window.Quill) {
+            initFallback(content);
+            return;
+        }
+        initialized = true;
+        var quill = new Quill('#quill-editor', {
+            theme:   'snow',
+            modules: { toolbar: '#quill-toolbar' },
+        });
+        if (content) {
+            quill.clipboard.dangerouslyPasteHTML(0, content);
+        }
+        <?php if ($isReply): ?>
+        quill.setSelection(0, 0);
+        <?php endif; ?>
+        form.addEventListener('submit', function() {
+            hidden.value = quill.root.innerHTML;
+        });
+    }
+
+    var content = buildInitialContent();
+    // If Quill loads, use it; otherwise fall back after a short grace period.
+    if (window.Quill) {
+        initQuill(content);
+        return;
+    }
+
+    var quillScript = document.getElementById('quill-script');
+    if (quillScript) {
+        quillScript.addEventListener('load', function() { initQuill(content); });
+        quillScript.addEventListener('error', function() { initFallback(content); });
+    }
+
+    // Grace period in case the script is slow but will eventually load.
+    setTimeout(function() {
+        if (initialized) return;
+        if (window.Quill) {
+            initQuill(content);
+        } else {
+            initFallback(content);
+        }
+    }, QUILL_LOAD_GRACE_MS);
 })();
 </script>
 
