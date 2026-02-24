@@ -102,6 +102,9 @@ function findFolderName(array $folders, array $candidates, string $fallback): st
 
 function trashFolder(ImapClient $imap): string
 {
+    /**
+     * Resolve the Trash folder name across common variants, falling back to "Trash".
+     */
     return findFolderName($imap->getFolders(), ['Trash', 'Deleted', 'Deleted Items'], 'Trash') ?: 'Trash';
 }
 
@@ -445,9 +448,10 @@ if ($action === 'bulk' && isAjax()) {
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
-        $trash = $act === 'delete'
-            ? trashFolder($imap)
-            : null;
+        $trash = null;
+        if ($act === 'delete') {
+            $trash = trashFolder($imap);
+        }
         foreach ($uids as $uid) {
             match ($act) {
                 'delete' => strcasecmp($folder, $trash) === 0
