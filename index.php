@@ -643,18 +643,25 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $isDraft = !empty($_POST['save_draft']);
 
+    // Require a "to" address only when actually sending (not saving a draft)
+    if (!$isDraft && trim($message['to']) === '') {
+        flashSet('danger', 'A recipient address is required to send a message.');
+        redirect('?action=compose');
+    }
+
     if ($isDraft) {
         $raw = $smtp->buildRaw($accountFrom['email'], $message);
+        $draftsFolder = 'Drafts';
         try {
             $imap = $accountMgr->imapConnect($fromAccountId);
-            $drafts = findFolderName($imap->getFolders(), ['Drafts'], 'Drafts');
-            $imap->appendToFolder($drafts, $raw, '\\Draft');
+            $draftsFolder = findFolderName($imap->getFolders(), ['Drafts'], 'Drafts');
+            $imap->appendToFolder($draftsFolder, $raw, '\\Draft');
             $imap->disconnect();
             flashSet('success', 'Draft saved.');
         } catch (RuntimeException $e) {
             flashSet('danger', 'Could not save draft: ' . $e->getMessage());
         }
-        redirect('?action=inbox');
+        redirect('?action=inbox&folder=' . urlencode($draftsFolder));
     }
 
     if ($smtp->send($params, $message)) {
@@ -808,6 +815,42 @@ if ($action === 'settings_save') {
                 'password'      => $_POST['password']        ?? '',
             ]);
             flashSet('success', 'Account added.');
+            redirect('?action=settings&tab=accounts');
+
+        case 'edit_account':
+            $mgr = new Account();
+            $editId = (int) ($_POST['account_id'] ?? 0);
+            if (!$mgr->belongsToUser($editId, $userId)) {
+                flashSet('danger', 'Account not found.');
+                redirect('?action=settings&tab=accounts');
+            }
+            $existing = $mgr->get($editId);
+            $smtpSsl = !empty($_POST['smtp_ssl']);
+            $smtpStarttls = !empty($_POST['smtp_starttls']);
+            // SSL takes precedence: if both are checked, disable STARTTLS
+            if ($smtpSsl) {
+                $smtpStarttls = false;
+            }
+            $updateData = [
+                'label'         => trim($_POST['label']       ?? $existing['label']),
+                'sender_name'   => trim($_POST['sender_name'] ?? $existing['sender_name'] ?? ''),
+                'signature'     => $existing['signature']     ?? '',
+                'email'         => trim($_POST['email']       ?? $existing['email']),
+                'imap_host'     => trim($_POST['imap_host']   ?? $existing['imap_host']),
+                'imap_port'     => (int) ($_POST['imap_port'] ?? $existing['imap_port']),
+                'imap_ssl'      => !empty($_POST['imap_ssl']),
+                'smtp_host'     => trim($_POST['smtp_host']   ?? $existing['smtp_host']),
+                'smtp_port'     => (int) ($_POST['smtp_port'] ?? $existing['smtp_port']),
+                'smtp_ssl'      => $smtpSsl,
+                'smtp_starttls' => $smtpStarttls,
+                'username'      => trim($_POST['username']    ?? $existing['username']),
+            ];
+            $newPassword = $_POST['password'] ?? '';
+            if ($newPassword !== '') {
+                $updateData['password'] = $newPassword;
+            }
+            $mgr->update($editId, $userId, $updateData);
+            flashSet('success', 'Account updated.');
             redirect('?action=settings&tab=accounts');
 
         case 'delete_account':
