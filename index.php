@@ -73,6 +73,35 @@ function jsonResponse(array $data): never
     exit;
 }
 
+function findFolderName(array $folders, array $candidates, string $fallback): string
+{
+    /**
+     * Find the first folder whose display or name matches any candidate (case-insensitive).
+     * Falls back to the provided default if no match is found.
+     */
+    foreach ($folders as $f) {
+        foreach ($candidates as $cand) {
+            if (strcasecmp($f['display'], $cand) === 0 || strcasecmp($f['name'], $cand) === 0) {
+                return $f['name'];
+            }
+        }
+    }
+    return $fallback;
+}
+
+function parseIniSize(string $value): int
+{
+    $value = trim($value);
+    $unit  = strtolower(substr($value, -1));
+    $num   = (float) $value;
+    return match ($unit) {
+        'g' => (int) ($num * 1024 * 1024 * 1024),
+        'm' => (int) ($num * 1024 * 1024),
+        'k' => (int) ($num * 1024),
+        default => (int) $num,
+    };
+}
+
 function isAjax(): bool
 {
     return ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
@@ -502,7 +531,24 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $attachments = [];
     if (!empty($_FILES['attachments']) && is_array($_FILES['attachments']['name'])) {
-        $maxSize = 10 * 1024 * 1024; // 10 MB
+        $maxSize = 50 * 1024 * 1024; // 50 MB (requires matching PHP upload_max_filesize/post_max_size)
+        $phpUpload = parseIniSize(ini_get('upload_max_filesize'));
+        $phpPost   = parseIniSize(ini_get('post_max_size'));
+        $limitAdjusted = false;
+        if ($phpUpload > 0 && $phpUpload < $maxSize) {
+            error_log('Attachment limit reduced to PHP upload_max_filesize: ' . $phpUpload . ' bytes');
+            $maxSize = $phpUpload;
+            $limitAdjusted = true;
+        }
+        if ($phpPost > 0 && $phpPost < $maxSize) {
+            error_log('Attachment limit reduced to PHP post_max_size: ' . $phpPost . ' bytes');
+            $maxSize = $phpPost;
+            $limitAdjusted = true;
+        }
+        if ($limitAdjusted) {
+            $mb = round($maxSize / (1024 * 1024), 1);
+            flashSet('warning', 'Server limits attachments to ' . $mb . ' MB due to PHP configuration.');
+        }
         foreach ($_FILES['attachments']['name'] as $i => $name) {
             if (($_FILES['attachments']['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
                 continue;
@@ -529,7 +575,33 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $message['attachments'] = $attachments;
     }
 
+    $isDraft = !empty($_POST['save_draft']);
+
+    if ($isDraft) {
+        $raw = $smtp->buildRaw($accountFrom['email'], $message);
+        try {
+            $imap = $accountMgr->imapConnect($fromAccountId);
+            $drafts = findFolderName($imap->getFolders(), ['Drafts'], 'Drafts');
+            $imap->appendToFolder($drafts, $raw, '\\Draft');
+            $imap->disconnect();
+            flashSet('success', 'Draft saved.');
+        } catch (RuntimeException $e) {
+            flashSet('danger', 'Could not save draft: ' . $e->getMessage());
+        }
+        redirect('?action=inbox');
+    }
+
     if ($smtp->send($params, $message)) {
+        $raw = $smtp->getLastRaw() ?: $smtp->buildRaw($accountFrom['email'], $message);
+        try {
+            $imap = $accountMgr->imapConnect($fromAccountId);
+            $sent = findFolderName($imap->getFolders(), ['Sent', 'Sent Items'], 'Sent');
+            $imap->appendToFolder($sent, $raw);
+            $imap->disconnect();
+        } catch (RuntimeException $e) {
+            error_log('Sent folder sync failed for account ' . $fromAccountId . ': ' . $e->getMessage());
+            // Non-fatal: still consider email sent
+        }
         flashSet('success', 'Message sent successfully.');
         redirect('?action=inbox');
     } else {

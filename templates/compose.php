@@ -23,6 +23,10 @@ $signature = $signature ?? '';
             Cancel
         </a>
         <div class="wm-topbar-spacer"></div>
+        <button type="submit" form="compose-form" name="save_draft" value="1" class="btn btn-outline btn-sm" style="margin-right:.5rem">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M4 9h16"/><path d="M9 4v5"/></svg>
+            Save draft
+        </button>
         <button type="submit" form="compose-form" class="btn btn-primary btn-sm">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             Send
@@ -104,6 +108,7 @@ $signature = $signature ?? '';
 
         <!-- Quill HTML editor -->
         <div id="editor-container">
+            <input type="file" id="inline-image-input" accept="image/*" style="display:none">
             <div id="quill-toolbar">
                 <div class="wm-editor-group">
                     <label class="wm-editor-label">Size
@@ -128,6 +133,7 @@ $signature = $signature ?? '';
                     <label class="wm-editor-label">Highlight
                         <input type="color" data-cmd="hiliteColor" value="#ffff00">
                     </label>
+                    <button type="button" class="ql-color-reset" data-cmd="clearColor" title="Reset color">Reset color</button>
                 </div>
                 <div class="wm-editor-group">
                     <button type="button" class="ql-list" data-cmd="insertOrderedList" title="Numbered list">1.</button>
@@ -137,7 +143,8 @@ $signature = $signature ?? '';
                 </div>
                     <div class="wm-editor-group">
                         <button type="button" class="ql-link" data-cmd="createLink" title="Insert link">🔗</button>
-                        <button type="button" class="ql-image" data-cmd="insertImage" title="Insert image">🖼️</button>
+                        <button type="button" class="ql-image-url" data-cmd="insertImage" title="Insert image from URL" aria-label="Insert image from URL">🖼️ URL</button>
+                        <button type="button" class="ql-image-upload" data-cmd="insertImageUpload" title="Insert image from device" aria-label="Insert image from device">🖼️ File</button>
                         <button type="button" class="ql-blockquote" data-cmd="formatBlock" data-value="blockquote" title="Quote">❝</button>
                         <button type="button" class="ql-clean" data-cmd="removeFormat" title="Clear formatting">✕</button>
                     </div>
@@ -153,8 +160,11 @@ $signature = $signature ?? '';
     var toolbar    = document.getElementById('quill-toolbar');
     var editorEl   = document.getElementById('quill-editor');
     var hidden     = document.getElementById('body-html-hidden');
+    var imageInput = document.getElementById('inline-image-input');
+    var inlineLimit = 2 * 1024 * 1024; // 2 MB inline embed cap
     var initialHtml = <?= json_encode($prefill['body_html'] ?? '') ?>;
     var signature   = <?= json_encode($signature) ?>;
+    var defaultColor = '';
 
     function buildInitialContent() {
         var content = '';
@@ -167,6 +177,7 @@ $signature = $signature ?? '';
 
     editorEl.contentEditable = 'true';
     editorEl.innerHTML = buildInitialContent() || '<p><br></p>';
+    defaultColor = getComputedStyle(editorEl).color;
 
     if (toolbar) {
         toolbar.querySelectorAll('button[data-cmd]').forEach(function(btn) {
@@ -182,6 +193,17 @@ $signature = $signature ?? '';
                     val = prompt('Image URL');
                     if (!val) return;
                 }
+                if (cmd === 'insertImageUpload' && imageInput) {
+                    imageInput.click();
+                    return;
+                }
+                if (cmd === 'clearColor') {
+                    var currentDefault = getComputedStyle(editorEl).color || defaultColor;
+                    document.execCommand('foreColor', false, currentDefault);
+                    document.execCommand('hiliteColor', false, 'transparent');
+                    editorEl.focus();
+                    return;
+                }
                 document.execCommand(cmd, false, val);
                 editorEl.focus();
             });
@@ -193,6 +215,28 @@ $signature = $signature ?? '';
                 document.execCommand(cmd, false, val);
                 editorEl.focus();
             });
+        });
+    }
+
+    if (imageInput) {
+        imageInput.addEventListener('change', function() {
+            var file = imageInput.files && imageInput.files[0];
+            if (!file) return;
+            if (file.size > inlineLimit) {
+                alert('Inline editor images are limited to 2 MB. Please attach the file instead for larger images (subject to server attachment limits, typically 50 MB).');
+                imageInput.value = '';
+                return;
+            }
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var dataUrl = e.target && e.target.result;
+                if (dataUrl) {
+                    document.execCommand('insertImage', false, dataUrl);
+                    editorEl.focus();
+                }
+            };
+            reader.readAsDataURL(file);
+            imageInput.value = '';
         });
     }
 

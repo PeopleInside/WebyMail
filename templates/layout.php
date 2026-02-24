@@ -65,18 +65,6 @@
 
         <div class="wm-topbar-spacer"></div>
 
-        <?php if (!empty($accounts) && count($accounts) > 1): ?>
-        <div class="wm-top-account">
-            <select id="account-switcher" data-account-select>
-                <?php foreach ($accounts as $acc): ?>
-                <option value="<?= (int)$acc['id'] ?>" <?= $acc['id'] == $session['account_id'] ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($acc['label']) ?> (<?= htmlspecialchars($acc['email']) ?>)
-                </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <?php endif; ?>
-
         <!-- Theme toggle -->
         <button class="theme-toggle" title="Toggle theme"><!-- filled by JS --></button>
 
@@ -93,7 +81,28 @@
                     <polyline points="6 9 12 15 18 9"/>
                 </svg>
             </button>
-            <div id="user-menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:8px;min-width:180px;box-shadow:var(--wm-shadow);z-index:300;overflow:hidden">
+            <div id="user-menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:8px;min-width:200px;box-shadow:var(--wm-shadow);z-index:300;overflow:hidden">
+                <?php if (!empty($accounts) && count($accounts) > 1): ?>
+                <div style="padding:.6rem 1rem;font-size:.75rem;font-weight:600;color:var(--wm-text-muted);text-transform:uppercase;letter-spacing:.03em">
+                    Accounts
+                </div>
+                <?php foreach ($accounts as $acc): ?>
+                <button type="button" data-switch-account="<?= (int)$acc['id'] ?>"
+                        style="display:flex;width:100%;align-items:center;gap:.6rem;padding:.55rem 1rem;font-size:.85rem;background:none;border:none;color:var(--wm-text);text-align:left;cursor:pointer">
+                    <div class="wm-account-avatar" style="width:28px;height:28px;font-size:.75rem">
+                        <?= strtoupper(substr($acc['label'] ?: $acc['email'], 0, 1)) ?>
+                    </div>
+                    <div style="flex:1;display:flex;flex-direction:column">
+                        <span style="font-weight:600;"><?= htmlspecialchars($acc['label'] ?: $acc['email']) ?></span>
+                        <span style="font-size:.75rem;color:var(--wm-text-muted)"><?= htmlspecialchars($acc['email']) ?></span>
+                    </div>
+                    <?php if ($acc['id'] == $session['account_id']): ?>
+                    <span style="font-size:.7rem;color:var(--wm-success);font-weight:700;">Active</span>
+                    <?php endif; ?>
+                </button>
+                <?php endforeach; ?>
+                <div style="height:1px;background:var(--wm-border)"></div>
+                <?php endif; ?>
                 <a href="?action=settings" style="display:flex;align-items:center;gap:.6rem;padding:.6rem 1rem;font-size:.85rem;color:var(--wm-text);text-decoration:none">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
                     Settings
