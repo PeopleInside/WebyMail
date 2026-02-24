@@ -130,6 +130,10 @@ class SmtpClient
         $this->expect('250');
     }
 
+    /**
+     * Build the raw MIME message (used for sending and mailbox appends).
+     * Caller should pass a validated sender address string.
+     */
     public function buildRaw(string $from, array $msg): string
     {
         $date     = date('r');

@@ -75,6 +75,10 @@ function jsonResponse(array $data): never
 
 function findFolderName(array $folders, array $candidates, string $fallback): string
 {
+    /**
+     * Find the first folder whose display or name matches any candidate (case-insensitive).
+     * Falls back to the provided default if no match is found.
+     */
     foreach ($folders as $f) {
         foreach ($candidates as $cand) {
             if (strcasecmp($f['display'], $cand) === 0 || strcasecmp($f['name'], $cand) === 0) {
@@ -530,13 +534,20 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $maxSize = 50 * 1024 * 1024; // 50 MB (requires matching PHP upload_max_filesize/post_max_size)
         $phpUpload = parseIniSize(ini_get('upload_max_filesize'));
         $phpPost   = parseIniSize(ini_get('post_max_size'));
+        $limitAdjusted = false;
         if ($phpUpload > 0 && $phpUpload < $maxSize) {
             error_log('Attachment limit reduced to PHP upload_max_filesize: ' . $phpUpload . ' bytes');
             $maxSize = $phpUpload;
+            $limitAdjusted = true;
         }
         if ($phpPost > 0 && $phpPost < $maxSize) {
             error_log('Attachment limit reduced to PHP post_max_size: ' . $phpPost . ' bytes');
             $maxSize = $phpPost;
+            $limitAdjusted = true;
+        }
+        if ($limitAdjusted) {
+            $mb = round($maxSize / (1024 * 1024), 1);
+            flashSet('warning', 'Server limits attachments to ' . $mb . ' MB due to PHP configuration.');
         }
         foreach ($_FILES['attachments']['name'] as $i => $name) {
             if (($_FILES['attachments']['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
@@ -571,7 +582,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $imap = $accountMgr->imapConnect($fromAccountId);
             $drafts = findFolderName($imap->getFolders(), ['Drafts'], 'Drafts');
-            $imap->appendToFolder($drafts, $raw, "\\Draft");
+            $imap->appendToFolder($drafts, $raw, '\\Draft');
             $imap->disconnect();
             flashSet('success', 'Draft saved.');
         } catch (RuntimeException $e) {

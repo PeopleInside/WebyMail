@@ -161,6 +161,7 @@ $signature = $signature ?? '';
     var editorEl   = document.getElementById('quill-editor');
     var hidden     = document.getElementById('body-html-hidden');
     var imageInput = document.getElementById('inline-image-input');
+    var inlineLimit = 2 * 1024 * 1024; // 2 MB inline embed cap
     var initialHtml = <?= json_encode($prefill['body_html'] ?? '') ?>;
     var signature   = <?= json_encode($signature) ?>;
     var defaultColor = '';
@@ -221,7 +222,7 @@ $signature = $signature ?? '';
         imageInput.addEventListener('change', function() {
             var file = imageInput.files && imageInput.files[0];
             if (!file) return;
-            if (file.size > 2 * 1024 * 1024) {
+            if (file.size > inlineLimit) {
                 alert('Inline editor images are limited to 2 MB. Please attach the file instead for larger images (subject to server attachment limits, typically 50 MB).');
                 imageInput.value = '';
                 return;
