@@ -414,12 +414,19 @@ if ($action === 'email_body') {
 if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $msgNo  = (int) ($_GET['msg']    ?? 0);
     $folder = $_GET['folder'] ?? 'INBOX';
+    $trashCandidates = ['Trash', 'Deleted', 'Deleted Items'];
+    $isTrashFolder = in_array(strtoupper($folder), array_map('strtoupper', $trashCandidates), true);
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
-        $imap->deleteMessage($folder, $msgNo);
+        if ($isTrashFolder) {
+            $imap->deleteMessage($folder, $msgNo);
+        } else {
+            $trash = findFolderName($folders, $trashCandidates, 'Trash');
+            $imap->moveMessage($folder, $msgNo, $trash);
+        }
         $imap->disconnect();
-        flashSet('success', 'Message deleted.');
+        flashSet('success', $isTrashFolder ? 'Message deleted.' : 'Moved to Trash.');
     } catch (RuntimeException $e) {
         flashSet('danger', 'Delete failed: ' . $e->getMessage());
     }
@@ -432,12 +439,21 @@ if ($action === 'bulk' && isAjax()) {
     $folder = $body['folder'] ?? 'INBOX';
     $uids   = array_map('intval', $body['uids'] ?? []);
     $act    = $body['action'] ?? '';
+    $trashCandidates = ['Trash', 'Deleted', 'Deleted Items'];
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
         foreach ($uids as $uid) {
             match ($act) {
-                'delete' => $imap->deleteMessage($folder, $uid),
+                'delete' => (function() use ($imap, $folder, $trashCandidates, $uid) {
+                    $isTrash = in_array(strtoupper($folder), array_map('strtoupper', $trashCandidates), true);
+                    if ($isTrash) {
+                        $imap->deleteMessage($folder, $uid);
+                    } else {
+                        $trash = findFolderName($imap->getFolders(), $trashCandidates, 'Trash');
+                        $imap->moveMessage($folder, $uid, $trash);
+                    }
+                })(),
                 'read'   => $imap->markRead($folder, $uid, true),
                 'unread' => $imap->markRead($folder, $uid, false),
                 default  => null,
