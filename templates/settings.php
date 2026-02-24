@@ -9,6 +9,7 @@
  * @var array  $recoveryCodes (when enrolling 2FA)
  */
 $tab = $tab ?? 'profile';
+$brandName = function_exists('appName') ? appName() : Config::get('app_name', 'WebyMail');
 ?>
 
 <div class="wm-settings-grid">
@@ -84,6 +85,7 @@ $tab = $tab ?? 'profile';
             var toolbar = document.getElementById('sig-toolbar');
             var editor  = document.getElementById('sig-editor');
             editor.innerHTML = <?= json_encode($user['signature'] ?? '') ?> || '<p><br></p>';
+            try { document.execCommand('enableObjectResizing', false, true); } catch (e) {}
 
             toolbar.querySelectorAll('[data-sig-cmd]').forEach(function(btn) {
                 btn.addEventListener('click', function(e) {
@@ -312,7 +314,7 @@ $tab = $tab ?? 'profile';
             <div class="wm-card-header">Theme</div>
             <div class="wm-card-body">
                 <p style="font-size:.875rem;color:var(--wm-text-muted);margin-top:0">
-                    Choose how WebyMail looks. <strong>System</strong> automatically follows your
+                    Choose how <?= htmlspecialchars($brandName) ?> looks. <strong>System</strong> automatically follows your
                     operating system's dark/light preference.
                 </p>
                 <form method="post" action="?action=settings_save&tab=appearance" id="theme-form">

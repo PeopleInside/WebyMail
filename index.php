@@ -31,6 +31,17 @@ spl_autoload_register(function (string $class): void {
 
 require_once __DIR__ . '/src/Config.php';
 
+function appName(): string
+{
+    return (string) Config::get('app_name', 'WebyMail');
+}
+
+function pageTitle(string $section = ''): string
+{
+    $name = appName();
+    return $section !== '' ? ($name . ' – ' . $section) : $name;
+}
+
 // ── First-run: redirect to setup wizard ──────────────────────────────────────
 if (!Config::isSetup()) {
     header('Location: setup.php');
@@ -218,6 +229,7 @@ if ($action === 'login') {
         'error' => $error,
         'needs2fa' => $needs2fa,
         'challenge' => $challenge,
+        'pageTitle' => pageTitle('Login'),
     ], false);
     exit;
 }
@@ -275,6 +287,13 @@ try {
 } catch (RuntimeException) {
     // IMAP might be temporarily unavailable; non-fatal
 }
+if (empty($folders)) {
+    $folders = [
+        ['name' => 'INBOX', 'display' => 'Inbox', 'unread' => 0],
+        ['name' => 'Sent',  'display' => 'Sent'],
+        ['name' => 'Drafts','display' => 'Drafts'],
+    ];
+}
 
 $layoutCommon = [
     'session'       => $session,
@@ -287,6 +306,10 @@ $layoutCommon = [
 // ── Account switch ────────────────────────────────────────────────────────────
 if ($action === 'switch_account') {
     $newId = (int) ($_POST['account_id'] ?? 0);
+    if ($newId === 0 && isAjax()) {
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $newId = (int) ($body['account_id'] ?? 0);
+    }
     if ($accountMgr->belongsToUser($newId, $userId)) {
         (new Session())->switchAccount($newId);
     }
@@ -310,7 +333,7 @@ if ($action === 'inbox' || $action === 'search') {
     render('inbox', $layoutCommon + [
         'mailData'     => $mailData,
         'folder'       => $currentFolder,
-        'pageTitle'    => 'WebyMail – Inbox',
+        'pageTitle'    => pageTitle('Inbox'),
     ]);
     exit;
 }
@@ -343,7 +366,7 @@ if ($action === 'view') {
         'message'     => $message,
         'folder'      => $currentFolder,
         'hasExternal' => $hasExternal,
-        'pageTitle'   => htmlspecialchars($message['subject'] ?? 'View message'),
+        'pageTitle'   => pageTitle($message['subject'] ?? 'View message'),
     ]);
     exit;
 }
@@ -493,7 +516,7 @@ if ($action === 'compose') {
         'folder'            => $currentFolder,
         'currentAccountId'  => $accountId,
         'signature'         => $user['signature'] ?? '',
-        'pageTitle'         => 'WebyMail – Compose',
+        'pageTitle'         => pageTitle('Compose'),
     ]);
     exit;
 }
@@ -639,7 +662,7 @@ if ($action === 'settings') {
         'totpSecret'    => $totpSecret,
         'recoveryCodes' => $recoveryCodes,
         'qrUrl'         => $qrUrl,
-        'pageTitle'     => 'WebyMail – Settings',
+        'pageTitle'     => pageTitle('Settings'),
     ]);
     exit;
 }

@@ -3,7 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($pageTitle ?? 'WebyMail') ?></title>
+    <?php
+    $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'WebyMail');
+    $activeAccount = null;
+    if (!empty($accounts ?? []) && isset($session['account_id'])) {
+        foreach ($accounts as $acc) {
+            if ((int)$acc['id'] === (int)$session['account_id']) {
+                $activeAccount = $acc;
+                break;
+            }
+        }
+    }
+    $activeLabel = $activeAccount['label'] ?? ($session['display_name'] ?? $session['email'] ?? '');
+    $activeEmail = $activeAccount['email'] ?? ($session['email'] ?? '');
+    ?>
+    <title><?= htmlspecialchars($pageTitle ?? $brandName) ?></title>
     <meta name="robots" content="noindex,nofollow">
 
     <!--
@@ -46,7 +60,7 @@
                 <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
             </svg>
         </button>
-        <a href="?action=inbox" class="brand">Weby<span>Mail</span></a>
+        <a href="?action=inbox" class="brand"><?= htmlspecialchars($brandName) ?></a>
 
         <!-- Search -->
         <div class="input-group" style="max-width:320px;flex:1">
@@ -72,10 +86,10 @@
         <div style="position:relative">
             <button class="btn-ghost btn" style="color:rgba(255,255,255,.85);gap:.5rem" id="user-menu-btn">
                 <div class="wm-account-avatar" style="width:28px;height:28px;font-size:.75rem">
-                    <?= strtoupper(substr($session['display_name'] ?? $session['email'] ?? 'U', 0, 1)) ?>
+                    <?= strtoupper(substr($activeLabel ?: $activeEmail ?: 'U', 0, 1)) ?>
                 </div>
                 <span style="font-size:.82rem;max-width:120px;overflow:hidden;text-overflow:ellipsis">
-                    <?= htmlspecialchars($session['display_name'] ?? $session['email'] ?? '') ?>
+                    <?= htmlspecialchars($activeLabel ?: $activeEmail) ?>
                 </span>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <polyline points="6 9 12 15 18 9"/>

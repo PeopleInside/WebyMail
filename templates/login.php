@@ -2,13 +2,14 @@
 /** @var array|null $challenge  POW captcha challenge payload */
 /** @var string $error     Login error message */
 /** @var bool $needs2fa    Show 2FA step instead of password */
+$brandName = function_exists('appName') ? appName() : Config::get('app_name', 'WebyMail');
 ?>
 <div class="wm-auth-page">
     <div class="wm-auth-box">
         <!-- Logo -->
         <div class="wm-auth-logo">
-            <h1>Weby<span>Mail</span></h1>
-            <p>Secure Web Mail Client</p>
+            <h1><?= htmlspecialchars($brandName) ?></h1>
+            <p><?= htmlspecialchars($brandName) ?> — Secure Web Mail Client</p>
         </div>
 
         <!-- Theme toggle (top-right of card) -->

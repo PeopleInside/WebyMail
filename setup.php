@@ -83,7 +83,7 @@ ob_start();
 include __DIR__ . '/templates/setup.php';
 $content = ob_get_clean();
 
-$pageTitle   = 'WebyMail Setup';
+$pageTitle   = Config::get('app_name', 'WebyMail') . ' Setup';
 $shellLayout = false;
 
 include __DIR__ . '/templates/layout.php';
