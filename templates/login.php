@@ -9,10 +9,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
         <!-- Logo -->
         <div class="wm-auth-logo">
             <h1>Weby<span>Mail</span></h1>
-            <?php
-            $loginSubtitle = Config::get('login_subtitle', '');
-            ?>
-            <p><?= $loginSubtitle !== '' ? htmlspecialchars($loginSubtitle) : 'Secure Web Mail Client' ?></p>
+            <p><?= htmlspecialchars(Config::get('login_subtitle', 'Secure Web Mail Client')) ?></p>
         </div>
 
         <!-- Theme toggle (top-right of card) -->

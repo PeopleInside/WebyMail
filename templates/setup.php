@@ -186,12 +186,12 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                         <legend style="font-size:.82rem;font-weight:600;padding:0 .5rem;color:var(--wm-text-muted)">Login page branding</legend>
 
                         <div class="form-group" style="margin-bottom:.75rem">
-                            <label>Subtitle (shown below the app name)</label>
+                            <label>Tagline (the line below the app name on the login page)</label>
                             <input type="text" name="login_subtitle" class="form-control"
-                                   placeholder="e.g. Company Mail · Powered by WebyMail"
-                                   value="<?= htmlspecialchars($_POST['login_subtitle'] ?? '') ?>">
+                                   placeholder="Secure Web Mail Client"
+                                   value="<?= htmlspecialchars($_POST['login_subtitle'] ?? 'Secure Web Mail Client') ?>">
                             <p class="form-hint" style="font-size:.78rem;color:var(--wm-text-muted);margin:.25rem 0 0">
-                                Plain text only. Leave blank for the default tagline.
+                                Replaces <em>Secure Web Mail Client</em> shown under the logo. Plain text only.
                             </p>
                         </div>
 

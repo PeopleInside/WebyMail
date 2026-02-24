@@ -68,7 +68,7 @@ class Config
             'db_path'                   => __DIR__ . '/../data/webymail.db',
             'setup_complete'            => false,
             // UI / branding
-            'login_subtitle'            => '',
+            'login_subtitle'            => 'Secure Web Mail Client',
             'login_footer'              => '',
             'show_server_settings'      => true,
             'favicon_path'              => '',
