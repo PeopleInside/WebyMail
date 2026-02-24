@@ -103,14 +103,14 @@ function requireAuth(): array
 
 $action = $_GET['action'] ?? 'inbox';
 
-// ── ALTCHA challenge endpoint (GET, public) ───────────────────────────────────
-if ($action === 'altcha_challenge') {
+// ── Proof-of-Work captcha challenge endpoint (GET, public) ─────────────────────
+if ($action === 'pow_challenge') {
     if (!Config::get('altcha_enabled', true)) {
         http_response_code(404);
         exit;
     }
-    $altcha    = new Altcha();
-    $challenge = $altcha->createChallenge();
+    $captcha   = new Captcha();
+    $challenge = $captcha->issue();
     header('Content-Type: application/json');
     echo json_encode($challenge);
     exit;
@@ -126,7 +126,8 @@ if ($action === 'login') {
 
     $error   = null;
     $needs2fa = isset($_SESSION['pending_2fa']) && time() < ($_SESSION['pending_2fa']['expires'] ?? 0);
-    $altchaEnabled = (bool) Config::get('altcha_enabled', true);
+    $captchaEnabled = (bool) Config::get('altcha_enabled', true);
+    $captcha = new Captcha();
 
     // Pick up any flash error (e.g. from a failed 2FA attempt)
     $flashMsg = flashGet();
@@ -134,12 +135,12 @@ if ($action === 'login') {
         $error = $flashMsg['message'];
     }
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        // Verify ALTCHA
-        $captchaCheckPassed  = !$altchaEnabled;
-        if ($altchaEnabled) {
-            $altcha  = new Altcha();
-            $payload = $_POST['altcha'] ?? '';
-            if ($altcha->verify($payload)) {
+        // Verify proof-of-work captcha
+        $captchaCheckPassed = !$captchaEnabled;
+        if ($captchaEnabled) {
+            $powSolution = $_POST['pow_solution'] ?? '';
+            $powToken    = $_POST['pow_token'] ?? '';
+            if ($captcha->verify($powSolution, $powToken)) {
                 $captchaCheckPassed = true;
             } else {
                 $error = 'Security check failed. Please try again.';
@@ -180,12 +181,11 @@ if ($action === 'login') {
         }
     }
 
-    $challenge = $altchaEnabled ? (new Altcha())->createChallenge() : null;
+    $challenge = $captchaEnabled ? $captcha->issue() : null;
     render('login', [
         'error' => $error,
         'needs2fa' => $needs2fa,
         'challenge' => $challenge,
-        'altchaEnabled' => $altchaEnabled,
     ], false);
     exit;
 }
