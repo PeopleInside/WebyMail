@@ -238,6 +238,8 @@ function initSmtpPortSync(container) {
             port.value = '465';
         } else if (starttl.checked) {
             port.value = '587';
+        } else if (!port.value) {
+            port.value = '587';
         }
     };
 

@@ -188,19 +188,26 @@ $signature = $signature ?? '';
     }
 
     var content = buildInitialContent();
-    // If Quill loads deferred, wait for it; otherwise fall back quickly.
+    // If Quill loads, use it; otherwise fall back after a short grace period.
     if (window.Quill) {
         initQuill(content);
-    } else {
-        // Give the deferred script a moment; if still missing, fallback.
-        setTimeout(function() {
-            if (window.Quill) {
-                initQuill(content);
-            } else {
-                initFallback(content);
-            }
-        }, 100);
+        return;
     }
+
+    var quillScript = document.querySelector('script[src*="quill@2"]');
+    if (quillScript) {
+        quillScript.addEventListener('load', function() { initQuill(content); });
+        quillScript.addEventListener('error', function() { initFallback(content); });
+    }
+
+    // Grace period in case the script is slow but will eventually load.
+    setTimeout(function() {
+        if (window.Quill) {
+            initQuill(content);
+        } else {
+            initFallback(content);
+        }
+    }, 500);
 })();
 </script>
 
