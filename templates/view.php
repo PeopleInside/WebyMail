@@ -77,7 +77,7 @@ $hasHtml   = !empty($message['body_html']);
     <iframe id="email-frame" class="wm-email-frame"
             data-src="?action=email_body&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&images=1"
             src="?action=email_body&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&images=0"
-            sandbox="allow-same-origin"
+            sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
             referrerpolicy="no-referrer"
             loading="lazy"
             onload="this.style.height=(this.contentWindow.document.body.scrollHeight+20)+'px'">
@@ -85,7 +85,7 @@ $hasHtml   = !empty($message['body_html']);
     <?php else: ?>
     <iframe id="email-frame" class="wm-email-frame"
             src="?action=email_body&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&images=1"
-            sandbox="allow-same-origin"
+            sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
             referrerpolicy="no-referrer"
             loading="lazy"
             onload="this.style.height=(this.contentWindow.document.body.scrollHeight+20)+'px'">

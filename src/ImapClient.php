@@ -305,6 +305,40 @@ class ImapClient
         return true;
     }
 
+    public function createFolder(string $name): bool
+    {
+        $this->assertConnected();
+        $nameRaw = $this->host . mb_convert_encoding($name, 'UTF7-IMAP', 'UTF-8');
+        $ok = imap_createmailbox($this->conn, $nameRaw);
+        if ($ok === false) {
+            throw new RuntimeException('Failed to create folder: ' . $name);
+        }
+        return true;
+    }
+
+    public function renameFolder(string $oldName, string $newName): bool
+    {
+        $this->assertConnected();
+        $oldRaw = $this->host . mb_convert_encoding($oldName, 'UTF7-IMAP', 'UTF-8');
+        $newRaw = $this->host . mb_convert_encoding($newName, 'UTF7-IMAP', 'UTF-8');
+        $ok = imap_renamemailbox($this->conn, $oldRaw, $newRaw);
+        if ($ok === false) {
+            throw new RuntimeException('Failed to rename folder: ' . $oldName);
+        }
+        return true;
+    }
+
+    public function deleteFolder(string $name): bool
+    {
+        $this->assertConnected();
+        $nameRaw = $this->host . mb_convert_encoding($name, 'UTF7-IMAP', 'UTF-8');
+        $ok = imap_deletemailbox($this->conn, $nameRaw);
+        if ($ok === false) {
+            throw new RuntimeException('Failed to delete folder: ' . $name);
+        }
+        return true;
+    }
+
     private function isAttachment(object $part): bool
     {
         if (isset($part->disposition) && strtolower($part->disposition) === 'attachment') {

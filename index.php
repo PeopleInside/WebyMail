@@ -317,6 +317,15 @@ try {
         }
     }
     unset($f);
+    // Sort: INBOX first, then others alphabetically
+    usort($folders, function (array $a, array $b): int {
+        $aIsInbox = strtoupper($a['name']) === 'INBOX';
+        $bIsInbox = strtoupper($b['name']) === 'INBOX';
+        if ($aIsInbox !== $bIsInbox) {
+            return $aIsInbox ? -1 : 1;
+        }
+        return strcmp($a['display'], $b['display']);
+    });
 } catch (RuntimeException) {
     // IMAP might be temporarily unavailable; non-fatal
 }
@@ -347,6 +356,63 @@ if ($action === 'switch_account') {
         (new Session())->switchAccount($newId);
     }
     if (isAjax()) jsonResponse(['ok' => true]);
+    redirect('?action=inbox');
+}
+
+// ── Folder management ─────────────────────────────────────────────────────────
+if ($action === 'create_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $name = trim($_POST['name'] ?? '');
+    if ($name === '') {
+        flashSet('danger', 'Folder name cannot be empty.');
+        redirect('?action=inbox');
+    }
+    try {
+        $imap = $accountMgr->imapConnect($accountId);
+        $imap->createFolder($name);
+        $imap->disconnect();
+        flashSet('success', 'Folder "' . htmlspecialchars($name) . '" created.');
+    } catch (RuntimeException $e) {
+        flashSet('danger', 'Could not create folder: ' . $e->getMessage());
+    }
+    redirect('?action=inbox');
+}
+
+if ($action === 'rename_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $oldName = trim($_POST['old_name'] ?? '');
+    $newName = trim($_POST['new_name'] ?? '');
+    if ($oldName === '' || $newName === '') {
+        flashSet('danger', 'Folder names cannot be empty.');
+        redirect('?action=inbox');
+    }
+    try {
+        $imap = $accountMgr->imapConnect($accountId);
+        $imap->renameFolder($oldName, $newName);
+        $imap->disconnect();
+        flashSet('success', 'Folder renamed to "' . htmlspecialchars($newName) . '".');
+    } catch (RuntimeException $e) {
+        flashSet('danger', 'Could not rename folder: ' . $e->getMessage());
+    }
+    redirect('?action=inbox');
+}
+
+if ($action === 'delete_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $name = trim($_POST['name'] ?? '');
+    if (strtoupper($name) === 'INBOX') {
+        flashSet('danger', 'Cannot delete INBOX.');
+        redirect('?action=inbox');
+    }
+    if ($name === '') {
+        flashSet('danger', 'Folder name cannot be empty.');
+        redirect('?action=inbox');
+    }
+    try {
+        $imap = $accountMgr->imapConnect($accountId);
+        $imap->deleteFolder($name);
+        $imap->disconnect();
+        flashSet('success', 'Folder "' . htmlspecialchars($name) . '" deleted.');
+    } catch (RuntimeException $e) {
+        flashSet('danger', 'Could not delete folder: ' . $e->getMessage());
+    }
     redirect('?action=inbox');
 }
 
@@ -430,6 +496,58 @@ if ($action === 'email_body') {
         );
     }
 
+    // Sanitize links: remove javascript: hrefs and add target="_blank" rel="noopener noreferrer"
+    // Use DOMDocument when available for reliable link sanitization
+    if (class_exists('DOMDocument') && trim($html) !== '') {
+        $doc = new DOMDocument('1.0', 'UTF-8');
+        libxml_use_internal_errors(true);
+        $doc->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        libxml_clear_errors();
+        foreach ($doc->getElementsByTagName('a') as $a) {
+            $href = $a->getAttribute('href');
+            // Normalise: decode HTML entities, remove whitespace chars, lowercase
+            $normalised = strtolower(preg_replace('/[\x00-\x20]+/', '', html_entity_decode($href, ENT_QUOTES | ENT_HTML5)));
+            if (str_starts_with($normalised, 'javascript:') || str_starts_with($normalised, 'vbscript:') || str_starts_with($normalised, 'data:text/html')) {
+                $a->setAttribute('href', '#');
+            }
+            $a->setAttribute('target', '_blank');
+            $a->setAttribute('rel', 'noopener noreferrer');
+        }
+        $html = '';
+        foreach ($doc->getElementsByTagName('body')->item(0)?->childNodes ?? [] as $node) {
+            $html .= $doc->saveHTML($node);
+        }
+        if ($html === '') {
+            // Fallback: just save the full document body
+            $html = $doc->saveHTML();
+        }
+    } else {
+        // Regex fallback: strip known dangerous schemes and rewrite anchors
+        $html = preg_replace_callback(
+            '/<a\b([^>]*)>/i',
+            function (array $m): string {
+                $attrs = $m[1];
+                // Strip any href whose value (normalised) starts with javascript: or vbscript:
+                $attrs = preg_replace_callback(
+                    '/\bhref\s*=\s*(["\'])(.*?)\1/is',
+                    function (array $hm): string {
+                        $normalised = strtolower(preg_replace('/[\x00-\x20]+/', '', html_entity_decode($hm[2], ENT_QUOTES | ENT_HTML5)));
+                        if (str_starts_with($normalised, 'javascript:') || str_starts_with($normalised, 'vbscript:') || str_starts_with($normalised, 'data:text/html')) {
+                            return 'href="#"';
+                        }
+                        return $hm[0];
+                    },
+                    $attrs
+                );
+                // Remove existing target and rel attributes so we can set our own
+                $attrs = preg_replace('/\s*\btarget\s*=\s*(["\'])[^"\']*\1/i', '', $attrs);
+                $attrs = preg_replace('/\s*\brel\s*=\s*(["\'])[^"\']*\1/i', '', $attrs);
+                return '<a' . $attrs . ' target="_blank" rel="noopener noreferrer">';
+            },
+            $html
+        );
+    }
+
     // Determine dark/light from cookie preference for iframe body color
     $theme = $_COOKIE['wm_theme'] ?? 'system';
     $bodyBg = $theme === 'dark' ? '#161b22' : ($theme === 'light' ? '#ffffff' : '#ffffff');
@@ -438,6 +556,7 @@ if ($action === 'email_body') {
     header('Content-Type: text/html; charset=UTF-8');
     header('Content-Security-Policy: default-src \'none\'; style-src \'unsafe-inline\'; img-src ' . ($showImages ? 'https: data:' : 'data:') . '; font-src \'none\'');
     echo '<!DOCTYPE html><html><head><meta charset="UTF-8">';
+    echo '<base target="_blank" rel="noopener noreferrer">';
     echo '<style>body{margin:0;padding:1rem;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:.9rem;line-height:1.6;background:' . $bodyBg . ';color:' . $bodyColor . '}img{max-width:100%;height:auto}a{color:#2563eb}</style>';
     echo '</head><body>' . $html . '</body></html>';
     exit;

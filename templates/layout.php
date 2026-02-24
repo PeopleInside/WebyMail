@@ -137,17 +137,64 @@
             Compose
         </a>
 
-        <div class="wm-sidebar-section">Folders</div>
-        <?php foreach ($folders ?? [] as $folder): ?>
-        <a href="?action=inbox&folder=<?= urlencode($folder['name']) ?>"
-           class="<?= ($currentFolder ?? 'INBOX') === $folder['name'] ? 'active' : '' ?>">
-            <?= htmlspecialchars($folder['display']) ?>
-            <?php if (!empty($folder['unread'])): ?>
-            <span class="badge"><?= (int)$folder['unread'] ?></span>
+        <div class="wm-sidebar-section" style="display:flex;align-items:center;justify-content:space-between">
+            <span>Folders</span>
+            <button type="button" id="new-folder-btn" title="New folder"
+                    style="background:none;border:none;cursor:pointer;color:var(--wm-text-muted);padding:.1rem .3rem;font-size:1rem;line-height:1">+</button>
+        </div>
+        <?php foreach ($folders ?? [] as $f): ?>
+        <div class="wm-sidebar-folder-row" style="display:flex;align-items:center;position:relative">
+            <a href="?action=inbox&folder=<?= urlencode($f['name']) ?>"
+               class="<?= ($currentFolder ?? 'INBOX') === $f['name'] ? 'active' : '' ?>"
+               style="flex:1;min-width:0">
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= htmlspecialchars($f['display']) ?></span>
+                <?php if (!empty($f['unread'])): ?>
+                <span class="badge"><?= (int)$f['unread'] ?></span>
+                <?php endif; ?>
+            </a>
+            <?php if (strtoupper($f['name']) !== 'INBOX'): ?>
+            <button type="button"
+                    class="wm-folder-menu-btn"
+                    data-folder="<?= htmlspecialchars($f['name']) ?>"
+                    title="Folder options"
+                    style="background:none;border:none;cursor:pointer;color:var(--wm-text-muted);padding:.2rem .4rem;font-size:.85rem;opacity:0;flex-shrink:0">⋯</button>
             <?php endif; ?>
-        </a>
+        </div>
         <?php endforeach; ?>
+
+        <!-- Folder management forms (hidden) -->
+        <form id="new-folder-form" method="post" action="?action=create_folder"
+              style="display:none;padding:.4rem .75rem;gap:.3rem;flex-direction:column">
+            <input type="text" name="name" id="new-folder-name" placeholder="Folder name"
+                   style="font-size:.82rem;padding:.3rem .5rem;border:1px solid var(--wm-border);border-radius:5px;background:var(--wm-surface);color:var(--wm-text)">
+            <div style="display:flex;gap:.3rem">
+                <button type="submit" class="btn btn-primary btn-sm" style="flex:1;font-size:.78rem">Create</button>
+                <button type="button" id="cancel-new-folder" class="btn btn-ghost btn-sm" style="font-size:.78rem">Cancel</button>
+            </div>
+        </form>
     </nav>
+
+    <!-- Folder context menu (shared, positioned dynamically) -->
+    <div id="folder-ctx-menu" style="display:none;position:fixed;background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:8px;box-shadow:var(--wm-shadow);z-index:500;min-width:140px;overflow:hidden">
+        <button type="button" id="folder-rename-btn" style="display:flex;width:100%;padding:.55rem 1rem;font-size:.85rem;background:none;border:none;color:var(--wm-text);cursor:pointer;gap:.5rem;align-items:center">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Rename
+        </button>
+        <div style="height:1px;background:var(--wm-border)"></div>
+        <button type="button" id="folder-delete-btn" style="display:flex;width:100%;padding:.55rem 1rem;font-size:.85rem;background:none;border:none;color:var(--wm-danger);cursor:pointer;gap:.5rem;align-items:center">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+            Delete
+        </button>
+    </div>
+
+    <!-- Hidden forms for folder rename/delete -->
+    <form id="rename-folder-form" method="post" action="?action=rename_folder" style="display:none">
+        <input type="hidden" name="old_name" id="rename-old-name">
+        <input type="hidden" name="new_name" id="rename-new-name">
+    </form>
+    <form id="delete-folder-form" method="post" action="?action=delete_folder" style="display:none">
+        <input type="hidden" name="name" id="delete-folder-name">
+    </form>
 
     <!-- Main -->
     <main class="wm-main">
@@ -172,6 +219,90 @@ document.addEventListener('click', function() {
     var m = document.getElementById('user-menu');
     if (m) m.style.display = 'none';
 });
+
+// Folder management
+(function() {
+    var newFolderBtn    = document.getElementById('new-folder-btn');
+    var newFolderForm   = document.getElementById('new-folder-form');
+    var cancelNewFolder = document.getElementById('cancel-new-folder');
+    var newFolderName   = document.getElementById('new-folder-name');
+    var ctxMenu         = document.getElementById('folder-ctx-menu');
+    var renameFolderBtn = document.getElementById('folder-rename-btn');
+    var deleteFolderBtn = document.getElementById('folder-delete-btn');
+    var renameForm      = document.getElementById('rename-folder-form');
+    var deleteForm      = document.getElementById('delete-folder-form');
+    var renameOldName   = document.getElementById('rename-old-name');
+    var renameNewName   = document.getElementById('rename-new-name');
+    var deleteFolderName = document.getElementById('delete-folder-name');
+    var activeFolder    = null;
+
+    // Show/hide new folder form
+    if (newFolderBtn && newFolderForm) {
+        newFolderBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var visible = newFolderForm.style.display !== 'none';
+            newFolderForm.style.display = visible ? 'none' : 'flex';
+            if (!visible && newFolderName) { newFolderName.value = ''; newFolderName.focus(); }
+        });
+    }
+    if (cancelNewFolder && newFolderForm) {
+        cancelNewFolder.addEventListener('click', function() {
+            newFolderForm.style.display = 'none';
+        });
+    }
+
+    // Show folder menu buttons on hover
+    document.querySelectorAll('.wm-sidebar-folder-row').forEach(function(row) {
+        var btn = row.querySelector('.wm-folder-menu-btn');
+        if (!btn) return;
+        row.addEventListener('mouseenter', function() { btn.style.opacity = '1'; });
+        row.addEventListener('mouseleave', function() { btn.style.opacity = '0'; });
+    });
+
+    // Open context menu
+    document.querySelectorAll('.wm-folder-menu-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            activeFolder = btn.dataset.folder;
+            var rect = btn.getBoundingClientRect();
+            ctxMenu.style.top  = rect.bottom + 'px';
+            ctxMenu.style.left = rect.left + 'px';
+            ctxMenu.style.display = 'block';
+        });
+    });
+
+    // Close context menu on outside click
+    document.addEventListener('click', function() {
+        if (ctxMenu) ctxMenu.style.display = 'none';
+    });
+    if (ctxMenu) {
+        ctxMenu.addEventListener('click', function(e) { e.stopPropagation(); });
+    }
+
+    // Rename action
+    if (renameFolderBtn) {
+        renameFolderBtn.addEventListener('click', function() {
+            if (!activeFolder) return;
+            ctxMenu.style.display = 'none';
+            var newName = prompt('Rename folder "' + activeFolder + '" to:', activeFolder);
+            if (!newName || newName.trim() === '' || newName.trim() === activeFolder) return;
+            renameOldName.value = activeFolder;
+            renameNewName.value = newName.trim();
+            renameForm.submit();
+        });
+    }
+
+    // Delete action
+    if (deleteFolderBtn) {
+        deleteFolderBtn.addEventListener('click', function() {
+            if (!activeFolder) return;
+            ctxMenu.style.display = 'none';
+            if (!confirm('Delete folder "' + activeFolder + '"? This cannot be undone.')) return;
+            deleteFolderName.value = activeFolder;
+            deleteForm.submit();
+        });
+    }
+})();
 </script>
 
 <?php else: ?>

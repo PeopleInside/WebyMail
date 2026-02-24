@@ -147,8 +147,12 @@ $signature = $signature ?? '';
                         <button type="button" class="ql-blockquote" data-cmd="formatBlock" data-value="blockquote" title="Quote">❝</button>
                         <button type="button" class="ql-clean" data-cmd="removeFormat" title="Clear formatting">✕</button>
                     </div>
+                    <div class="wm-editor-group">
+                        <button type="button" id="source-toggle" title="Toggle HTML source">&lt;/&gt;</button>
+                    </div>
             </div>
             <div id="quill-editor" style="flex:1;min-height:300px"></div>
+            <textarea id="source-editor" style="display:none;flex:1;min-height:300px;width:100%;box-sizing:border-box;font-family:monospace;font-size:.85rem;padding:.75rem;border:none;border-top:1px solid var(--wm-border);resize:none;background:var(--wm-surface);color:var(--wm-text);outline:none" spellcheck="false"></textarea>
         </div>
     </form>
 </div>
@@ -221,13 +225,37 @@ $signature = $signature ?? '';
                 var cmd = btn.dataset.cmd;
                 var val = btn.dataset.value || null;
                 if (cmd === 'createLink') {
-                    val = prompt('Enter URL');
-                    if (!val) return;
-                    // If an image is selected in the overlay, wrap it in a link
                     var overlayTarget = imgOverlay && imgOverlay._target;
+                    var existingUrl = '';
+                    if (overlayTarget) {
+                        // Check if image is already wrapped in a link
+                        var parentNode = overlayTarget.parentNode;
+                        if (parentNode && parentNode.tagName === 'A') {
+                            existingUrl = parentNode.href || '';
+                        }
+                    } else {
+                        // Check if current text selection is already a link
+                        var sel = window.getSelection();
+                        if (sel && sel.rangeCount > 0) {
+                            var container = sel.getRangeAt(0).commonAncestorContainer;
+                            var anchor = container.nodeType === 3 ? container.parentNode : container;
+                            while (anchor && anchor !== editorEl) {
+                                if (anchor.tagName === 'A') { existingUrl = anchor.href || ''; break; }
+                                anchor = anchor.parentNode;
+                            }
+                        }
+                    }
+                    val = prompt('Enter URL', existingUrl);
+                    if (val === null) return; // cancelled
                     if (overlayTarget) {
                         var existing = overlayTarget.parentNode;
-                        if (existing && existing.tagName === 'A') {
+                        if (val === '') {
+                            // Remove link if URL is empty
+                            if (existing && existing.tagName === 'A') {
+                                existing.parentNode.insertBefore(overlayTarget, existing);
+                                existing.parentNode.removeChild(existing);
+                            }
+                        } else if (existing && existing.tagName === 'A') {
                             existing.href = val;
                         } else {
                             var a = document.createElement('a');
@@ -235,6 +263,11 @@ $signature = $signature ?? '';
                             overlayTarget.parentNode.insertBefore(a, overlayTarget);
                             a.appendChild(overlayTarget);
                         }
+                        editorEl.focus();
+                        return;
+                    }
+                    if (val === '') {
+                        document.execCommand('unlink', false, null);
                         editorEl.focus();
                         return;
                     }
@@ -463,12 +496,42 @@ $signature = $signature ?? '';
     // Require "to" field only when actually sending (not saving draft)
     var toField = document.getElementById('to');
     form.addEventListener('submit', function(e) {
+        // Sync source editor back to visual editor if in source mode
+        var sourceEditor = document.getElementById('source-editor');
+        if (sourceEditor && sourceEditor.style.display !== 'none') {
+            editorEl.innerHTML = sourceEditor.value;
+        }
         hidden.value = editorEl.innerHTML;
         var isSaveDraft = (e.submitter && e.submitter.name === 'save_draft');
         if (toField) {
             toField.required = !isSaveDraft;
         }
     });
+
+    // HTML source editor toggle
+    (function() {
+        var sourceBtn    = document.getElementById('source-toggle');
+        var sourceEditor = document.getElementById('source-editor');
+        var sourceMode   = false;
+        if (!sourceBtn || !sourceEditor) return;
+        sourceBtn.addEventListener('click', function() {
+            sourceMode = !sourceMode;
+            if (sourceMode) {
+                sourceEditor.value = editorEl.innerHTML;
+                editorEl.style.display = 'none';
+                sourceEditor.style.display = 'block';
+                sourceBtn.style.fontWeight = '700';
+                sourceBtn.title = 'Switch to visual editor';
+            } else {
+                editorEl.innerHTML = sourceEditor.value;
+                sourceEditor.style.display = 'none';
+                editorEl.style.display = '';
+                sourceBtn.style.fontWeight = '';
+                sourceBtn.title = 'Toggle HTML source';
+                editorEl.focus();
+            }
+        });
+    })();
 
 })();
 </script>
