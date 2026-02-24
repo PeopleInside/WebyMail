@@ -73,6 +73,18 @@ function jsonResponse(array $data): never
     exit;
 }
 
+function findFolderName(array $folders, array $candidates, string $fallback): string
+{
+    foreach ($folders as $f) {
+        foreach ($candidates as $cand) {
+            if (strcasecmp($f['display'], $cand) === 0 || strcasecmp($f['name'], $cand) === 0) {
+                return $f['name'];
+            }
+        }
+    }
+    return $fallback;
+}
+
 function isAjax(): bool
 {
     return ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
@@ -535,13 +547,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $raw = $smtp->buildRaw($accountFrom['email'], $message);
         try {
             $imap = $accountMgr->imapConnect($fromAccountId);
-            $drafts = 'Drafts';
-            foreach ($imap->getFolders() as $f) {
-                if (strcasecmp($f['display'], 'Drafts') === 0 || strcasecmp($f['name'], 'Drafts') === 0) {
-                    $drafts = $f['name'];
-                    break;
-                }
-            }
+            $drafts = findFolderName($imap->getFolders(), ['Drafts'], 'Drafts');
             $imap->appendToFolder($drafts, $raw, "\\Draft");
             $imap->disconnect();
             flashSet('success', 'Draft saved.');
@@ -555,13 +561,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $raw = $smtp->getLastRaw() ?: $smtp->buildRaw($accountFrom['email'], $message);
         try {
             $imap = $accountMgr->imapConnect($fromAccountId);
-            $sent = 'Sent';
-            foreach ($imap->getFolders() as $f) {
-                if (strcasecmp($f['display'], 'Sent') === 0 || strcasecmp($f['name'], 'Sent') === 0 || strcasecmp($f['name'], 'Sent Items') === 0) {
-                    $sent = $f['name'];
-                    break;
-                }
-            }
+            $sent = findFolderName($imap->getFolders(), ['Sent', 'Sent Items'], 'Sent');
             $imap->appendToFolder($sent, $raw);
             $imap->disconnect();
         } catch (RuntimeException $e) {

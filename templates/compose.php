@@ -143,8 +143,8 @@ $signature = $signature ?? '';
                 </div>
                     <div class="wm-editor-group">
                         <button type="button" class="ql-link" data-cmd="createLink" title="Insert link">🔗</button>
-                        <button type="button" class="ql-image" data-cmd="insertImage" title="Insert image from URL" aria-label="Insert image from URL">🖼️ URL</button>
-                        <button type="button" class="ql-image" data-cmd="insertImageUpload" title="Insert image from device" aria-label="Insert image from device">🖼️ File</button>
+                        <button type="button" class="ql-image-url" data-cmd="insertImage" title="Insert image from URL" aria-label="Insert image from URL">🖼️ URL</button>
+                        <button type="button" class="ql-image-upload" data-cmd="insertImageUpload" title="Insert image from device" aria-label="Insert image from device">🖼️ File</button>
                         <button type="button" class="ql-blockquote" data-cmd="formatBlock" data-value="blockquote" title="Quote">❝</button>
                         <button type="button" class="ql-clean" data-cmd="removeFormat" title="Clear formatting">✕</button>
                     </div>
@@ -221,7 +221,7 @@ $signature = $signature ?? '';
             var file = imageInput.files && imageInput.files[0];
             if (!file) return;
             if (file.size > 2 * 1024 * 1024) {
-                alert('Inline images are limited to 2 MB. Please attach the file instead for larger images.');
+                alert('Inline editor images are limited to 2 MB. Please attach the file instead for larger images (50 MB limit).');
                 imageInput.value = '';
                 return;
             }
