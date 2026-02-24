@@ -148,11 +148,7 @@ class ImapClient
     {
         $this->reopenFolder($folder);
         $destRaw = mb_convert_encoding($dest, 'UTF7-IMAP', 'UTF-8');
-        $ok = imap_mail_move($this->conn, (string) $msgNo, $destRaw);
-        if ($ok === false) {
-            throw new RuntimeException('Failed to move message to ' . $dest);
-        }
-        return (bool) imap_expunge($this->conn);
+        return (bool) imap_mail_move($this->conn, (string) $msgNo, $destRaw);
     }
 
     public function markRead(string $folder, int $msgNo, bool $read): bool
