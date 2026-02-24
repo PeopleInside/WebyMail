@@ -693,7 +693,6 @@ if ($action === 'settings_save') {
                     'smtp_ssl'      => (int)$account['smtp_ssl'],
                     'smtp_starttls' => (int)$account['smtp_starttls'],
                     'username'      => $account['username'],
-                    'password'      => '',
                 ]);
             }
             flashSet('success', 'Profile saved for this account.');
@@ -715,7 +714,6 @@ if ($action === 'settings_save') {
                     'smtp_ssl'      => (int)$account['smtp_ssl'],
                     'smtp_starttls' => (int)$account['smtp_starttls'],
                     'username'      => $account['username'],
-                    'password'      => '',
                 ]);
             }
             flashSet('success', 'Signature saved for this account.');

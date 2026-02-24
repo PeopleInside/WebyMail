@@ -154,6 +154,7 @@ $signature = $signature ?? '';
     var initialHtml = <?= json_encode($prefill['body_html'] ?? '') ?>;
     var signature   = <?= json_encode($signature) ?>;
     var defaultColor = '';
+    var resizeTarget = null;
 
     function buildInitialContent() {
         var content = '';
@@ -208,6 +209,31 @@ $signature = $signature ?? '';
         });
     }
 
+    // Image resize control
+    var resizeBox = document.createElement('div');
+    resizeBox.id = 'img-resizer';
+    resizeBox.style.display = 'none';
+    resizeBox.style.gap = '.35rem';
+    resizeBox.style.alignItems = 'center';
+    resizeBox.style.marginLeft = '.5rem';
+    resizeBox.innerHTML = '<label style="font-size:.8rem;color:var(--wm-text);display:flex;align-items:center;gap:.35rem">Width % <input type="number" id="img-resize-input" min="10" max="200" step="5" value="100" style="width:70px"></label><button type="button" class="btn btn-outline btn-sm" id="img-resize-apply">Apply</button><button type="button" class="btn btn-ghost btn-sm" id="img-resize-close">Close</button>';
+    toolbar?.appendChild(resizeBox);
+    var resizeInput = resizeBox.querySelector('#img-resize-input');
+    resizeBox.querySelector('#img-resize-apply')?.addEventListener('click', function() {
+        if (resizeTarget && resizeInput) {
+            var val = resizeInput.value;
+            if (val) {
+                resizeTarget.style.width = val + '%';
+                resizeTarget.style.height = 'auto';
+            }
+            resizeBox.style.display = 'none';
+        }
+    });
+    resizeBox.querySelector('#img-resize-close')?.addEventListener('click', function() {
+        resizeTarget = null;
+        resizeBox.style.display = 'none';
+    });
+
     // Explicit apply buttons for color/highlight
     document.getElementById('apply-color')?.addEventListener('click', function() {
         var picker = document.getElementById('editor-color-picker');
@@ -250,17 +276,16 @@ $signature = $signature ?? '';
         hidden.value = editorEl.innerHTML;
     });
 
-    // Simple image resize: prompt for width percentage on click
+    // Simple image resize: show inline controls on click
     editorEl.addEventListener('click', function(e) {
         var target = e.target;
         if (target && target.tagName === 'IMG') {
-            var current = target.style.width || target.getAttribute('width') || '100%';
-            var pct = prompt('Set image width (e.g., 50%)', current);
-            if (pct) {
-                target.style.width = pct;
-                target.removeAttribute('width');
-                target.style.height = 'auto';
-            }
+            resizeTarget = target;
+            var current = target.style.width || target.getAttribute('width');
+            var widthPercent = parseInt(current, 10);
+            if (!isFinite(widthPercent)) widthPercent = 100;
+            if (resizeInput) resizeInput.value = widthPercent;
+            if (resizeBox) resizeBox.style.display = 'inline-flex';
         }
     });
 })();

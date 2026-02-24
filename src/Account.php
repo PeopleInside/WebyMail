@@ -67,7 +67,7 @@ class Account
     public function update(int $id, int $userId, array $data): bool
     {
         $data['sender_name'] = $data['sender_name'] ?? '';
-        $data['signature']   = $data['signature']   ?? '';
+        $data['signature'] = $data['signature'] ?? '';
         $fields = ['label', 'sender_name', 'signature', 'email', 'imap_host', 'imap_port', 'imap_ssl',
                    'smtp_host', 'smtp_port', 'smtp_ssl', 'smtp_starttls', 'username'];
         $set    = implode(', ', array_map(fn($f) => "{$f} = ?", $fields));
