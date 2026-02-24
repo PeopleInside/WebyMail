@@ -106,17 +106,20 @@ function resolveTrashFolder(ImapClient $imap): string
 {
     /**
      * Resolve the Trash folder name across common variants, falling back to "Trash".
+     *
+     * @param ImapClient $imap
+     * @return string
      */
     return findFolderName($imap->getFolders(), TRASH_FOLDER_VARIANTS, 'Trash');
 }
 
 function isTrashFolderEquivalent(string $folder, string $trash): bool
 {
-    $normalize = static function (string $name): string {
-        $parts = preg_split('/[\\.\\/]/', $name) ?: [$name];
+    $normalizeFolderName = static function (string $name): string {
+        $parts = preg_split('/[\.\\/]/', $name) ?: [$name];
         return strtolower(end($parts));
     };
-    return $normalize($folder) === $normalize($trash);
+    return $normalizeFolderName($folder) === $normalizeFolderName($trash);
 }
 
 function moveToTrashOrDelete(ImapClient $imap, string $folder, int $msgNo, string $trash, bool $isTrashFolder): void
