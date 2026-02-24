@@ -1,11 +1,12 @@
 # WebyMail
 A PHP Web Mail Client
 
-You can monitor the status of this project here:
+- You can monitor the status of this project here:
 https://github.com/PeopleInside/WebyMail/releases
 
-For any question you can use https://github.com/PeopleInside/WebyMail/discussions
-For security policy you can read the right section: https://github.com/PeopleInside/WebyMail/security
+- For any question you can use https://github.com/PeopleInside/WebyMail/discussions
+
+- For security policy you can read the right section: https://github.com/PeopleInside/WebyMail/security
 
 ## Security
 - A self-hosted proof-of-work captcha is enabled by default on login. To disable it, set `'altcha_enabled' => false` in `config/config.php`.
