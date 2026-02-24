@@ -89,7 +89,12 @@ $signature = $signature ?? '';
             <div class="wm-compose-field">
                 <label for="attachments">Attachments</label>
                 <input type="file" id="attachments" name="attachments[]" multiple
-                       style="background:var(--wm-surface-2);border:1px solid var(--wm-border);padding:.4rem .55rem;border-radius:7px;color:var(--wm-text);">
+                       style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);border:0;padding:0;">
+                <button type="button" class="btn btn-outline btn-sm" id="attachment-trigger" aria-label="Add attachments">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3.5 3.5 0 114.95 4.95l-8.48 8.48a2 2 0 01-2.83-2.83l7.78-7.78"/></svg>
+                    Add attachments
+                </button>
+                <span id="attachment-label" style="font-size:.85rem;color:var(--wm-text-muted);margin-left:.35rem"></span>
             </div>
         </div>
 
@@ -154,7 +159,6 @@ $signature = $signature ?? '';
     var initialHtml = <?= json_encode($prefill['body_html'] ?? '') ?>;
     var signature   = <?= json_encode($signature) ?>;
     var defaultColor = '';
-    var resizeTarget = null;
 
     function buildInitialContent() {
         var content = '';
@@ -209,31 +213,6 @@ $signature = $signature ?? '';
         });
     }
 
-    // Image resize control
-    var resizeBox = document.createElement('div');
-    resizeBox.id = 'img-resizer';
-    resizeBox.style.display = 'none';
-    resizeBox.style.gap = '.35rem';
-    resizeBox.style.alignItems = 'center';
-    resizeBox.style.marginLeft = '.5rem';
-    resizeBox.innerHTML = '<label style="font-size:.8rem;color:var(--wm-text);display:flex;align-items:center;gap:.35rem">Width % <input type="number" id="img-resize-input" min="10" max="200" step="5" value="100" style="width:70px"></label><button type="button" class="btn btn-outline btn-sm" id="img-resize-apply">Apply</button><button type="button" class="btn btn-ghost btn-sm" id="img-resize-close">Close</button>';
-    toolbar?.appendChild(resizeBox);
-    var resizeInput = resizeBox.querySelector('#img-resize-input');
-    resizeBox.querySelector('#img-resize-apply')?.addEventListener('click', function() {
-        if (resizeTarget && resizeInput) {
-            var val = resizeInput.value;
-            if (val) {
-                resizeTarget.style.width = val + '%';
-                resizeTarget.style.height = 'auto';
-            }
-            resizeBox.style.display = 'none';
-        }
-    });
-    resizeBox.querySelector('#img-resize-close')?.addEventListener('click', function() {
-        resizeTarget = null;
-        resizeBox.style.display = 'none';
-    });
-
     // Explicit apply buttons for color/highlight
     document.getElementById('apply-color')?.addEventListener('click', function() {
         var picker = document.getElementById('editor-color-picker');
@@ -272,22 +251,26 @@ $signature = $signature ?? '';
         });
     }
 
+    // Attachment picker helper
+    var attachInput = document.getElementById('attachments');
+    var attachBtn   = document.getElementById('attachment-trigger');
+    var attachLabel = document.getElementById('attachment-label');
+    if (attachBtn && attachInput) {
+        if (attachLabel) attachLabel.textContent = 'No files selected';
+        attachBtn.addEventListener('click', function() {
+            attachInput.click();
+        });
+        attachInput.addEventListener('change', function() {
+            if (!attachLabel) return;
+            var files = Array.from(attachInput.files || []).map(function(f) { return f.name; });
+            attachLabel.textContent = files.length ? files.join(', ') : '';
+        });
+    }
+
     form.addEventListener('submit', function() {
         hidden.value = editorEl.innerHTML;
     });
 
-    // Simple image resize: show inline controls on click
-    editorEl.addEventListener('click', function(e) {
-        var target = e.target;
-        if (target && target.tagName === 'IMG') {
-            resizeTarget = target;
-            var current = target.style.width || target.getAttribute('width');
-            var widthPercent = parseInt(current, 10);
-            if (!isFinite(widthPercent)) widthPercent = 100;
-            if (resizeInput) resizeInput.value = widthPercent;
-            if (resizeBox) resizeBox.style.display = 'inline-flex';
-        }
-    });
 })();
 </script>
 
