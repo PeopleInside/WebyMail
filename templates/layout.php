@@ -45,16 +45,6 @@
 
     <link rel="stylesheet" href="assets/css/style.css">
 
-    <?php
-    // Favicon from AppConfig (if configured)
-    $faviconPath = class_exists('AppConfig') ? AppConfig::get('faviconPath', '') : '';
-    if ($faviconPath !== ''):
-        $faviconExt  = strtolower(pathinfo($faviconPath, PATHINFO_EXTENSION));
-        $faviconType = $faviconExt === 'svg' ? 'image/svg+xml' : 'image/x-icon';
-    ?>
-    <link rel="icon" type="<?= htmlspecialchars($faviconType) ?>" href="<?= htmlspecialchars($faviconPath) ?>">
-    <?php endif; ?>
-
     <?php if (!empty($extraHead)) echo $extraHead; ?>
 </head>
 <body>
