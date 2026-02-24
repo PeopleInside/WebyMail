@@ -159,6 +159,8 @@ $signature = $signature ?? '';
     var initialHtml = <?= json_encode($prefill['body_html'] ?? '') ?>;
     var signature   = <?= json_encode($signature) ?>;
     var defaultColor = '';
+    var imgOverlay = null;
+    var dragState = null;
 
     function buildInitialContent() {
         var content = '';
@@ -173,6 +175,24 @@ $signature = $signature ?? '';
     editorEl.innerHTML = buildInitialContent() || '<p><br></p>';
     defaultColor = getComputedStyle(editorEl).color;
     try { document.execCommand('enableObjectResizing', false, true); } catch (e) {}
+
+    // Lightweight image resize handles (4 corners)
+    (function setupImageOverlay() {
+        var style = document.createElement('style');
+        style.textContent = '#img-resize-overlay{position:absolute;border:1px dashed var(--wm-primary);pointer-events:none;z-index:10}#img-resize-overlay .handle{width:10px;height:10px;background:var(--wm-primary);border:2px solid #fff;box-shadow:0 0 0 1px var(--wm-primary);position:absolute;pointer-events:auto;cursor:nwse-resize;border-radius:3px}#img-resize-overlay .handle.br{cursor:nwse-resize;right:-6px;bottom:-6px}#img-resize-overlay .handle.bl{cursor:nesw-resize;left:-6px;bottom:-6px}#img-resize-overlay .handle.tr{cursor:nesw-resize;right:-6px;top:-6px}#img-resize-overlay .handle.tl{cursor:nwse-resize;left:-6px;top:-6px}';
+        document.head.appendChild(style);
+
+        imgOverlay = document.createElement('div');
+        imgOverlay.id = 'img-resize-overlay';
+        imgOverlay.style.display = 'none';
+        ['tl','tr','bl','br'].forEach(function(pos) {
+            var h = document.createElement('div');
+            h.className = 'handle ' + pos;
+            h.dataset.dir = pos;
+            imgOverlay.appendChild(h);
+        });
+        document.body.appendChild(imgOverlay);
+    })();
 
     if (toolbar) {
         toolbar.querySelectorAll('button[data-cmd]').forEach(function(btn) {
@@ -266,6 +286,86 @@ $signature = $signature ?? '';
             attachLabel.textContent = files.length ? files.join(', ') : '';
         });
     }
+
+    // Image resize overlay logic
+    function hideOverlay() {
+        if (imgOverlay) {
+            imgOverlay.style.display = 'none';
+            imgOverlay._target = null;
+        }
+        dragState = null;
+    }
+    function showOverlay(target) {
+        if (!imgOverlay || !target) return;
+        var rect = target.getBoundingClientRect();
+        imgOverlay._target = target;
+        imgOverlay.style.display = 'block';
+        imgOverlay.style.width  = rect.width + 'px';
+        imgOverlay.style.height = rect.height + 'px';
+        imgOverlay.style.left   = window.scrollX + rect.left + 'px';
+        imgOverlay.style.top    = window.scrollY + rect.top + 'px';
+    }
+    function startDrag(e, dir) {
+        var target = imgOverlay?._target;
+        if (!target) return;
+        e.preventDefault();
+        dragState = {
+            target: target,
+            startX: e.clientX,
+            startY: e.clientY,
+            startW: target.getBoundingClientRect().width,
+            startH: target.getBoundingClientRect().height,
+            dir: dir
+        };
+    }
+    function onMove(e) {
+        if (!dragState) return;
+        e.preventDefault();
+        var dx = e.clientX - dragState.startX;
+        var dy = e.clientY - dragState.startY;
+        var dir = dragState.dir;
+        var newW = dragState.startW + dx * (dir.x || 0);
+        var newH = dragState.startH + dy * (dir.y || 0);
+        if (!dir.x) newW = dragState.startW;
+        if (!dir.y) newH = dragState.startH;
+        newW = Math.max(30, newW);
+        newH = Math.max(30, newH);
+        dragState.target.style.width = newW + 'px';
+        dragState.target.style.height = newH + 'px';
+        showOverlay(dragState.target);
+    }
+    function onUp() { dragState = null; }
+    if (imgOverlay) {
+        imgOverlay.addEventListener('mousedown', function(e) {
+            var dirKey = e.target.dataset.dir;
+            if (!dirKey) return;
+            var dir = {
+                tl: {x:-1, y:-1},
+                tr: {x: 1, y:-1},
+                bl: {x:-1, y: 1},
+                br: {x: 1, y: 1},
+            }[dirKey];
+            startDrag(e, dir);
+        });
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    }
+
+    // Show handles on image click
+    editorEl.addEventListener('click', function(e) {
+        var target = e.target;
+        if (target && target.tagName === 'IMG') {
+            showOverlay(target);
+        } else {
+            hideOverlay();
+        }
+    });
+
+    window.addEventListener('scroll', function() {
+        if (imgOverlay && imgOverlay._target) {
+            showOverlay(imgOverlay._target);
+        }
+    });
 
     form.addEventListener('submit', function() {
         hidden.value = editorEl.innerHTML;
