@@ -100,18 +100,20 @@ function findFolderName(array $folders, array $candidates, string $fallback): st
     return $fallback;
 }
 
+const TRASH_FOLDER_VARIANTS = ['Trash', 'Deleted', 'Deleted Items'];
+
 function resolveTrashFolder(ImapClient $imap): string
 {
     /**
      * Resolve the Trash folder name across common variants, falling back to "Trash".
      */
-    return findFolderName($imap->getFolders(), ['Trash', 'Deleted', 'Deleted Items'], 'Trash');
+    return findFolderName($imap->getFolders(), TRASH_FOLDER_VARIANTS, 'Trash');
 }
 
 function isTrashFolderEquivalent(string $folder, string $trash): bool
 {
     $normalize = static function (string $name): string {
-        $parts = preg_split('/[.\/]/', $name) ?: [$name];
+        $parts = preg_split('/[.\\/]/', $name) ?: [$name];
         return strtolower(end($parts));
     };
     return $normalize($folder) === $normalize($trash);
