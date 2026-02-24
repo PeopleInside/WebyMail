@@ -100,6 +100,11 @@ function findFolderName(array $folders, array $candidates, string $fallback): st
     return $fallback;
 }
 
+function trashFolder(ImapClient $imap): string
+{
+    return findFolderName($imap->getFolders(), ['Trash', 'Deleted', 'Deleted Items'], 'Trash') ?: 'Trash';
+}
+
 function parseIniSize(string $value): int
 {
     $value = trim($value);
@@ -417,7 +422,7 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
-        $trash = findFolderName($imap->getFolders(), ['Trash', 'Deleted', 'Deleted Items'], 'Trash') ?: 'Trash';
+        $trash = trashFolder($imap);
         if (strcasecmp($folder, $trash) === 0) {
             $imap->deleteMessage($folder, $msgNo);
         } else {
@@ -441,7 +446,7 @@ if ($action === 'bulk' && isAjax()) {
     try {
         $imap = $accountMgr->imapConnect($accountId);
         $trash = $act === 'delete'
-            ? (findFolderName($imap->getFolders(), ['Trash', 'Deleted', 'Deleted Items'], 'Trash') ?: 'Trash')
+            ? trashFolder($imap)
             : null;
         foreach ($uids as $uid) {
             match ($act) {

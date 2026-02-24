@@ -6,7 +6,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
 ?>
 <div class="wm-auth-page">
     <div class="wm-auth-box">
-<!-- Logo -->
+        <!-- Logo -->
         <div class="wm-auth-logo">
             <h1>Weby<span>Mail</span></h1>
             <p>Secure Web Mail Client</p>
