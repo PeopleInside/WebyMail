@@ -417,7 +417,12 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
-        $imap->deleteMessage($folder, $msgNo);
+        $trash = findFolderName($imap->getFolders(), ['Trash', 'Deleted', 'Deleted Items'], 'Trash');
+        if (strcasecmp($folder, $trash) === 0) {
+            $imap->deleteMessage($folder, $msgNo);
+        } else {
+            $imap->moveMessage($folder, $msgNo, $trash);
+        }
         $imap->disconnect();
         flashSet('success', 'Message deleted.');
     } catch (RuntimeException $e) {
@@ -435,9 +440,14 @@ if ($action === 'bulk' && isAjax()) {
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
+        $trash = $act === 'delete'
+            ? findFolderName($imap->getFolders(), ['Trash', 'Deleted', 'Deleted Items'], 'Trash')
+            : null;
         foreach ($uids as $uid) {
             match ($act) {
-                'delete' => $imap->deleteMessage($folder, $uid),
+                'delete' => strcasecmp($folder, $trash) === 0
+                    ? $imap->deleteMessage($folder, $uid)
+                    : $imap->moveMessage($folder, $uid, $trash),
                 'read'   => $imap->markRead($folder, $uid, true),
                 'unread' => $imap->markRead($folder, $uid, false),
                 default  => null,
