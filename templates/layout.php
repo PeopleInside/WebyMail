@@ -65,6 +65,18 @@
 
         <div class="wm-topbar-spacer"></div>
 
+        <?php if (!empty($accounts) && count($accounts) > 1): ?>
+        <div class="wm-top-account">
+            <select id="account-switcher" data-account-select>
+                <?php foreach ($accounts as $acc): ?>
+                <option value="<?= (int)$acc['id'] ?>" <?= $acc['id'] == $session['account_id'] ? 'selected' : '' ?>>
+                    <?= htmlspecialchars($acc['label']) ?> (<?= htmlspecialchars($acc['email']) ?>)
+                </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <?php endif; ?>
+
         <!-- Theme toggle -->
         <button class="theme-toggle" title="Toggle theme"><!-- filled by JS --></button>
 
@@ -97,24 +109,6 @@
 
     <!-- Sidebar -->
     <nav class="wm-sidebar">
-        <!-- Account switcher -->
-        <?php if (!empty($accounts) && count($accounts) > 1): ?>
-        <div class="wm-account-switcher">
-            <?php foreach ($accounts as $acc): ?>
-            <button class="wm-account-btn <?= $acc['id'] == $session['account_id'] ? 'active' : '' ?>"
-                    data-switch-account="<?= (int)$acc['id'] ?>">
-                <div class="wm-account-avatar"><?= strtoupper(substr($acc['email'], 0, 1)) ?></div>
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">
-                    <?= htmlspecialchars($acc['label']) ?>
-                </span>
-                <?php if ($acc['id'] == $session['account_id']): ?>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>
-                <?php endif; ?>
-            </button>
-            <?php endforeach; ?>
-        </div>
-        <?php endif; ?>
-
         <a href="?action=compose" class="btn btn-primary" style="margin:.5rem .75rem .75rem;justify-content:center">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Compose

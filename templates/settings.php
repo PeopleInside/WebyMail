@@ -66,22 +66,53 @@ $tab = $tab ?? 'profile';
             <div class="wm-card-body">
                 <form method="post" action="?action=settings_save&tab=signature" id="sig-form">
                     <input type="hidden" name="signature" id="sig-hidden">
-                    <div id="sig-editor" style="min-height:150px;border:1px solid var(--wm-border);border-radius:7px;overflow:hidden">
-                        <div id="sig-quill" style="min-height:120px"></div>
+                    <div id="sig-toolbar" class="wm-editor-group" style="margin-bottom:.5rem">
+                        <button type="button" data-sig-cmd="bold"><b>B</b></button>
+                        <button type="button" data-sig-cmd="italic"><i>I</i></button>
+                        <button type="button" data-sig-cmd="underline"><u>U</u></button>
+                        <button type="button" data-sig-cmd="createLink">Link</button>
+                        <input type="color" data-sig-cmd="foreColor" value="#2563eb" title="Text color">
                     </div>
+                    <div id="sig-editor" contenteditable="true" style="min-height:150px;border:1px solid var(--wm-border);border-radius:7px;overflow:hidden;padding:.75rem;background:var(--wm-surface-2)"></div>
                     <button type="submit" class="btn btn-primary btn-sm" style="margin-top:.75rem">Save Signature</button>
                 </form>
             </div>
         </div>
 
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css">
-        <script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"></script>
         <script>
-        var sigQuill = new Quill('#sig-quill', { theme: 'snow' });
-        sigQuill.clipboard.dangerouslyPasteHTML(0, <?= json_encode($user['signature'] ?? '') ?>);
-        document.getElementById('sig-form').addEventListener('submit', function() {
-            document.getElementById('sig-hidden').value = sigQuill.root.innerHTML;
-        });
+        (function() {
+            var toolbar = document.getElementById('sig-toolbar');
+            var editor  = document.getElementById('sig-editor');
+            editor.innerHTML = <?= json_encode($user['signature'] ?? '') ?> || '<p><br></p>';
+
+            toolbar.querySelectorAll('[data-sig-cmd]').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var cmd = btn.dataset.sigCmd;
+                    var val = null;
+                    if (cmd === 'createLink') {
+                        val = prompt('Enter URL');
+                        if (!val) return;
+                    }
+                    if (btn.type === 'color' || btn.tagName === 'INPUT') {
+                        val = btn.value;
+                    }
+                    document.execCommand(cmd, false, val);
+                    editor.focus();
+                });
+            });
+            toolbar.querySelectorAll('input[data-sig-cmd]').forEach(function(input) {
+                input.addEventListener('change', function() {
+                    var cmd = input.dataset.sigCmd;
+                    document.execCommand(cmd, false, input.value);
+                    editor.focus();
+                });
+            });
+
+            document.getElementById('sig-form').addEventListener('submit', function() {
+                document.getElementById('sig-hidden').value = editor.innerHTML;
+            });
+        })();
         </script>
 
         <!-- ── Security ── -->

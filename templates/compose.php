@@ -29,7 +29,7 @@ $signature = $signature ?? '';
         </button>
     </div>
 
-    <form id="compose-form" method="post" action="?action=send" style="display:contents">
+    <form id="compose-form" method="post" action="?action=send" enctype="multipart/form-data" style="display:contents">
         <!-- Hidden fields -->
         <input type="hidden" name="folder"       value="<?= htmlspecialchars($folder) ?>">
         <input type="hidden" name="in_reply_to"  value="<?= htmlspecialchars($prefill['in_reply_to'] ?? '') ?>">
@@ -91,60 +91,68 @@ $signature = $signature ?? '';
                 <input type="text" id="subject" name="subject" autocomplete="off"
                        value="<?= htmlspecialchars($prefill['subject'] ?? '') ?>"
                        placeholder="Subject…">
-                <?php if (!$isReply): ?>
+                 <?php if (!$isReply): ?>
                 <button type="button" id="show-replyto" class="btn btn-ghost btn-sm" style="font-size:.75rem">Reply-To</button>
                 <?php endif; ?>
+            </div>
+
+            <div class="wm-compose-field">
+                <label for="attachments">Attachments</label>
+                <input type="file" id="attachments" name="attachments[]" multiple>
             </div>
         </div>
 
         <!-- Quill HTML editor -->
         <div id="editor-container">
             <div id="quill-toolbar">
-                <span class="ql-formats">
-                    <select class="ql-font"></select>
-                    <select class="ql-size"></select>
-                </span>
-                <span class="ql-formats">
-                    <button class="ql-bold"></button>
-                    <button class="ql-italic"></button>
-                    <button class="ql-underline"></button>
-                    <button class="ql-strike"></button>
-                </span>
-                <span class="ql-formats">
-                    <select class="ql-color"></select>
-                    <select class="ql-background"></select>
-                </span>
-                <span class="ql-formats">
-                    <button class="ql-list" value="ordered"></button>
-                    <button class="ql-list" value="bullet"></button>
-                    <button class="ql-indent" value="-1"></button>
-                    <button class="ql-indent" value="+1"></button>
-                </span>
-                <span class="ql-formats">
-                    <button class="ql-link"></button>
-                    <button class="ql-image"></button>
-                    <button class="ql-blockquote"></button>
-                </span>
-                <span class="ql-formats">
-                    <button class="ql-clean"></button>
-                </span>
+                <div class="wm-editor-group">
+                    <label class="wm-editor-label">Size
+                        <select data-cmd="fontSize">
+                            <option value="3">Normal</option>
+                            <option value="2">Small</option>
+                            <option value="4">Large</option>
+                            <option value="5">X-Large</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="wm-editor-group">
+                    <button type="button" class="ql-bold" data-cmd="bold" title="Bold"><b>B</b></button>
+                    <button type="button" class="ql-italic" data-cmd="italic" title="Italic"><i>I</i></button>
+                    <button type="button" class="ql-underline" data-cmd="underline" title="Underline"><u>U</u></button>
+                    <button type="button" class="ql-strike" data-cmd="strikeThrough" title="Strike"><s>S</s></button>
+                </div>
+                <div class="wm-editor-group">
+                    <label class="wm-editor-label">Color
+                        <input type="color" data-cmd="foreColor" value="#2563eb">
+                    </label>
+                    <label class="wm-editor-label">Highlight
+                        <input type="color" data-cmd="hiliteColor" value="#ffff00">
+                    </label>
+                </div>
+                <div class="wm-editor-group">
+                    <button type="button" class="ql-list" data-cmd="insertOrderedList" title="Numbered list">1.</button>
+                    <button type="button" class="ql-list" data-cmd="insertUnorderedList" title="Bullet list">•</button>
+                    <button type="button" class="ql-indent" data-cmd="outdent" title="Outdent">◀</button>
+                    <button type="button" class="ql-indent" data-cmd="indent" title="Indent">▶</button>
+                </div>
+                    <div class="wm-editor-group">
+                        <button type="button" class="ql-link" data-cmd="createLink" title="Insert link">🔗</button>
+                        <button type="button" class="ql-image" data-cmd="insertImage" title="Insert image">🖼️</button>
+                        <button type="button" class="ql-blockquote" data-cmd="formatBlock" data-value="blockquote" title="Quote">❝</button>
+                        <button type="button" class="ql-clean" data-cmd="removeFormat" title="Clear formatting">✕</button>
+                    </div>
             </div>
             <div id="quill-editor" style="flex:1;min-height:300px"></div>
         </div>
     </form>
 </div>
 
-<!-- Quill from CDN (if reachable); graceful fallback to contenteditable -->
-<link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css" onerror="this.disabled=true">
-<script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js" id="quill-script" defer></script>
 <script>
 (function() {
     var form       = document.getElementById('compose-form');
     var toolbar    = document.getElementById('quill-toolbar');
     var editorEl   = document.getElementById('quill-editor');
     var hidden     = document.getElementById('body-html-hidden');
-    var initialized = false;
-    var QUILL_LOAD_GRACE_MS = 500; // Allow deferred script time to load before falling back
     var initialHtml = <?= json_encode($prefill['body_html'] ?? '') ?>;
     var signature   = <?= json_encode($signature) ?>;
 
@@ -157,64 +165,40 @@ $signature = $signature ?? '';
         return content;
     }
 
-    function initFallback(content) {
-        if (initialized) return;
-        initialized = true;
-        if (toolbar) toolbar.style.display = 'none';
-        editorEl.contentEditable = 'true';
-        editorEl.style.border = '1px solid var(--wm-border)';
-        editorEl.style.padding = '.75rem';
-        editorEl.style.borderRadius = '0 0 10px 10px';
-        editorEl.innerHTML = content || '<p><br></p>';
-        form.addEventListener('submit', function() {
-            hidden.value = editorEl.innerHTML;
+    editorEl.contentEditable = 'true';
+    editorEl.innerHTML = buildInitialContent() || '<p><br></p>';
+
+    if (toolbar) {
+        toolbar.querySelectorAll('button[data-cmd]').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                var cmd = btn.dataset.cmd;
+                var val = btn.dataset.value || null;
+                if (cmd === 'createLink') {
+                    val = prompt('Enter URL');
+                    if (!val) return;
+                }
+                if (cmd === 'insertImage') {
+                    val = prompt('Image URL');
+                    if (!val) return;
+                }
+                document.execCommand(cmd, false, val);
+                editorEl.focus();
+            });
+        });
+        toolbar.querySelectorAll('input[data-cmd], select[data-cmd]').forEach(function(el) {
+            el.addEventListener('change', function() {
+                var cmd = el.dataset.cmd;
+                var val = el.value;
+                document.execCommand(cmd, false, val);
+                editorEl.focus();
+            });
         });
     }
 
-    function initQuill(content) {
-        if (initialized) return;
-        if (!window.Quill) {
-            initFallback(content);
-            return;
-        }
-        initialized = true;
-        var quill = new Quill('#quill-editor', {
-            theme:   'snow',
-            modules: { toolbar: '#quill-toolbar' },
-        });
-        if (content) {
-            quill.clipboard.dangerouslyPasteHTML(0, content);
-        }
-        <?php if ($isReply): ?>
-        quill.setSelection(0, 0);
-        <?php endif; ?>
-        form.addEventListener('submit', function() {
-            hidden.value = quill.root.innerHTML;
-        });
-    }
-
-    var content = buildInitialContent();
-    // If Quill loads, use it; otherwise fall back after a short grace period.
-    if (window.Quill) {
-        initQuill(content);
-        return;
-    }
-
-    var quillScript = document.getElementById('quill-script');
-    if (quillScript) {
-        quillScript.addEventListener('load', function() { initQuill(content); });
-        quillScript.addEventListener('error', function() { initFallback(content); });
-    }
-
-    // Grace period in case the script is slow but will eventually load.
-    setTimeout(function() {
-        if (initialized) return;
-        if (window.Quill) {
-            initQuill(content);
-        } else {
-            initFallback(content);
-        }
-    }, QUILL_LOAD_GRACE_MS);
+    form.addEventListener('submit', function() {
+        hidden.value = editorEl.innerHTML;
+    });
 })();
 </script>
 

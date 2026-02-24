@@ -157,6 +157,9 @@ if ($action === 'login') {
             $smtpPort = (int) ($_POST['smtp_port'] ?? Config::get('smtp_port', 587));
             $smtpSsl  = !empty($_POST['smtp_ssl']);
             $smtpTls  = !empty($_POST['smtp_starttls']);
+            if ($smtpSsl) {
+                $smtpTls = false;
+            }
 
             // Auto-fill host from email domain if left blank
             if ($host === '' && str_contains($username, '@')) {
@@ -497,6 +500,35 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'from_name'   => $fromName,
     ];
 
+    $attachments = [];
+    if (!empty($_FILES['attachments']) && is_array($_FILES['attachments']['name'])) {
+        $maxSize = 10 * 1024 * 1024; // 10 MB
+        foreach ($_FILES['attachments']['name'] as $i => $name) {
+            if (($_FILES['attachments']['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                continue;
+            }
+            $tmp = $_FILES['attachments']['tmp_name'][$i] ?? '';
+            if ($tmp === '' || !is_uploaded_file($tmp)) {
+                continue;
+            }
+            if (filesize($tmp) > $maxSize) {
+                continue;
+            }
+            $data = file_get_contents($tmp);
+            if ($data === false) {
+                continue;
+            }
+            $attachments[] = [
+                'name' => $name,
+                'type' => $_FILES['attachments']['type'][$i] ?: 'application/octet-stream',
+                'data' => $data,
+            ];
+        }
+    }
+    if (!empty($attachments)) {
+        $message['attachments'] = $attachments;
+    }
+
     if ($smtp->send($params, $message)) {
         flashSet('success', 'Message sent successfully.');
         redirect('?action=inbox');
@@ -585,6 +617,11 @@ if ($action === 'settings_save') {
 
         case 'add_account':
             $mgr = new Account();
+            $smtpSsl = !empty($_POST['smtp_ssl']);
+            $smtpStarttls = !empty($_POST['smtp_starttls']);
+            if ($smtpSsl) {
+                $smtpStarttls = false;
+            }
             $mgr->add($userId, [
                 'label'         => trim($_POST['label']      ?? ''),
                 'sender_name'   => trim($_POST['sender_name'] ?? ''),
@@ -594,8 +631,8 @@ if ($action === 'settings_save') {
                 'imap_ssl'      => !empty($_POST['imap_ssl']),
                 'smtp_host'     => trim($_POST['smtp_host']  ?? ''),
                 'smtp_port'     => (int) ($_POST['smtp_port'] ?? 587),
-                'smtp_ssl'      => !empty($_POST['smtp_ssl']),
-                'smtp_starttls' => !empty($_POST['smtp_starttls']),
+                'smtp_ssl'      => $smtpSsl,
+                'smtp_starttls' => $smtpStarttls,
                 'username'      => trim($_POST['username']   ?? ''),
                 'password'      => $_POST['password']        ?? '',
             ]);

@@ -190,9 +190,18 @@ function initAccountSwitcher() {
         btn.addEventListener('click', async () => {
             const id = btn.dataset.switchAccount;
             await apiPost('?action=switch_account', { account_id: id });
-            window.location.reload();
+            window.location.href = '?action=inbox';
         });
     });
+
+    const select = document.querySelector('[data-account-select]');
+    if (select) {
+        select.addEventListener('change', async (e) => {
+            const id = e.target.value;
+            await apiPost('?action=switch_account', { account_id: id });
+            window.location.href = '?action=inbox';
+        });
+    }
 }
 
 /* =============================================================
@@ -233,21 +242,24 @@ function initSmtpPortSync(container) {
     const root = container || document;
     const port    = root.querySelector('[data-smtp-port]');
     const ssl     = root.querySelector('[data-smtp-ssl]');
-    const starttl = root.querySelector('[data-smtp-starttls]');
-    if (!port || !ssl || !starttl) return;
+    const starttls = root.querySelector('[data-smtp-starttls]');
+    if (!port || !ssl || !starttls) return;
 
     const sync = () => {
         if (ssl.checked) {
+            starttls.checked = false;
             port.value = SMTP_SSL_PORT;
-        } else if (starttl.checked) {
+        } else if (starttls.checked) {
+            ssl.checked = false;
             port.value = SMTP_STARTTLS_PORT;
         } else if (!port.value) {
             port.value = SMTP_STARTTLS_PORT;
+            starttls.checked = true;
         }
     };
 
     ssl.addEventListener('change', sync);
-    starttl.addEventListener('change', sync);
+    starttls.addEventListener('change', sync);
     sync();
 }
 

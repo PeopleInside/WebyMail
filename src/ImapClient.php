@@ -193,6 +193,11 @@ class ImapClient
             $this->walkParts($msgNo, $struct->parts, '1', $html, $text);
         }
 
+        if ($html === '' && $text === '') {
+            $fallback = $this->decodeBodyPart(imap_body($this->conn, $msgNo), $struct->encoding ?? 0);
+            $text = $this->convertCharset($fallback, $struct->parameters ?? []);
+        }
+
         return ['html' => $html, 'text' => $text];
     }
 

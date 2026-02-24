@@ -149,23 +149,56 @@ class SmtpClient
         }
         $headers .= "MIME-Version: 1.0\r\n";
 
-        $boundary = '---=_WebyMail_' . bin2hex(random_bytes(8));
-        $headers .= "Content-Type: multipart/alternative; boundary=\"{$boundary}\"\r\n";
+        $attachments = $msg['attachments'] ?? [];
+        $hasAttachments = !empty($attachments);
+
+        $boundaryAlt   = '---=_WebyMail_ALT_' . bin2hex(random_bytes(8));
+        $boundaryMixed = '---=_WebyMail_MIX_' . bin2hex(random_bytes(8));
+
+        if ($hasAttachments) {
+            $headers .= "Content-Type: multipart/mixed; boundary=\"{$boundaryMixed}\"\r\n";
+        } else {
+            $headers .= "Content-Type: multipart/alternative; boundary=\"{$boundaryAlt}\"\r\n";
+        }
 
         $plainText = $msg['body_text'] ?? strip_tags($msg['body_html'] ?? '');
         $htmlBody  = $msg['body_html'] ?? nl2br(htmlspecialchars($plainText));
 
-        $body  = "--{$boundary}\r\n";
+        $body = '';
+
+        if ($hasAttachments) {
+            $body .= "--{$boundaryMixed}\r\n";
+            $body .= "Content-Type: multipart/alternative; boundary=\"{$boundaryAlt}\"\r\n\r\n";
+        }
+
+        $body .= "--{$boundaryAlt}\r\n";
         $body .= "Content-Type: text/plain; charset=UTF-8\r\n";
         $body .= "Content-Transfer-Encoding: base64\r\n\r\n";
         $body .= chunk_split(base64_encode($plainText)) . "\r\n";
 
-        $body .= "--{$boundary}\r\n";
+        $body .= "--{$boundaryAlt}\r\n";
         $body .= "Content-Type: text/html; charset=UTF-8\r\n";
         $body .= "Content-Transfer-Encoding: base64\r\n\r\n";
         $body .= chunk_split(base64_encode($htmlBody)) . "\r\n";
 
-        $body .= "--{$boundary}--\r\n";
+        $body .= "--{$boundaryAlt}--\r\n";
+
+        if ($hasAttachments) {
+            foreach ($attachments as $att) {
+                $data = chunk_split(base64_encode($att['data']));
+                $type = $att['type'] ?? '';
+                if (!preg_match('#^[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+$#', $type)) {
+                    $type = 'application/octet-stream';
+                }
+                $name = addcslashes($att['name'] ?? 'attachment', "\"\\");
+                $body .= "--{$boundaryMixed}\r\n";
+                $body .= "Content-Type: {$type}; name=\"{$name}\"\r\n";
+                $body .= "Content-Transfer-Encoding: base64\r\n";
+                $body .= "Content-Disposition: attachment; filename=\"{$name}\"\r\n\r\n";
+                $body .= $data . "\r\n";
+            }
+            $body .= "--{$boundaryMixed}--\r\n";
+        }
 
         return $headers . "\r\n" . $body;
     }
