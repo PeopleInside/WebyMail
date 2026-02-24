@@ -136,7 +136,7 @@ $signature = $signature ?? '';
 
 <!-- Quill from CDN (if reachable); graceful fallback to contenteditable -->
 <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css" onerror="this.disabled=true">
-<script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js" id="quill-script" defer></script>
 <script>
 (function() {
     var form       = document.getElementById('compose-form');
@@ -200,7 +200,7 @@ $signature = $signature ?? '';
         return;
     }
 
-    var quillScript = document.querySelector('script[src*="quill@2"]');
+    var quillScript = document.getElementById('quill-script');
     if (quillScript) {
         quillScript.addEventListener('load', function() { initQuill(content); });
         quillScript.addEventListener('error', function() { initFallback(content); });
@@ -208,6 +208,7 @@ $signature = $signature ?? '';
 
     // Grace period in case the script is slow but will eventually load.
     setTimeout(function() {
+        if (initialized) return;
         if (window.Quill) {
             initQuill(content);
         } else {

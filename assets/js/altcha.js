@@ -74,6 +74,7 @@
             const json = atob(embedded);
             return JSON.parse(json);
         } catch (_) {
+            console.warn('ALTCHA: embedded challenge payload invalid');
             return null;
         }
     }
