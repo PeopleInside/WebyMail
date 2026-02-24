@@ -14,8 +14,8 @@
             }
         }
     }
-    $activeLabel = $activeAccount['label'] ?? ($session['display_name'] ?? $session['email'] ?? '');
     $activeEmail = $activeAccount['email'] ?? ($session['email'] ?? '');
+    $activeLabel = $activeAccount['label'] ?? ($activeAccount['email'] ?? ($session['display_name'] ?? $activeEmail));
     ?>
     <title><?= htmlspecialchars($pageTitle ?? $brandName) ?></title>
     <meta name="robots" content="noindex,nofollow">

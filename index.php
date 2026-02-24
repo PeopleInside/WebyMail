@@ -289,9 +289,9 @@ try {
 }
 if (empty($folders)) {
     $folders = [
-        ['name' => 'INBOX', 'display' => 'Inbox', 'unread' => 0],
-        ['name' => 'Sent',  'display' => 'Sent'],
-        ['name' => 'Drafts','display' => 'Drafts'],
+        ['name' => 'INBOX',  'display' => 'Inbox',  'unread' => 0],
+        ['name' => 'Sent',   'display' => 'Sent',   'unread' => 0],
+        ['name' => 'Drafts', 'display' => 'Drafts', 'unread' => 0],
     ];
 }
 
