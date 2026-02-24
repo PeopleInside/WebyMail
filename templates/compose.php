@@ -133,7 +133,7 @@ $signature = $signature ?? '';
                     <label class="wm-editor-label">Highlight
                         <input type="color" data-cmd="hiliteColor" value="#ffff00">
                     </label>
-                    <button type="button" class="ql-clean" data-cmd="clearColor" title="Reset color">Reset color</button>
+                    <button type="button" class="ql-color-reset" data-cmd="clearColor" title="Reset color">Reset color</button>
                 </div>
                 <div class="wm-editor-group">
                     <button type="button" class="ql-list" data-cmd="insertOrderedList" title="Numbered list">1.</button>
@@ -197,8 +197,8 @@ $signature = $signature ?? '';
                     return;
                 }
                 if (cmd === 'clearColor') {
-                    document.execCommand('removeFormat', false, null);
                     document.execCommand('foreColor', false, defaultColor);
+                    document.execCommand('hiliteColor', false, 'transparent');
                     editorEl.focus();
                     return;
                 }
@@ -220,6 +220,11 @@ $signature = $signature ?? '';
         imageInput.addEventListener('change', function() {
             var file = imageInput.files && imageInput.files[0];
             if (!file) return;
+            if (file.size > 2 * 1024 * 1024) {
+                alert('Inline images are limited to 2 MB. Please attach the file instead.');
+                imageInput.value = '';
+                return;
+            }
             var reader = new FileReader();
             reader.onload = function(e) {
                 var dataUrl = e.target && e.target.result;

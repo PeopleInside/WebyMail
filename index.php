@@ -502,7 +502,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $attachments = [];
     if (!empty($_FILES['attachments']) && is_array($_FILES['attachments']['name'])) {
-        $maxSize = 50 * 1024 * 1024; // 50 MB
+        $maxSize = 50 * 1024 * 1024; // 50 MB (requires matching PHP upload_max_filesize/post_max_size)
         foreach ($_FILES['attachments']['name'] as $i => $name) {
             if (($_FILES['attachments']['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
                 continue;
