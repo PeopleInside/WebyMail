@@ -523,6 +523,60 @@ label {
     overflow: hidden;
 }
 
+.wm-editor-group {
+    display: inline-flex;
+    gap: .35rem;
+    align-items: center;
+    margin-right: .5rem;
+}
+
+#quill-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    padding: .5rem;
+    background: var(--wm-surface-2);
+    border: 1px solid var(--wm-border);
+    border-radius: 8px 8px 0 0;
+}
+
+.wm-editor-group button {
+    border: 1px solid var(--wm-border);
+    background: var(--wm-surface);
+    color: var(--wm-text);
+    padding: .35rem .55rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .85rem;
+}
+#quill-toolbar button { margin: 0; }
+
+#quill-toolbar input[type="color"] {
+    border: 1px solid var(--wm-border);
+    border-radius: 6px;
+    height: 30px;
+    width: 50px;
+    padding: 0;
+    background: var(--wm-surface);
+}
+
+.wm-editor-label {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    font-size: .8rem;
+    color: var(--wm-text-muted);
+}
+
+#quill-editor {
+    border: 1px solid var(--wm-border);
+    border-top: none;
+    padding: .75rem;
+    border-radius: 0 0 10px 10px;
+    overflow-y: auto;
+}
+
 .ql-toolbar.ql-snow {
     border-top: none !important;
     border-left: none !important;
@@ -608,6 +662,17 @@ label {
 }
 .theme-toggle:hover { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.4); }
 .theme-toggle svg   { width: 14px; height: 14px; flex-shrink: 0; }
+
+.wm-top-account select {
+    background: rgba(255,255,255,.08);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 8px;
+    padding: .3rem .6rem;
+    font-size: .85rem;
+    min-width: 180px;
+}
+.wm-top-account select option { color: #111; }
 
 /* ----------------------------------------------------------
    14. Settings
