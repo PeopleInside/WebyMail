@@ -4,6 +4,7 @@
  * @var string $step     current step: 'welcome' | 'server' | 'done'
  * @var string $error
  */
+$brandName = function_exists('appName') ? appName() : Config::get('app_name', 'WebyMail');
 ?>
 <div class="wm-auth-page">
     <div class="wm-auth-box" style="max-width:520px">
@@ -14,7 +15,7 @@
         </div>
 
         <div class="wm-auth-logo">
-            <h1>Weby<span>Mail</span></h1>
+            <h1><?= htmlspecialchars($brandName) ?></h1>
             <p>Initial Setup Wizard</p>
         </div>
 
@@ -45,11 +46,11 @@
         <div class="wm-card">
             <div class="wm-card-header">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                Welcome to WebyMail
+                Welcome to <?= htmlspecialchars($brandName) ?>
             </div>
             <div class="wm-card-body">
                 <p style="font-size:.9rem;margin-top:0">
-                    This wizard will help you configure WebyMail. Your settings will be saved
+                    This wizard will help you configure <?= htmlspecialchars($brandName) ?>. Your settings will be saved
                     as a PHP file on the server — <strong>no database server required</strong>.
                 </p>
                 <ul style="font-size:.85rem;color:var(--wm-text-muted);line-height:1.8">
@@ -87,7 +88,7 @@
                     <div class="form-group">
                         <label>Application name</label>
                         <input type="text" name="app_name" class="form-control"
-                               value="<?= htmlspecialchars($_POST['app_name'] ?? 'WebyMail') ?>">
+                               value="<?= htmlspecialchars($_POST['app_name'] ?? $brandName) ?>">
                     </div>
 
                     <fieldset style="border:1px solid var(--wm-border);border-radius:8px;padding:1rem;margin-bottom:1rem">
@@ -170,7 +171,7 @@
             </div>
             <div class="wm-card-body">
                 <p style="font-size:.9rem;margin-top:0">
-                    WebyMail is ready to use. Log in with your IMAP email credentials.
+                    <?= htmlspecialchars($brandName) ?> is ready to use. Log in with your IMAP email credentials.
                 </p>
                 <div class="alert alert-info" style="font-size:.82rem">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>

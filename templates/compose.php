@@ -43,20 +43,6 @@ $signature = $signature ?? '';
         <!-- Address fields -->
         <div class="wm-compose-fields">
 
-            <!-- From (account selector) -->
-            <?php if (!empty($accounts) && count($accounts) > 1): ?>
-            <div class="wm-compose-field">
-                <label for="from_account">From</label>
-                <select name="from_account" id="from_account" class="form-control" style="flex:1;height:auto;padding:.15rem .5rem;font-size:.9rem">
-                    <?php foreach ($accounts as $acc): ?>
-                    <option value="<?= (int)$acc['id'] ?>" <?= $acc['id'] == ($currentAccountId ?? 0) ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($acc['label']) ?> &lt;<?= htmlspecialchars($acc['email']) ?>&gt;
-                    </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <?php endif; ?>
-
             <div class="wm-compose-field">
                 <label for="to">To</label>
                 <input type="text" id="to" name="to" autocomplete="off"
@@ -178,6 +164,7 @@ $signature = $signature ?? '';
     editorEl.contentEditable = 'true';
     editorEl.innerHTML = buildInitialContent() || '<p><br></p>';
     defaultColor = getComputedStyle(editorEl).color;
+    try { document.execCommand('enableObjectResizing', false, true); } catch (e) {}
 
     if (toolbar) {
         toolbar.querySelectorAll('button[data-cmd]').forEach(function(btn) {
