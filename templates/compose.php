@@ -177,6 +177,13 @@ $signature = $signature ?? '';
     try { document.execCommand('enableObjectResizing', false, true); } catch (e) {}
 
     // Lightweight image resize handles (4 corners)
+    var resizeDirs = {
+        tl: {x:-1, y:-1},
+        tr: {x: 1, y:-1},
+        bl: {x:-1, y: 1},
+        br: {x: 1, y: 1},
+    };
+
     (function setupImageOverlay() {
         var style = document.createElement('style');
         style.textContent = '#img-resize-overlay{position:absolute;border:1px dashed var(--wm-primary);pointer-events:none;z-index:10}#img-resize-overlay .handle{width:10px;height:10px;background:var(--wm-primary);border:2px solid #fff;box-shadow:0 0 0 1px var(--wm-primary);position:absolute;pointer-events:auto;cursor:nwse-resize;border-radius:3px}#img-resize-overlay .handle.br{cursor:nwse-resize;right:-6px;bottom:-6px}#img-resize-overlay .handle.bl{cursor:nesw-resize;left:-6px;bottom:-6px}#img-resize-overlay .handle.tr{cursor:nesw-resize;right:-6px;top:-6px}#img-resize-overlay .handle.tl{cursor:nwse-resize;left:-6px;top:-6px}';
@@ -317,6 +324,8 @@ $signature = $signature ?? '';
             startH: target.getBoundingClientRect().height,
             dir: dir
         };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
     }
     function onMove(e) {
         if (!dragState) return;
@@ -332,21 +341,18 @@ $signature = $signature ?? '';
         dragState.target.style.height = newH + 'px';
         showOverlay(dragState.target);
     }
-    function onUp() { dragState = null; }
+    function onUp() {
+        dragState = null;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+    }
     if (imgOverlay) {
         imgOverlay.addEventListener('mousedown', function(e) {
             var dirKey = e.target.dataset.dir;
             if (!dirKey) return;
-            var dir = {
-                tl: {x:-1, y:-1},
-                tr: {x: 1, y:-1},
-                bl: {x:-1, y: 1},
-                br: {x: 1, y: 1},
-            }[dirKey];
+            var dir = resizeDirs[dirKey];
             if (dir) startDrag(e, dir);
         });
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
     }
 
     // Show handles on image click
