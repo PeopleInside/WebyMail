@@ -108,11 +108,20 @@ function resolveTrashFolder(ImapClient $imap): string
     return findFolderName($imap->getFolders(), ['Trash', 'Deleted', 'Deleted Items'], 'Trash');
 }
 
+function isTrashFolderEquivalent(string $folder, string $trash): bool
+{
+    $normalize = static function (string $name): string {
+        $parts = preg_split('/[\\.\\/]/', $name) ?: [$name];
+        return strtolower(end($parts));
+    };
+    return $normalize($folder) === $normalize($trash);
+}
+
 function moveToTrashOrDelete(ImapClient $imap, string $folder, int $msgNo, string $trash): void
 {
     // Case-insensitive comparison: IMAP servers may expose Trash casing differently than the requested folder param.
     // Messages already in Trash are permanently deleted; others are moved into Trash.
-    if (strcasecmp($folder, $trash) === 0) {
+    if (isTrashFolderEquivalent($folder, $trash)) {
         $imap->deleteMessage($folder, $msgNo);
     } else {
         $imap->moveMessage($folder, $msgNo, $trash);
@@ -437,9 +446,10 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $imap = $accountMgr->imapConnect($accountId);
         $trash = resolveTrashFolder($imap);
+        $inTrash = isTrashFolderEquivalent($folder, $trash);
         moveToTrashOrDelete($imap, $folder, $msgNo, $trash);
         $imap->disconnect();
-        flashSet('success', 'Message deleted.');
+        flashSet('success', $inTrash ? 'Message deleted.' : 'Message moved to Trash.');
     } catch (RuntimeException $e) {
         flashSet('danger', 'Delete failed: ' . $e->getMessage());
     }
