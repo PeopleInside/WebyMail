@@ -197,7 +197,8 @@ $signature = $signature ?? '';
                     return;
                 }
                 if (cmd === 'clearColor') {
-                    document.execCommand('foreColor', false, defaultColor);
+                    var currentDefault = getComputedStyle(editorEl).color || defaultColor;
+                    document.execCommand('foreColor', false, currentDefault);
                     document.execCommand('hiliteColor', false, 'transparent');
                     editorEl.focus();
                     return;
@@ -221,7 +222,7 @@ $signature = $signature ?? '';
             var file = imageInput.files && imageInput.files[0];
             if (!file) return;
             if (file.size > 2 * 1024 * 1024) {
-                alert('Inline editor images are limited to 2 MB. Please attach the file instead for larger images (50 MB limit).');
+                alert('Inline editor images are limited to 2 MB. Please attach the file instead for larger images (subject to server attachment limits, typically 50 MB).');
                 imageInput.value = '';
                 return;
             }

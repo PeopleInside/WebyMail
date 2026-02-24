@@ -85,6 +85,19 @@ function findFolderName(array $folders, array $candidates, string $fallback): st
     return $fallback;
 }
 
+function parseIniSize(string $value): int
+{
+    $value = trim($value);
+    $unit  = strtolower(substr($value, -1));
+    $num   = (float) $value;
+    return match ($unit) {
+        'g' => (int) ($num * 1024 * 1024 * 1024),
+        'm' => (int) ($num * 1024 * 1024),
+        'k' => (int) ($num * 1024),
+        default => (int) $num,
+    };
+}
+
 function isAjax(): bool
 {
     return ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
@@ -515,6 +528,16 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $attachments = [];
     if (!empty($_FILES['attachments']) && is_array($_FILES['attachments']['name'])) {
         $maxSize = 50 * 1024 * 1024; // 50 MB (requires matching PHP upload_max_filesize/post_max_size)
+        $phpUpload = parseIniSize(ini_get('upload_max_filesize'));
+        $phpPost   = parseIniSize(ini_get('post_max_size'));
+        if ($phpUpload > 0 && $phpUpload < $maxSize) {
+            error_log('Attachment limit reduced to PHP upload_max_filesize: ' . $phpUpload . ' bytes');
+            $maxSize = $phpUpload;
+        }
+        if ($phpPost > 0 && $phpPost < $maxSize) {
+            error_log('Attachment limit reduced to PHP post_max_size: ' . $phpPost . ' bytes');
+            $maxSize = $phpPost;
+        }
         foreach ($_FILES['attachments']['name'] as $i => $name) {
             if (($_FILES['attachments']['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
                 continue;
@@ -565,7 +588,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $imap->appendToFolder($sent, $raw);
             $imap->disconnect();
         } catch (RuntimeException $e) {
-            error_log('Sent folder sync failed: ' . $e->getMessage());
+            error_log('Sent folder sync failed for account ' . $fromAccountId . ': ' . $e->getMessage());
             // Non-fatal: still consider email sent
         }
         flashSet('success', 'Message sent successfully.');
