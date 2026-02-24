@@ -97,6 +97,12 @@ class Auth
 
         $user = $this->db->fetch('SELECT * FROM users WHERE id = ?', [$userId]);
 
+        // Enforce global 2FA requirement: if twoFactorForAll is enabled and this user
+        // has not yet set up TOTP, deny login with guidance to contact the administrator.
+        if (AppConfig::get('twoFactorForAll', false) && (int) $user['totp_enabled'] !== 1) {
+            return ['ok' => false, 'error' => 'Two-factor authentication is required for all users. Please contact your administrator to enable 2FA for your account or to temporarily disable the global 2FA requirement.'];
+        }
+
         if ((int) $user['totp_enabled'] === 1) {
             // Store pending auth in a short-lived token so the 2FA page can complete it
             $pending = bin2hex(random_bytes(16));
