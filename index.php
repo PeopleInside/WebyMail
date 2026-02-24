@@ -100,7 +100,7 @@ function findFolderName(array $folders, array $candidates, string $fallback): st
     return $fallback;
 }
 
-function trashFolder(ImapClient $imap): string
+function resolveTrashFolder(ImapClient $imap): string
 {
     /**
      * Resolve the Trash folder name across common variants, falling back to "Trash".
@@ -108,9 +108,10 @@ function trashFolder(ImapClient $imap): string
     return findFolderName($imap->getFolders(), ['Trash', 'Deleted', 'Deleted Items'], 'Trash');
 }
 
-function deleteOrTrash(ImapClient $imap, string $folder, int $msgNo, string $trash): void
+function moveToTrashOrDelete(ImapClient $imap, string $folder, int $msgNo, string $trash): void
 {
     // Case-insensitive comparison: IMAP servers may expose Trash casing differently than the requested folder param.
+    // Messages already in Trash are permanently deleted; others are moved into Trash.
     if (strcasecmp($folder, $trash) === 0) {
         $imap->deleteMessage($folder, $msgNo);
     } else {
@@ -435,8 +436,8 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
-        $trash = trashFolder($imap);
-        deleteOrTrash($imap, $folder, $msgNo, $trash);
+        $trash = resolveTrashFolder($imap);
+        moveToTrashOrDelete($imap, $folder, $msgNo, $trash);
         $imap->disconnect();
         flashSet('success', 'Message deleted.');
     } catch (RuntimeException $e) {
@@ -455,9 +456,9 @@ if ($action === 'bulk' && isAjax()) {
     try {
         $imap = $accountMgr->imapConnect($accountId);
         if ($act === 'delete') {
-            $trash = trashFolder($imap);
+            $trash = resolveTrashFolder($imap);
             foreach ($uids as $uid) {
-                deleteOrTrash($imap, $folder, $uid, $trash);
+                moveToTrashOrDelete($imap, $folder, $uid, $trash);
             }
         } else {
             foreach ($uids as $uid) {
