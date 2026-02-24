@@ -110,7 +110,7 @@ function trashFolder(ImapClient $imap): string
 
 function deleteOrTrash(ImapClient $imap, string $folder, int $msgNo, string $trash): void
 {
-    // Case-insensitive comparison to handle provider-specific Trash casing.
+    // Case-insensitive comparison: IMAP servers may expose Trash casing differently than the requested folder param.
     if (strcasecmp($folder, $trash) === 0) {
         $imap->deleteMessage($folder, $msgNo);
     } else {
@@ -454,7 +454,7 @@ if ($action === 'bulk' && isAjax()) {
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
-        $trash = '';
+        $trash = null;
         if ($act === 'delete') {
             $trash = trashFolder($imap);
         }
