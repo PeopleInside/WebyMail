@@ -182,11 +182,7 @@ $signature = $signature ?? '';
                     val = prompt('Image URL');
                     if (!val) return;
                 }
-                if (cmd === 'formatBlock' && val) {
-                    document.execCommand(cmd, false, val);
-                } else {
-                    document.execCommand(cmd, false, val);
-                }
+                document.execCommand(cmd, false, val);
                 editorEl.focus();
             });
         });

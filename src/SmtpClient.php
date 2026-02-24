@@ -186,7 +186,10 @@ class SmtpClient
         if ($hasAttachments) {
             foreach ($attachments as $att) {
                 $data = chunk_split(base64_encode($att['data']));
-                $type = preg_replace('/[^A-Za-z0-9\\-\\.\\/\\+]+/', '', $att['type'] ?? '') ?: 'application/octet-stream';
+                $type = $att['type'] ?? '';
+                if (!preg_match('#^[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+$#', $type)) {
+                    $type = 'application/octet-stream';
+                }
                 $name = addcslashes($att['name'] ?? 'attachment', "\"\\");
                 $body .= "--{$boundaryMixed}\r\n";
                 $body .= "Content-Type: {$type}; name=\"{$name}\"\r\n";

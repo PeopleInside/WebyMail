@@ -502,12 +502,16 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $attachments = [];
     if (!empty($_FILES['attachments']) && is_array($_FILES['attachments']['name'])) {
+        $maxSize = 10 * 1024 * 1024; // 10 MB
         foreach ($_FILES['attachments']['name'] as $i => $name) {
             if (($_FILES['attachments']['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
                 continue;
             }
             $tmp = $_FILES['attachments']['tmp_name'][$i] ?? '';
             if ($tmp === '' || !is_uploaded_file($tmp)) {
+                continue;
+            }
+            if (filesize($tmp) > $maxSize) {
                 continue;
             }
             $data = file_get_contents($tmp);

@@ -242,24 +242,24 @@ function initSmtpPortSync(container) {
     const root = container || document;
     const port    = root.querySelector('[data-smtp-port]');
     const ssl     = root.querySelector('[data-smtp-ssl]');
-    const starttl = root.querySelector('[data-smtp-starttls]');
-    if (!port || !ssl || !starttl) return;
+    const starttls = root.querySelector('[data-smtp-starttls]');
+    if (!port || !ssl || !starttls) return;
 
     const sync = () => {
         if (ssl.checked) {
-            starttl.checked = false;
+            starttls.checked = false;
             port.value = SMTP_SSL_PORT;
-        } else if (starttl.checked) {
+        } else if (starttls.checked) {
             ssl.checked = false;
             port.value = SMTP_STARTTLS_PORT;
         } else if (!port.value) {
             port.value = SMTP_STARTTLS_PORT;
-            starttl.checked = true;
+            starttls.checked = true;
         }
     };
 
     ssl.addEventListener('change', sync);
-    starttl.addEventListener('change', sync);
+    starttls.addEventListener('change', sync);
     sync();
 }
 
