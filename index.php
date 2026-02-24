@@ -113,7 +113,7 @@ function resolveTrashFolder(ImapClient $imap): string
 function isTrashFolderEquivalent(string $folder, string $trash): bool
 {
     $normalize = static function (string $name): string {
-        $parts = preg_split('/[.\\/]/', $name) ?: [$name];
+        $parts = preg_split('/[\\.\\/]/', $name) ?: [$name];
         return strtolower(end($parts));
     };
     return $normalize($folder) === $normalize($trash);
@@ -121,7 +121,7 @@ function isTrashFolderEquivalent(string $folder, string $trash): bool
 
 function moveToTrashOrDelete(ImapClient $imap, string $folder, int $msgNo, string $trash, bool $isTrashFolder): void
 {
-    // Case-insensitive comparison: IMAP servers may expose Trash casing differently than the requested folder parameter.
+    // Case-insensitive folder name comparison using the last path segment.
     // Messages already in Trash are permanently deleted; others are moved into Trash.
     if ($isTrashFolder) {
         $imap->deleteMessage($folder, $msgNo);
