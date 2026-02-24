@@ -94,7 +94,7 @@ $signature = $signature ?? '';
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3.5 3.5 0 114.95 4.95l-8.48 8.48a2 2 0 01-2.83-2.83l7.78-7.78"/></svg>
                     Add attachments
                 </button>
-                <span id="attachment-label" style="font-size:.85rem;color:var(--wm-text-muted);margin-left:.35rem"></span>
+                <span id="attachment-label" style="font-size:.85rem;color:var(--wm-text-muted);margin-left:.35rem">No files selected</span>
             </div>
         </div>
 
@@ -161,6 +161,7 @@ $signature = $signature ?? '';
     var defaultColor = '';
     var imgOverlay = null;
     var dragState = null;
+    var MIN_IMG_SIZE = 30;
 
     function buildInitialContent() {
         var content = '';
@@ -335,8 +336,8 @@ $signature = $signature ?? '';
         var dir = dragState.dir;
         var newW = dragState.startW + dx * (dir.x || 0);
         var newH = dragState.startH + dy * (dir.y || 0);
-        newW = Math.max(30, newW);
-        newH = Math.max(30, newH);
+        newW = Math.max(MIN_IMG_SIZE, newW);
+        newH = Math.max(MIN_IMG_SIZE, newH);
         dragState.target.style.width = newW + 'px';
         dragState.target.style.height = newH + 'px';
         showOverlay(dragState.target);
