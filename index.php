@@ -478,6 +478,14 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $user   = Database::getInstance()->fetch('SELECT display_name FROM users WHERE id = ?', [$userId]);
     $accountFrom = $accountMgr->get($fromAccountId);
 
+    $fromName = ($accountFrom['sender_name'] ?? '');
+    if ($fromName === '' && ($user['display_name'] ?? '') !== '') {
+        $fromName = $user['display_name'];
+    }
+    if ($fromName === '' && ($accountFrom['label'] ?? '') !== '') {
+        $fromName = $accountFrom['label'];
+    }
+
     $message = [
         'to'          => $_POST['to']       ?? '',
         'cc'          => $_POST['cc']       ?? '',
@@ -486,7 +494,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'reply_to'    => $_POST['reply_to'] ?? '',
         'in_reply_to' => $_POST['in_reply_to'] ?? '',
         'body_html'   => $_POST['body_html'] ?? '',
-        'from_name'   => ($accountFrom['sender_name'] ?? '') !== '' ? $accountFrom['sender_name'] : (($user['display_name'] ?? '') !== '' ? $user['display_name'] : ($accountFrom['label'] ?? '')),
+        'from_name'   => $fromName,
     ];
 
     if ($smtp->send($params, $message)) {

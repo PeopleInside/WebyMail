@@ -65,6 +65,9 @@ class Account
 
     public function update(int $id, int $userId, array $data): bool
     {
+        if (!isset($data['sender_name'])) {
+            $data['sender_name'] = '';
+        }
         $fields = ['label', 'sender_name', 'email', 'imap_host', 'imap_port', 'imap_ssl',
                    'smtp_host', 'smtp_port', 'smtp_ssl', 'smtp_starttls', 'username'];
         $set    = implode(', ', array_map(fn($f) => "{$f} = ?", $fields));

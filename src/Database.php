@@ -158,7 +158,7 @@ class Database
     private function secureDatabaseFile(string $path): void
     {
         if (is_file($path)) {
-            @chmod($path, 0600);
+            chmod($path, 0600);
         }
     }
 }
