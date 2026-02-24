@@ -118,18 +118,21 @@
                                 <div>
                                     <label for="smtp_port">Port</label>
                                     <input type="number" id="smtp_port" name="smtp_port" class="form-control"
+                                           data-smtp-port
                                            value="<?= htmlspecialchars($_POST['smtp_port'] ?? Config::get('smtp_port', '587')) ?>">
                                 </div>
                             </div>
                             <div style="display:flex;gap:1.5rem;flex-wrap:wrap">
                                 <label>
                                     <input type="checkbox" name="smtp_ssl" value="1"
-                                           <?= (!empty($_POST['smtp_ssl'])) ? 'checked' : '' ?>>
+                                            data-smtp-ssl
+                                            <?= (!empty($_POST['smtp_ssl'])) ? 'checked' : '' ?>>
                                     SSL (port 465)
                                 </label>
                                 <label>
                                     <input type="checkbox" name="smtp_starttls" value="1"
-                                           <?= (!isset($_POST['smtp_starttls']) || $_POST['smtp_starttls']) ? 'checked' : '' ?>>
+                                            data-smtp-starttls
+                                            <?= (!isset($_POST['smtp_starttls']) || $_POST['smtp_starttls']) ? 'checked' : '' ?>>
                                     STARTTLS (port 587)
                                 </label>
                             </div>
@@ -138,7 +141,9 @@
 
                     <!-- ALTCHA POW Captcha -->
                     <?php if ($altchaEnabled): ?>
-                    <div class="form-group" id="altcha-container" data-altcha-url="?action=altcha_challenge">
+                    <div class="form-group" id="altcha-container"
+                         data-altcha-url="?action=altcha_challenge"
+                         data-altcha-payload="<?= htmlspecialchars(base64_encode(json_encode($challenge))) ?>">
                         <div class="altcha-box border rounded p-3">
                             <div class="d-flex gap-3" style="justify-content:space-between;align-items:center">
                                 <div>

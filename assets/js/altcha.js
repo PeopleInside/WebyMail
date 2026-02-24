@@ -11,10 +11,11 @@
     const widget = document.getElementById('altcha-container');
     if (!widget) return;
 
-    const statusEl   = widget.querySelector('[data-altcha-status]');
-    const retryBtn   = widget.querySelector('[data-altcha-retry]');
-    const inputField = widget.querySelector('input[name="altcha"]');
+    const statusEl     = widget.querySelector('[data-altcha-status]');
+    const retryBtn     = widget.querySelector('[data-altcha-retry]');
+    const inputField   = widget.querySelector('input[name="altcha"]');
     const challengeUrl = widget.dataset.altchaUrl;
+    const embedded     = widget.dataset.altchaPayload;
 
     function setStatus(text, isError = false) {
         if (!statusEl) return;
@@ -67,15 +68,28 @@
         setStatus('Security check completed');
     }
 
+    function decodeEmbedded() {
+        if (!embedded) return null;
+        try {
+            const json = atob(embedded);
+            return JSON.parse(json);
+        } catch (_) {
+            return null;
+        }
+    }
+
     async function loadChallenge() {
         setStatus('Preparing challenge...');
         retryBtn && (retryBtn.style.display = 'none');
         try {
-            const res = await fetch(challengeUrl, { cache: 'no-store' });
-            if (!res.ok) {
-                throw new Error('Challenge request failed');
+            let challenge = decodeEmbedded();
+            if (!challenge) {
+                const res = await fetch(challengeUrl, { cache: 'no-store' });
+                if (!res.ok) {
+                    throw new Error('Challenge request failed');
+                }
+                challenge = await res.json();
             }
-            const challenge = await res.json();
             await solveChallenge(challenge);
         } catch (e) {
             setStatus('Verification failed. Try again.', true);

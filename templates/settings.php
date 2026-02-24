@@ -222,11 +222,11 @@ $tab = $tab ?? 'profile';
                         <legend style="font-size:.78rem;font-weight:600;color:var(--wm-text-muted);padding:0 .5rem">SMTP</legend>
                         <div style="display:grid;grid-template-columns:1fr 90px;gap:.5rem">
                             <div><label>Host</label><input type="text" name="smtp_host" class="form-control" placeholder="mail.example.com" required></div>
-                            <div><label>Port</label><input type="number" name="smtp_port" class="form-control" value="587"></div>
+                            <div><label>Port</label><input type="number" name="smtp_port" class="form-control" data-smtp-port value="587"></div>
                         </div>
                         <div style="display:flex;gap:1.5rem;margin-top:.5rem">
-                            <label><input type="checkbox" name="smtp_ssl" value="1"> SSL</label>
-                            <label><input type="checkbox" name="smtp_starttls" value="1" checked> STARTTLS</label>
+                            <label><input type="checkbox" name="smtp_ssl" value="1" data-smtp-ssl> SSL</label>
+                            <label><input type="checkbox" name="smtp_starttls" value="1" data-smtp-starttls checked> STARTTLS</label>
                         </div>
                     </fieldset>
                     <button class="btn btn-primary btn-sm">Add account</button>
