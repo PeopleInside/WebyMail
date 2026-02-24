@@ -190,7 +190,7 @@ class ImapClient
                 $text = $body;
             }
         } else {
-            $this->walkParts($msgNo, $struct->parts, '1', $html, $text);
+            $this->walkParts($msgNo, $struct->parts, '0', $html, $text);
         }
 
         if ($html === '' && $text === '') {

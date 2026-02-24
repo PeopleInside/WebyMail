@@ -8,8 +8,8 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
     <div class="wm-auth-box">
         <!-- Logo -->
         <div class="wm-auth-logo">
-            <h1><?= htmlspecialchars($brandName) ?></h1>
-            <p><?= htmlspecialchars($brandName) ?> — Secure Web Mail Client</p>
+            <h1>WebyMail</h1>
+            <p><?= htmlspecialchars($brandName === 'WebyMail' ? 'Secure Web Mail Client' : $brandName) ?></p>
         </div>
 
         <!-- Theme toggle (top-right of card) -->

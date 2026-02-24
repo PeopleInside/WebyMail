@@ -88,7 +88,8 @@ $signature = $signature ?? '';
 
             <div class="wm-compose-field">
                 <label for="attachments">Attachments</label>
-                <input type="file" id="attachments" name="attachments[]" multiple>
+                <input type="file" id="attachments" name="attachments[]" multiple
+                       style="background:var(--wm-surface-2);border:1px solid var(--wm-border);padding:.4rem .55rem;border-radius:7px;color:var(--wm-text);">
             </div>
         </div>
 
@@ -112,15 +113,17 @@ $signature = $signature ?? '';
                     <button type="button" class="ql-underline" data-cmd="underline" title="Underline"><u>U</u></button>
                     <button type="button" class="ql-strike" data-cmd="strikeThrough" title="Strike"><s>S</s></button>
                 </div>
-                <div class="wm-editor-group">
-                    <label class="wm-editor-label">Color
-                        <input type="color" data-cmd="foreColor" value="#2563eb">
-                    </label>
-                    <label class="wm-editor-label">Highlight
-                        <input type="color" data-cmd="hiliteColor" value="#ffff00">
-                    </label>
-                    <button type="button" class="ql-color-reset" data-cmd="clearColor" title="Reset color">Reset color</button>
-                </div>
+                 <div class="wm-editor-group">
+                     <label class="wm-editor-label">Color
+                         <input type="color" data-cmd="foreColor" value="#2563eb" id="editor-color-picker">
+                     </label>
+                     <button type="button" class="btn btn-outline btn-sm" id="apply-color" aria-label="Apply text color">Apply color</button>
+                     <label class="wm-editor-label">Highlight
+                         <input type="color" data-cmd="hiliteColor" value="#ffff00" id="editor-highlight-picker">
+                     </label>
+                     <button type="button" class="btn btn-outline btn-sm" id="apply-highlight" aria-label="Apply highlight color">Apply highlight</button>
+                     <button type="button" class="ql-color-reset" data-cmd="clearColor" title="Reset color">Reset color</button>
+                 </div>
                 <div class="wm-editor-group">
                     <button type="button" class="ql-list" data-cmd="insertOrderedList" title="Numbered list">1.</button>
                     <button type="button" class="ql-list" data-cmd="insertUnorderedList" title="Bullet list">•</button>
@@ -205,6 +208,22 @@ $signature = $signature ?? '';
         });
     }
 
+    // Explicit apply buttons for color/highlight
+    document.getElementById('apply-color')?.addEventListener('click', function() {
+        var picker = document.getElementById('editor-color-picker');
+        if (picker) {
+            document.execCommand('foreColor', false, picker.value);
+            editorEl.focus();
+        }
+    });
+    document.getElementById('apply-highlight')?.addEventListener('click', function() {
+        var picker = document.getElementById('editor-highlight-picker');
+        if (picker) {
+            document.execCommand('hiliteColor', false, picker.value);
+            editorEl.focus();
+        }
+    });
+
     if (imageInput) {
         imageInput.addEventListener('change', function() {
             var file = imageInput.files && imageInput.files[0];
@@ -229,6 +248,20 @@ $signature = $signature ?? '';
 
     form.addEventListener('submit', function() {
         hidden.value = editorEl.innerHTML;
+    });
+
+    // Simple image resize: prompt for width percentage on click
+    editorEl.addEventListener('click', function(e) {
+        var target = e.target;
+        if (target && target.tagName === 'IMG') {
+            var current = target.style.width || target.getAttribute('width') || '100%';
+            var pct = prompt('Set image width (e.g., 50%)', current);
+            if (pct) {
+                target.style.width = pct;
+                target.removeAttribute('width');
+                target.style.height = 'auto';
+            }
+        }
     });
 })();
 </script>

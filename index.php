@@ -509,13 +509,14 @@ if ($action === 'compose') {
 
     $account = $accountMgr->get($accountId);
     $user    = Database::getInstance()->fetch('SELECT signature FROM users WHERE id = ?', [$userId]);
+    $signature = $account['signature'] ?? ($user['signature'] ?? '');
 
     render('compose', $layoutCommon + [
         'prefill'           => $prefill,
         'replyMsg'          => $replyMsg,
         'folder'            => $currentFolder,
         'currentAccountId'  => $accountId,
-        'signature'         => $user['signature'] ?? '',
+        'signature'         => $signature,
         'pageTitle'         => pageTitle('Compose'),
     ]);
     exit;
@@ -637,6 +638,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($action === 'settings') {
     $tab  = $_GET['tab'] ?? 'profile';
     $user = Database::getInstance()->fetch('SELECT * FROM users WHERE id = ?', [$userId]);
+    $activeAccount = $accountMgr->get($accountId);
     $tf   = new TwoFactor();
 
     $totpSecret    = null;
@@ -659,6 +661,7 @@ if ($action === 'settings') {
     render('settings', $layoutCommon + [
         'tab'           => $tab,
         'user'          => $user,
+        'account'       => $activeAccount,
         'totpSecret'    => $totpSecret,
         'recoveryCodes' => $recoveryCodes,
         'qrUrl'         => $qrUrl,
@@ -671,18 +674,51 @@ if ($action === 'settings_save') {
     $tab = $_GET['tab'] ?? 'profile';
     $db  = Database::getInstance();
     $auth = new Auth();
+    $account = $accountMgr->get($accountId);
 
     switch ($tab) {
         case 'profile':
             $name = trim($_POST['display_name'] ?? '');
-            $db->query('UPDATE users SET display_name = ? WHERE id = ?', [$name, $userId]);
-            flashSet('success', 'Profile saved.');
+            if ($account !== null) {
+                $accountMgr->update($accountId, $userId, [
+                    'label'         => $account['label'],
+                    'sender_name'   => $name,
+                    'signature'     => $account['signature'] ?? '',
+                    'email'         => $account['email'],
+                    'imap_host'     => $account['imap_host'],
+                    'imap_port'     => (int)$account['imap_port'],
+                    'imap_ssl'      => (int)$account['imap_ssl'],
+                    'smtp_host'     => $account['smtp_host'],
+                    'smtp_port'     => (int)$account['smtp_port'],
+                    'smtp_ssl'      => (int)$account['smtp_ssl'],
+                    'smtp_starttls' => (int)$account['smtp_starttls'],
+                    'username'      => $account['username'],
+                    'password'      => '',
+                ]);
+            }
+            flashSet('success', 'Profile saved for this account.');
             redirect('?action=settings&tab=profile');
 
         case 'signature':
             $sig = $_POST['signature'] ?? '';
-            $db->query('UPDATE users SET signature = ? WHERE id = ?', [$sig, $userId]);
-            flashSet('success', 'Signature saved.');
+            if ($account !== null) {
+                $accountMgr->update($accountId, $userId, [
+                    'label'         => $account['label'],
+                    'sender_name'   => $account['sender_name'] ?? '',
+                    'signature'     => $sig,
+                    'email'         => $account['email'],
+                    'imap_host'     => $account['imap_host'],
+                    'imap_port'     => (int)$account['imap_port'],
+                    'imap_ssl'      => (int)$account['imap_ssl'],
+                    'smtp_host'     => $account['smtp_host'],
+                    'smtp_port'     => (int)$account['smtp_port'],
+                    'smtp_ssl'      => (int)$account['smtp_ssl'],
+                    'smtp_starttls' => (int)$account['smtp_starttls'],
+                    'username'      => $account['username'],
+                    'password'      => '',
+                ]);
+            }
+            flashSet('success', 'Signature saved for this account.');
             redirect('?action=settings&tab=profile');
 
         case 'enable_2fa':

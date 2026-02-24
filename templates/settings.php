@@ -4,12 +4,17 @@
  * @var string $tab        active tab: profile|security|accounts|appearance
  * @var array  $user       current user row
  * @var array  $accounts   all accounts for user
+ * @var array|null $account active account row
  * @var array  $flash
  * @var string $totpSecret  (when enrolling 2FA)
  * @var array  $recoveryCodes (when enrolling 2FA)
  */
 $tab = $tab ?? 'profile';
 $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'WebyMail');
+$activeAccount  = is_array($account ?? null) ? $account : null;
+$activeSignature = $activeAccount['signature'] ?? ($user['signature'] ?? '');
+$activeSender    = $activeAccount['sender_name'] ?? ($user['display_name'] ?? '');
+$activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account');
 ?>
 
 <div class="wm-settings-grid">
@@ -48,13 +53,16 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
         <h2 style="margin-top:0;font-size:1.1rem">Profile</h2>
 
         <div class="wm-card" style="margin-bottom:1.5rem">
-            <div class="wm-card-header">Display Name</div>
+            <div class="wm-card-header">Display Name (account specific)</div>
             <div class="wm-card-body">
                 <form method="post" action="?action=settings_save&tab=profile">
                     <div class="form-group">
                         <label for="display_name">Display name</label>
                         <input type="text" id="display_name" name="display_name" class="form-control"
-                               value="<?= htmlspecialchars($user['display_name'] ?? '') ?>">
+                               value="<?= htmlspecialchars($activeSender) ?>">
+                        <p class="form-hint" style="margin-top:.35rem">
+                            Shown as the “From” name for <?= htmlspecialchars($activeEmail) ?>.
+                        </p>
                     </div>
                     <button class="btn btn-primary btn-sm">Save</button>
                 </form>
@@ -67,14 +75,19 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
             <div class="wm-card-body">
                 <form method="post" action="?action=settings_save&tab=signature" id="sig-form">
                     <input type="hidden" name="signature" id="sig-hidden">
-                    <div id="sig-toolbar" class="wm-editor-group" style="margin-bottom:.5rem">
+                    <div id="sig-toolbar" class="wm-editor-group" style="margin-bottom:.5rem;align-items:center;gap:.5rem;flex-wrap:wrap">
                         <button type="button" data-sig-cmd="bold"><b>B</b></button>
                         <button type="button" data-sig-cmd="italic"><i>I</i></button>
                         <button type="button" data-sig-cmd="underline"><u>U</u></button>
                         <button type="button" data-sig-cmd="createLink">Link</button>
-                        <input type="color" data-sig-cmd="foreColor" value="#2563eb" title="Text color">
+                        <span style="display:inline-flex;align-items:center;gap:.25rem">
+                            <input type="color" data-sig-cmd="foreColor" value="#2563eb" title="Text color">
+                            <button type="button" data-sig-apply-color style="padding:.2rem .45rem">Apply</button>
+                        </span>
+                        <button type="button" id="sig-toggle-source" class="btn btn-outline btn-sm" style="margin-left:auto">HTML source</button>
                     </div>
                     <div id="sig-editor" contenteditable="true" style="min-height:150px;border:1px solid var(--wm-border);border-radius:7px;overflow:hidden;padding:.75rem;background:var(--wm-surface-2)"></div>
+                    <textarea id="sig-source" style="display:none;width:100%;min-height:150px;border:1px solid var(--wm-border);border-radius:7px;padding:.65rem;font-family:monospace;"></textarea>
                     <button type="submit" class="btn btn-primary btn-sm" style="margin-top:.75rem">Save Signature</button>
                 </form>
             </div>
@@ -84,7 +97,9 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
         (function() {
             var toolbar = document.getElementById('sig-toolbar');
             var editor  = document.getElementById('sig-editor');
-            editor.innerHTML = <?= json_encode($user['signature'] ?? '') ?> || '<p><br></p>';
+            var source  = document.getElementById('sig-source');
+            var toggle  = document.getElementById('sig-toggle-source');
+            editor.innerHTML = <?= json_encode($activeSignature) ?> || '<p><br></p>';
             try { document.execCommand('enableObjectResizing', false, true); } catch (e) {}
 
             toolbar.querySelectorAll('[data-sig-cmd]').forEach(function(btn) {
@@ -111,7 +126,40 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                 });
             });
 
+            toolbar.querySelectorAll('[data-sig-apply-color]').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var picker = toolbar.querySelector('input[data-sig-cmd="foreColor"]');
+                    if (picker) {
+                        document.execCommand('foreColor', false, picker.value);
+                        editor.focus();
+                    }
+                });
+            });
+
+            function syncSourceFromEditor() {
+                source.value = editor.innerHTML;
+            }
+            function syncEditorFromSource() {
+                editor.innerHTML = source.value || '<p><br></p>';
+            }
+            toggle?.addEventListener('click', function() {
+                if (source.style.display === 'none') {
+                    syncSourceFromEditor();
+                    source.style.display = 'block';
+                    editor.style.display = 'none';
+                    toggle.textContent = 'Visual editor';
+                } else {
+                    syncEditorFromSource();
+                    source.style.display = 'none';
+                    editor.style.display = 'block';
+                    toggle.textContent = 'HTML source';
+                }
+            });
+
             document.getElementById('sig-form').addEventListener('submit', function() {
+                if (source.style.display !== 'none') {
+                    syncEditorFromSource();
+                }
                 document.getElementById('sig-hidden').value = editor.innerHTML;
             });
         })();
