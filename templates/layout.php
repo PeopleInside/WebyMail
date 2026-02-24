@@ -60,7 +60,7 @@
                 <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
             </svg>
         </button>
-        <a href="?action=inbox" class="brand"><?= htmlspecialchars($brandName) ?></a>
+        <a href="?action=inbox" class="brand">Weby<span>Mail</span></a>
 
         <!-- Search -->
         <div class="input-group" style="max-width:320px;flex:1">

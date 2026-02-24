@@ -100,6 +100,39 @@ function findFolderName(array $folders, array $candidates, string $fallback): st
     return $fallback;
 }
 
+const TRASH_FOLDER_VARIANTS = ['Trash', 'Deleted', 'Deleted Items'];
+
+function resolveTrashFolder(ImapClient $imap): string
+{
+    /**
+     * Resolve the Trash folder name across common variants, falling back to "Trash".
+     *
+     * @param ImapClient $imap
+     * @return string
+     */
+    return findFolderName($imap->getFolders(), TRASH_FOLDER_VARIANTS, 'Trash');
+}
+
+function isTrashFolderEquivalent(string $folder, string $trash): bool
+{
+    $normalizeFolderName = static function (string $name): string {
+        $parts = preg_split('/[\.\\/]/', $name) ?: [$name];
+        return strtolower(end($parts));
+    };
+    return $normalizeFolderName($folder) === $normalizeFolderName($trash);
+}
+
+function moveToTrashOrDelete(ImapClient $imap, string $folder, int $msgNo, string $trash, bool $isTrashFolder): void
+{
+    // Case-insensitive folder name comparison using the last path segment.
+    // Messages already in Trash are permanently deleted; others are moved into Trash.
+    if ($isTrashFolder) {
+        $imap->deleteMessage($folder, $msgNo);
+    } else {
+        $imap->moveMessage($folder, $msgNo, $trash);
+    }
+}
+
 function parseIniSize(string $value): int
 {
     $value = trim($value);
@@ -417,9 +450,11 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
-        $imap->deleteMessage($folder, $msgNo);
+        $trash = resolveTrashFolder($imap);
+        $inTrash = isTrashFolderEquivalent($folder, $trash);
+        moveToTrashOrDelete($imap, $folder, $msgNo, $trash, $inTrash);
         $imap->disconnect();
-        flashSet('success', 'Message deleted.');
+        flashSet('success', $inTrash ? 'Message deleted.' : 'Message moved to Trash.');
     } catch (RuntimeException $e) {
         flashSet('danger', 'Delete failed: ' . $e->getMessage());
     }
@@ -435,13 +470,20 @@ if ($action === 'bulk' && isAjax()) {
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
-        foreach ($uids as $uid) {
-            match ($act) {
-                'delete' => $imap->deleteMessage($folder, $uid),
-                'read'   => $imap->markRead($folder, $uid, true),
-                'unread' => $imap->markRead($folder, $uid, false),
-                default  => null,
-            };
+        if ($act === 'delete') {
+            $trash = resolveTrashFolder($imap);
+            $inTrash = isTrashFolderEquivalent($folder, $trash);
+            foreach ($uids as $uid) {
+                moveToTrashOrDelete($imap, $folder, $uid, $trash, $inTrash);
+            }
+        } else {
+            foreach ($uids as $uid) {
+                match ($act) {
+                    'read'   => $imap->markRead($folder, $uid, true),
+                    'unread' => $imap->markRead($folder, $uid, false),
+                    default  => null,
+                };
+            }
         }
         $imap->disconnect();
         jsonResponse(['ok' => true]);
