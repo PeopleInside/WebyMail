@@ -290,7 +290,7 @@ $signature = $signature ?? '';
         attachInput.addEventListener('change', function() {
             if (!attachLabel) return;
             var files = Array.from(attachInput.files || []).map(function(f) { return f.name; });
-            attachLabel.textContent = files.length ? files.join(', ') : '';
+            attachLabel.textContent = files.length ? files.join(', ') : 'No files selected';
         });
     }
 
