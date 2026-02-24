@@ -12,6 +12,7 @@ RewriteRule ^(.*)$ index.php [QSA,L]
     Header always set X-Content-Type-Options "nosniff"
     Header always set X-XSS-Protection "1; mode=block"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    # Allow HTTPS images to render user-provided signatures and inline editor content.
     Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:"
 </IfModule>
 
