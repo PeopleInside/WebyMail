@@ -454,17 +454,18 @@ if ($action === 'bulk' && isAjax()) {
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
-        $trash = null;
         if ($act === 'delete') {
             $trash = trashFolder($imap);
-        }
-        foreach ($uids as $uid) {
-            if ($act === 'delete') {
+            foreach ($uids as $uid) {
                 deleteOrTrash($imap, $folder, $uid, $trash);
-            } elseif ($act === 'read') {
-                $imap->markRead($folder, $uid, true);
-            } elseif ($act === 'unread') {
-                $imap->markRead($folder, $uid, false);
+            }
+        } else {
+            foreach ($uids as $uid) {
+                match ($act) {
+                    'read'   => $imap->markRead($folder, $uid, true),
+                    'unread' => $imap->markRead($folder, $uid, false),
+                    default  => null,
+                };
             }
         }
         $imap->disconnect();
