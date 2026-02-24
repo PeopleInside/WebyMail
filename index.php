@@ -542,7 +542,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     break;
                 }
             }
-            $imap->appendToFolder($drafts, $raw);
+            $imap->appendToFolder($drafts, $raw, "\\Draft");
             $imap->disconnect();
             flashSet('success', 'Draft saved.');
         } catch (RuntimeException $e) {
@@ -564,7 +564,8 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $imap->appendToFolder($sent, $raw);
             $imap->disconnect();
-        } catch (RuntimeException) {
+        } catch (RuntimeException $e) {
+            error_log('Sent folder sync failed: ' . $e->getMessage());
             // Non-fatal: still consider email sent
         }
         flashSet('success', 'Message sent successfully.');

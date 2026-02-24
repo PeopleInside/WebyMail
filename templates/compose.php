@@ -222,7 +222,7 @@ $signature = $signature ?? '';
             if (!file) return;
             var reader = new FileReader();
             reader.onload = function(e) {
-                var dataUrl = e.target?.result;
+                var dataUrl = e.target && e.target.result;
                 if (dataUrl) {
                     document.execCommand('insertImage', false, dataUrl);
                     editorEl.focus();

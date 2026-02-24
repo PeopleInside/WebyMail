@@ -294,11 +294,11 @@ class ImapClient
         return base64_decode($raw);
     }
 
-    public function appendToFolder(string $folder, string $raw): bool
+    public function appendToFolder(string $folder, string $raw, string $flags = "\\Seen"): bool
     {
         $this->assertConnected();
         $folderRaw = $this->host . mb_convert_encoding($folder, 'UTF7-IMAP', 'UTF-8');
-        return (bool) imap_append($this->conn, $folderRaw, $raw, "\\Seen");
+        return (bool) imap_append($this->conn, $folderRaw, $raw, $flags);
     }
 
     private function isAttachment(object $part): bool
