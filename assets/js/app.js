@@ -233,13 +233,16 @@ function initSmtpPortSync(container) {
     const starttl = root.querySelector('[data-smtp-starttls]');
     if (!port || !ssl || !starttl) return;
 
+    const SMTP_SSL_PORT     = '465';
+    const SMTP_STARTTLS_PORT = '587';
+
     const sync = () => {
         if (ssl.checked) {
-            port.value = '465';
+            port.value = SMTP_SSL_PORT;
         } else if (starttl.checked) {
-            port.value = '587';
+            port.value = SMTP_STARTTLS_PORT;
         } else if (!port.value) {
-            port.value = '587';
+            port.value = SMTP_STARTTLS_PORT;
         }
     };
 

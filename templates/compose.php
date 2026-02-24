@@ -143,6 +143,8 @@ $signature = $signature ?? '';
     var toolbar    = document.getElementById('quill-toolbar');
     var editorEl   = document.getElementById('quill-editor');
     var hidden     = document.getElementById('body-html-hidden');
+    var initialized = false;
+    var GRACE_MS    = 500; // Allow deferred script time to load before falling back
     var initialHtml = <?= json_encode($prefill['body_html'] ?? '') ?>;
     var signature   = <?= json_encode($signature) ?>;
 
@@ -156,6 +158,8 @@ $signature = $signature ?? '';
     }
 
     function initFallback(content) {
+        if (initialized) return;
+        initialized = true;
         if (toolbar) toolbar.style.display = 'none';
         editorEl.contentEditable = 'true';
         editorEl.style.border = '1px solid var(--wm-border)';
@@ -168,10 +172,12 @@ $signature = $signature ?? '';
     }
 
     function initQuill(content) {
+        if (initialized) return;
         if (!window.Quill) {
             initFallback(content);
             return;
         }
+        initialized = true;
         var quill = new Quill('#quill-editor', {
             theme:   'snow',
             modules: { toolbar: '#quill-toolbar' },
@@ -207,7 +213,7 @@ $signature = $signature ?? '';
         } else {
             initFallback(content);
         }
-    }, 500);
+    }, GRACE_MS);
 })();
 </script>
 
