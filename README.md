@@ -1,6 +1,21 @@
 # WebyMail
 A PHP Web Mail Client
 
+---
+
+### Features:
+1. Multi-account with just one login
+2. Login CAPTCHA Protection
+3. Two Factor Protection
+4. Reply-To during email composing
+5. HTML signature
+6. A modern look
+7. An updated and maintained code
+8. Easy to install without use of the SSH terminal
+9. Possibility to use without MySQL database. SQL Lite is used and some config are stored in PHP config file.
+
+---
+
 - You can monitor the status of this project here:
 https://github.com/PeopleInside/WebyMail/releases
 
