@@ -343,7 +343,7 @@ $signature = $signature ?? '';
                 bl: {x:-1, y: 1},
                 br: {x: 1, y: 1},
             }[dirKey];
-            startDrag(e, dir);
+            if (dir) startDrag(e, dir);
         });
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
@@ -359,10 +359,16 @@ $signature = $signature ?? '';
         }
     });
 
+    var scrollTick = false;
     window.addEventListener('scroll', function() {
-        if (imgOverlay && imgOverlay._target) {
-            showOverlay(imgOverlay._target);
-        }
+        if (!imgOverlay || !imgOverlay._target || scrollTick) return;
+        scrollTick = true;
+        requestAnimationFrame(function() {
+            if (imgOverlay && imgOverlay._target) {
+                showOverlay(imgOverlay._target);
+            }
+            scrollTick = false;
+        });
     });
 
     form.addEventListener('submit', function() {
