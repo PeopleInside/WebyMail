@@ -77,7 +77,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                 Mail Server Settings
             </div>
             <div class="wm-card-body">
-                <form method="post" action="?action=setup">
+                <form method="post" action="?action=setup" enctype="multipart/form-data">
                     <input type="hidden" name="step" value="save">
 
                     <p style="font-size:.82rem;color:var(--wm-text-muted);margin-top:0">
@@ -154,6 +154,74 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                         </label>
                         <p class="form-hint" style="font-size:.78rem;color:var(--wm-text-muted);margin:.35rem 0 0">
                             Disable if the captcha causes trouble; you can re-enable later by editing <code>config/config.php</code>.
+                        </p>
+                    </div>
+
+                    <div class="form-group" style="margin-top:1rem">
+                        <label style="font-weight:600">Two-Factor Authentication</label><br>
+                        <label style="font-size:.85rem;color:var(--wm-text-muted)">
+                            <input type="checkbox" name="two_factor_enabled" value="1"
+                                   <?= empty($_POST) || !empty($_POST['two_factor_enabled']) ? 'checked' : '' ?>>
+                            Enable Two-Factor Authentication (TOTP)
+                        </label>
+                        <p class="form-hint" style="font-size:.78rem;color:var(--wm-text-muted);margin:.35rem 0 0">
+                            Uncheck to globally disable 2FA. You can also disable it for specific accounts
+                            by adding their email addresses to <code>two_factor_bypass_users</code> in <code>config/config.php</code>.
+                        </p>
+                    </div>
+
+                    <div class="form-group" style="margin-top:1rem">
+                        <label style="font-weight:600">Server settings on login page</label><br>
+                        <label style="font-size:.85rem;color:var(--wm-text-muted)">
+                            <input type="checkbox" name="show_server_settings" value="1"
+                                   <?= empty($_POST) || !empty($_POST['show_server_settings']) ? 'checked' : '' ?>>
+                            Show "Server settings" panel on the login page
+                        </label>
+                        <p class="form-hint" style="font-size:.78rem;color:var(--wm-text-muted);margin:.35rem 0 0">
+                            Uncheck to hide the expandable IMAP/SMTP customisation section from the login form.
+                        </p>
+                    </div>
+
+                    <fieldset style="border:1px solid var(--wm-border);border-radius:8px;padding:1rem;margin-top:1rem;margin-bottom:1rem">
+                        <legend style="font-size:.82rem;font-weight:600;padding:0 .5rem;color:var(--wm-text-muted)">Login page branding</legend>
+
+                        <div class="form-group" style="margin-bottom:.75rem">
+                            <label>Subtitle (shown below the app name)</label>
+                            <input type="text" name="login_subtitle" class="form-control"
+                                   placeholder="e.g. Company Mail · Powered by WebyMail"
+                                   value="<?= htmlspecialchars($_POST['login_subtitle'] ?? '') ?>">
+                            <p class="form-hint" style="font-size:.78rem;color:var(--wm-text-muted);margin:.25rem 0 0">
+                                Plain text only. Leave blank for the default tagline.
+                            </p>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom:.75rem">
+                            <label>Footer text (HTML allowed, links open in new window)</label>
+                            <input type="text" name="login_footer" class="form-control"
+                                   placeholder='e.g. &amp;copy; 2025 ACME &lt;a href="..."&gt;Privacy&lt;/a&gt;'
+                                   value="<?= htmlspecialchars($_POST['login_footer'] ?? '') ?>">
+                            <p class="form-hint" style="font-size:.78rem;color:var(--wm-text-muted);margin:.25rem 0 0">
+                                Shown at the bottom of the login card. Supports HTML; links automatically open in a new window.
+                            </p>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom:0">
+                            <label>Favicon (.ico or .svg)</label>
+                            <input type="file" name="favicon" class="form-control" accept=".ico,.svg">
+                            <p class="form-hint" style="font-size:.78rem;color:var(--wm-text-muted);margin:.25rem 0 0">
+                                Optional. Will be saved to <code>assets/</code> and linked in every page.
+                            </p>
+                        </div>
+                    </fieldset>
+
+                    <div class="form-group">
+                        <label>Timezone</label>
+                        <input type="text" name="timezone" class="form-control"
+                               placeholder="Europe/Rome"
+                               value="<?= htmlspecialchars($_POST['timezone'] ?? 'Europe/Rome') ?>">
+                        <p class="form-hint" style="font-size:.78rem;color:var(--wm-text-muted);margin:.25rem 0 0">
+                            PHP timezone identifier, e.g. <code>Europe/Rome</code>, <code>America/New_York</code>.
+                            See <a href="https://www.php.net/manual/en/timezones.php" target="_blank" rel="noopener">full list</a>.
                         </p>
                     </div>
 
