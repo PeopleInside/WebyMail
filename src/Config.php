@@ -53,30 +53,20 @@ class Config
     private static function defaults(): array
     {
         return [
-            'app_name'                  => 'WebyMail',
-            'app_secret'                => bin2hex(random_bytes(32)),
-            'altcha_hmac_key'           => bin2hex(random_bytes(32)),
-            'altcha_enabled'            => true,
-            'session_lifetime'          => 15552000, // 6 months in seconds
-            'imap_host'                 => '',
-            'imap_port'                 => 993,
-            'imap_ssl'                  => true,
-            'smtp_host'                 => '',
-            'smtp_port'                 => 587,
-            'smtp_ssl'                  => false,
-            'smtp_starttls'             => true,
-            'db_path'                   => __DIR__ . '/../data/webymail.db',
-            'setup_complete'            => false,
-            // UI / branding
-            'login_subtitle'            => 'Secure Web Mail Client',
-            'login_footer'              => '',
-            'show_server_settings'      => true,
-            'favicon_path'              => '',
-            // Two-Factor Authentication
-            'two_factor_enabled'        => true,
-            'two_factor_bypass_users'   => [],
-            // Timezone
-            'timezone'                  => 'Europe/Rome',
+            'app_name'        => 'WebyMail',
+            'app_secret'      => bin2hex(random_bytes(32)),
+            'altcha_hmac_key' => bin2hex(random_bytes(32)),
+            'altcha_enabled'  => true,
+            'session_lifetime' => 15552000, // 6 months in seconds
+            'imap_host'       => '',
+            'imap_port'       => 993,
+            'imap_ssl'        => true,
+            'smtp_host'       => '',
+            'smtp_port'       => 587,
+            'smtp_ssl'        => false,
+            'smtp_starttls'   => true,
+            'db_path'         => __DIR__ . '/../data/webymail.db',
+            'setup_complete'  => false,
         ];
     }
 }

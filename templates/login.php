@@ -9,7 +9,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
         <!-- Logo -->
         <div class="wm-auth-logo">
             <h1>Weby<span>Mail</span></h1>
-            <p><?= htmlspecialchars(Config::get('login_subtitle', 'Secure Web Mail Client')) ?></p>
+            <p>Secure Web Mail Client</p>
         </div>
 
         <!-- Theme toggle (top-right of card) -->
@@ -83,7 +83,6 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                     </div>
 
                     <!-- Collapsible server settings -->
-                    <?php if (Config::get('show_server_settings', true)): ?>
                     <details style="margin-bottom:1rem">
                         <summary style="font-size:.82rem;color:var(--wm-text-muted);cursor:pointer;padding:.3rem 0">
                             ▸ Server settings (auto-detect or customise)
@@ -105,7 +104,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                             <div>
                                 <label>
                                     <input type="checkbox" name="imap_ssl" value="1"
-                                           <?= (isset($_POST['imap_ssl']) ? !empty($_POST['imap_ssl']) : (bool)Config::get('imap_ssl', true)) ? 'checked' : '' ?>>
+                                           <?= (!isset($_POST['imap_ssl']) || !empty($_POST['imap_ssl'])) ? 'checked' : '' ?>>
                                     Use SSL/TLS
                                 </label>
                             </div>
@@ -127,19 +126,18 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                                 <label>
                                     <input type="checkbox" name="smtp_ssl" value="1"
                                             data-smtp-ssl
-                                            <?= (isset($_POST['smtp_ssl']) ? !empty($_POST['smtp_ssl']) : (bool)Config::get('smtp_ssl', false)) ? 'checked' : '' ?>>
+                                            <?= (!empty($_POST['smtp_ssl'])) ? 'checked' : '' ?>>
                                     SSL (port 465)
                                 </label>
                                 <label>
                                     <input type="checkbox" name="smtp_starttls" value="1"
                                             data-smtp-starttls
-                                            <?= (isset($_POST['smtp_starttls']) ? !empty($_POST['smtp_starttls']) : (bool)Config::get('smtp_starttls', true)) ? 'checked' : '' ?>>
+                                            <?= (!isset($_POST['smtp_starttls']) || $_POST['smtp_starttls']) ? 'checked' : '' ?>>
                                     STARTTLS (port 587)
                                 </label>
                             </div>
                         </div>
                     </details>
-                    <?php endif; ?>
 
                     <!-- Self-hosted proof-of-work captcha -->
                     <?php if (!empty($challenge)): ?>
@@ -171,15 +169,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
         <?php endif; ?>
 
         <p style="text-align:center;font-size:.75rem;color:var(--wm-text-muted);margin-top:1.25rem">
-            <?php
-            $loginFooter = Config::get('login_footer', '');
-            if ($loginFooter !== '') {
-                // Make all <a> tags open in a new window
-                echo preg_replace('/<a\s/i', '<a target="_blank" rel="noopener noreferrer" ', $loginFooter);
-            } else {
-                echo 'WebyMail &mdash; Secure PHP Web Mail Client';
-            }
-            ?>
+            WebyMail &mdash; Secure PHP Web Mail Client
         </p>
     </div>
 </div>

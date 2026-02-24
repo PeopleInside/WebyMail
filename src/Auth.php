@@ -97,11 +97,7 @@ class Auth
 
         $user = $this->db->fetch('SELECT * FROM users WHERE id = ?', [$userId]);
 
-        $globalTwoFactor  = (bool) Config::get('two_factor_enabled', true);
-        $bypassUsers      = array_map('strtolower', array_map('trim', (array) Config::get('two_factor_bypass_users', [])));
-        $userBypassed     = in_array(strtolower(trim($username)), $bypassUsers, true);
-
-        if ($globalTwoFactor && !$userBypassed && (int) $user['totp_enabled'] === 1) {
+        if ((int) $user['totp_enabled'] === 1) {
             // Store pending auth in a short-lived token so the 2FA page can complete it
             $pending = bin2hex(random_bytes(16));
             $_SESSION['pending_2fa'] = [
