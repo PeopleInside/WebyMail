@@ -111,18 +111,17 @@ function resolveTrashFolder(ImapClient $imap): string
 function isTrashFolderEquivalent(string $folder, string $trash): bool
 {
     $normalize = static function (string $name): string {
-        $parts = preg_split('/[.\\/]/', $name) ?: [$name];
+        $parts = preg_split('/[.\/]/', $name) ?: [$name];
         return strtolower(end($parts));
     };
     return $normalize($folder) === $normalize($trash);
 }
 
-function moveToTrashOrDelete(ImapClient $imap, string $folder, int $msgNo, string $trash, ?bool $isTrashFolder = null): void
+function moveToTrashOrDelete(ImapClient $imap, string $folder, int $msgNo, string $trash, bool $isTrashFolder): void
 {
     // Case-insensitive comparison: IMAP servers may expose Trash casing differently than the requested folder parameter.
     // Messages already in Trash are permanently deleted; others are moved into Trash.
-    $inTrash = $isTrashFolder ?? isTrashFolderEquivalent($folder, $trash);
-    if ($inTrash) {
+    if ($isTrashFolder) {
         $imap->deleteMessage($folder, $msgNo);
     } else {
         $imap->moveMessage($folder, $msgNo, $trash);
@@ -468,8 +467,9 @@ if ($action === 'bulk' && isAjax()) {
         $imap = $accountMgr->imapConnect($accountId);
         if ($act === 'delete') {
             $trash = resolveTrashFolder($imap);
+            $inTrash = isTrashFolderEquivalent($folder, $trash);
             foreach ($uids as $uid) {
-                moveToTrashOrDelete($imap, $folder, $uid, $trash);
+                moveToTrashOrDelete($imap, $folder, $uid, $trash, $inTrash);
             }
         } else {
             foreach ($uids as $uid) {
