@@ -69,7 +69,7 @@
 
         --wm-primary:       #388bfd;
         --wm-primary-hover: #58a6ff;
-        --wm-primary-text:  #0d1117;
+        --wm-primary-text:  #ffffff;
 
         --wm-success:       #3fb950;
         --wm-danger:        #f85149;
@@ -106,7 +106,7 @@
 
     --wm-primary:       #388bfd;
     --wm-primary-hover: #58a6ff;
-    --wm-primary-text:  #0d1117;
+    --wm-primary-text:  #ffffff;
 
     --wm-success:       #3fb950;
     --wm-danger:        #f85149;
@@ -192,6 +192,12 @@ a:hover { text-decoration: underline; }
     overflow-y: auto;
     padding: .5rem 0;
     border-right: 1px solid var(--wm-border);
+    display: flex;
+    flex-direction: column;
+}
+
+.wm-sidebar .btn-primary {
+    color: #ffffff !important;
 }
 
 .wm-sidebar-section {
@@ -866,8 +872,8 @@ label {
 .rounded { border-radius: 8px; }
 .border  { border: 1px solid var(--wm-border); }
 
-/* ALTCHA widget theming */
-.altcha-box {
+/* POW captcha widget theming */
+.pow-box {
     background: var(--wm-input-bg);
     border-color: var(--wm-input-border);
 }
