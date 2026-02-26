@@ -174,9 +174,14 @@ function initCompose() {
    AJAX helpers
    ============================================================= */
 async function apiPost(url, data) {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     const res  = await fetch(url, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-Token': csrfToken
+        },
         body:    JSON.stringify(data),
     });
     return res.json();

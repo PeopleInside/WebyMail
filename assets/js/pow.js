@@ -12,9 +12,13 @@
 
     let current = null;
     let solving = false;
+    let expiryTimer = null;
 
-    function setStatus(text) {
-        if (statusEl) statusEl.textContent = text;
+    function setStatus(text, isError = false) {
+        if (statusEl) {
+            statusEl.textContent = text;
+            statusEl.style.color = isError ? '#dc3545' : '';
+        }
     }
 
     function disableSubmit(disabled) {
@@ -32,12 +36,23 @@
         solutionEl.value = '';
         tokenEl.value    = ch.token || '';
         disableSubmit(true);
+        if (expiryTimer) clearTimeout(expiryTimer);
+
         if (!ch.challenge || !ch.token) {
-            setStatus('Could not load security challenge.');
+            setStatus('Could not load security challenge.', true);
             return;
         }
+
+        // Set expiration timer (10 minutes)
+        expiryTimer = setTimeout(() => {
+            setStatus('Security check expired. Please refresh.', true);
+            disableSubmit(true);
+            solutionEl.value = '';
+            tokenEl.value = '';
+        }, 600000);
+
         setStatus('Solving… this may take a moment.');
-        solve(ch).catch(() => setStatus('Security check failed. Refresh to retry.'));
+        solve(ch).catch(() => setStatus('Security check failed. Refresh to retry.', true));
     }
 
     async function solve(challenge) {
