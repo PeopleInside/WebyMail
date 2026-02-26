@@ -5,7 +5,9 @@ A PHP Web Mail Client
 #### ⚠️ Disclaimer: ⚠️
 
 WebyMail is provided "as is."  
-While we strive for security, developers assume no liability. 
+While we strive for security, we don't assume no liability.
+
+This is an AI software.
 
 You use this software at your own risk!
 
