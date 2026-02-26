@@ -18,8 +18,8 @@ spl_autoload_register(function (string $class): void {
 
 require_once __DIR__ . '/src/Config.php';
 
-// If already set up, redirect to main app
-if (Config::isSetup() && ($_GET['action'] ?? '') !== 'setup') {
+// If already set up, redirect to main app unless force setup is requested
+if (Config::get('setup_complete') && ($_GET['force'] ?? '') !== '1' && ($_GET['action'] ?? '') !== 'setup') {
     header('Location: index.php');
     exit;
 }
@@ -42,7 +42,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $smtpPort  = (int) ($_POST['smtp_port'] ?? 587);
         $smtpSsl   = !empty($_POST['smtp_ssl']);
         $smtpTls   = !empty($_POST['smtp_starttls']);
-        $altchaOn  = !empty($_POST['altcha_enabled']);
+        $captchaOn  = !empty($_POST['captcha_enabled']);
+        $timezone  = trim($_POST['timezone'] ?? 'Europe/Rome');
+        $hideServer = !empty($_POST['hide_server_on_login']);
 
         Config::set('app_name',       $appName);
         Config::set('imap_host',      $imapHost);
@@ -52,8 +54,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Config::set('smtp_port',      $smtpPort);
         Config::set('smtp_ssl',       $smtpSsl);
         Config::set('smtp_starttls',  $smtpTls);
-        Config::set('altcha_enabled', $altchaOn);
+        Config::set('captcha_enabled', $captchaOn);
+        Config::set('timezone',       $timezone);
+        Config::set('hide_server_on_login', $hideServer);
         Config::set('setup_complete', true);
+
+        // Cleanup obsolete keys
+        Config::set('altcha_hmac_key', null);
+        Config::set('altcha_enabled', null);
+
+        // Handle Favicon upload
+        if (!empty($_FILES['favicon']['name']) && $_FILES['favicon']['error'] === UPLOAD_ERR_OK) {
+            $ext = strtolower(pathinfo($_FILES['favicon']['name'], PATHINFO_EXTENSION));
+            if (in_array($ext, ['ico', 'png', 'svg'])) {
+                $imgDir = __DIR__ . '/assets/img';
+                if (!is_dir($imgDir)) {
+                    mkdir($imgDir, 0755, true);
+                }
+                $faviconPath = 'assets/img/favicon.' . $ext;
+                if (move_uploaded_file($_FILES['favicon']['tmp_name'], __DIR__ . '/' . $faviconPath)) {
+                    Config::set('favicon_path', $faviconPath);
+                }
+            }
+        }
 
         // Ensure data directory is writable
         $dataDir = __DIR__ . '/data';
@@ -73,6 +96,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($error === null) {
                 $step = 'done';
+                // Auto-rename setup.php to prevent accidental re-runs
+                @rename(__FILE__, __FILE__ . '.bak');
             }
         }
     }
