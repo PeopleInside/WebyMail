@@ -20,6 +20,7 @@ $folderDisplay = htmlspecialchars($folder ?? 'INBOX');
     <div id="bulk-bar" style="display:none;align-items:center;gap:.5rem">
         <button class="btn btn-outline btn-sm" onclick="bulkAction('read')">Mark read</button>
         <button class="btn btn-outline btn-sm" onclick="bulkAction('unread')">Mark unread</button>
+        <button class="btn btn-outline btn-sm" onclick="bulkExport()">Export ZIP</button>
         <button class="btn btn-danger btn-sm" onclick="bulkAction('delete')">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
             Delete
@@ -53,7 +54,14 @@ $folderDisplay = htmlspecialchars($folder ?? 'INBOX');
         </div>
         <div class="wm-mail-from"><?= htmlspecialchars($msg['from']) ?></div>
         <div class="wm-mail-date"><?= htmlspecialchars($msg['date']) ?></div>
-        <div class="wm-mail-subject"><?= htmlspecialchars($msg['subject']) ?></div>
+        <div class="wm-mail-subject">
+            <?php if (!empty($msg['has_attachments'])): ?>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px;vertical-align:middle;opacity:.6" title="Has attachments">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+            </svg>
+            <?php endif; ?>
+            <?= htmlspecialchars($msg['subject']) ?>
+        </div>
     </div>
     <?php endforeach; ?>
     <?php endif; ?>
@@ -102,5 +110,11 @@ function bulkAction(action) {
         if (res.ok) window.location.reload();
         else alert(res.error || 'Action failed.');
     });
+}
+
+function bulkExport() {
+    var uids = getSelectedUids();
+    if (!uids.length) return;
+    window.location.href = '?action=export_zip&folder=<?= addslashes($folder ?? 'INBOX') ?>&uids=' + uids.join(',');
 }
 </script>

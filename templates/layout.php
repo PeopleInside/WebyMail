@@ -19,6 +19,12 @@
     ?>
     <title><?= htmlspecialchars($pageTitle ?? $brandName) ?></title>
     <meta name="robots" content="noindex,nofollow">
+    <?php if ($fav = Config::get('favicon_path')): ?>
+    <link rel="icon" href="<?= htmlspecialchars($fav) ?>">
+    <?php endif; ?>
+    <?php if (function_exists('csrfToken')): ?>
+    <meta name="csrf-token" content="<?= htmlspecialchars(csrfToken()) ?>">
+    <?php endif; ?>
 
     <!--
         Theme is applied BEFORE CSS loads to prevent flash:
@@ -165,6 +171,7 @@
         <!-- Folder management forms (hidden) -->
         <form id="new-folder-form" method="post" action="?action=create_folder"
               style="display:none;padding:.4rem .75rem;gap:.3rem;flex-direction:column">
+            <?php if (function_exists('csrfInput')) echo csrfInput(); ?>
             <input type="text" name="name" id="new-folder-name" placeholder="Folder name"
                    style="font-size:.82rem;padding:.3rem .5rem;border:1px solid var(--wm-border);border-radius:5px;background:var(--wm-surface);color:var(--wm-text)">
             <div style="display:flex;gap:.3rem">
@@ -172,6 +179,9 @@
                 <button type="button" id="cancel-new-folder" class="btn btn-ghost btn-sm" style="font-size:.78rem">Cancel</button>
             </div>
         </form>
+        <div style="margin-top:auto;padding:1rem .75rem;font-size:.7rem;color:var(--wm-text-muted);border-top:1px solid var(--wm-border)">
+            WebyMail v<?= Config::get('version', '0.2') ?>
+        </div>
     </nav>
 
     <!-- Folder context menu (shared, positioned dynamically) -->
@@ -189,10 +199,12 @@
 
     <!-- Hidden forms for folder rename/delete -->
     <form id="rename-folder-form" method="post" action="?action=rename_folder" style="display:none">
+        <?php if (function_exists('csrfInput')) echo csrfInput(); ?>
         <input type="hidden" name="old_name" id="rename-old-name">
         <input type="hidden" name="new_name" id="rename-new-name">
     </form>
     <form id="delete-folder-form" method="post" action="?action=delete_folder" style="display:none">
+        <?php if (function_exists('csrfInput')) echo csrfInput(); ?>
         <input type="hidden" name="name" id="delete-folder-name">
     </form>
 
