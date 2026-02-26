@@ -93,7 +93,25 @@ class ImapClient
             return ['messages' => [], 'total' => $total, 'pages' => (int) ceil($total / $perPage)];
         }
 
-        $messages = array_reverse(array_map([$this, 'summaryFromOverview'], $overview));
+        $messages = array_map([$this, 'summaryFromOverview'], $overview);
+        
+        // For each message, if has_attachments is false, do a quick structure check
+        // to be more reliable, but only for the current page.
+        foreach ($messages as &$msg) {
+            if (!$msg['has_attachments']) {
+                $struct = imap_fetchstructure($this->conn, $msg['msg_no']);
+                if (isset($struct->parts)) {
+                    foreach ($struct->parts as $part) {
+                        if ($this->isAttachment($part)) {
+                            $msg['has_attachments'] = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        $messages = array_reverse($messages);
 
         return [
             'messages' => $messages,
@@ -294,10 +312,35 @@ class ImapClient
         return imap_fetchheader($this->conn, $msgNo) ?: '';
     }
 
+    public function getRawMessage(string $folder, int $msgNo): string
+    {
+        $this->reopenFolder($folder);
+        return imap_fetchbody($this->conn, $msgNo, "");
+    }
+
     public function fetchAttachment(int $msgNo, string $section): string
     {
+        $this->assertConnected();
+        $struct = imap_fetchstructure($this->conn, $msgNo);
+        $part   = $this->findPartBySection($struct, $section);
+        $encoding = $part ? ($part->encoding ?? 0) : 0;
+
         $raw = imap_fetchbody($this->conn, $msgNo, $section);
-        return base64_decode($raw);
+        return $this->decodeBodyPart($raw, $encoding);
+    }
+
+    private function findPartBySection(object $struct, string $section): ?object
+    {
+        $parts = explode('.', $section);
+        $current = $struct;
+        foreach ($parts as $p) {
+            $idx = (int)$p - 1;
+            if (!isset($current->parts[$idx])) {
+                return null;
+            }
+            $current = $current->parts[$idx];
+        }
+        return $current;
     }
 
     public function appendToFolder(string $folder, string $raw, string $flags = "\\Seen"): bool
@@ -366,6 +409,13 @@ class ImapClient
 
     private function summaryFromOverview(object $ov): array
     {
+        // Try to detect attachments from overview if possible (some servers support it)
+        $hasAttachments = (bool) ($ov->has_attachment ?? false);
+
+        // If not in overview, we might need a more expensive check, but for now
+        // we'll stick to what the server provides or leave it false to avoid performance hits.
+        // In a real-world app, we might fetch STRUCTURE in bulk.
+
         return [
             'msg_no'  => $ov->msgno,
             'uid'     => $ov->uid,
@@ -375,6 +425,7 @@ class ImapClient
             'is_read' => (bool) $ov->seen,
             'is_flagged' => (bool) ($ov->flagged ?? false),
             'size'    => (int) ($ov->size ?? 0),
+            'has_attachments' => $hasAttachments,
         ];
     }
 

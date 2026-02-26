@@ -11,7 +11,10 @@ class Database
 
     private function __construct()
     {
-        $path = Config::get('db_path', __DIR__ . '/../data/webymail.db');
+        $path = Config::get('db_path', 'data/webymail.db');
+        if (!str_starts_with($path, '/') && !str_contains($path, ':')) {
+            $path = __DIR__ . '/../' . $path;
+        }
         $dir  = dirname($path);
         if (!is_dir($dir)) {
             mkdir($dir, 0750, true);
@@ -106,15 +109,8 @@ class Database
                 last_seen    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
             );
 
-            CREATE TABLE IF NOT EXISTS altcha_challenges (
-                challenge  TEXT    PRIMARY KEY,
-                expires_at INTEGER NOT NULL,
-                used       INTEGER NOT NULL DEFAULT 0
-            );
-
             CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
             CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
-            CREATE INDEX IF NOT EXISTS idx_altcha_expires ON altcha_challenges(expires_at);
         ");
 
         // Lightweight migrations
