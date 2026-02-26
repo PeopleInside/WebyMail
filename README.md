@@ -25,8 +25,15 @@ https://github.com/PeopleInside/WebyMail/releases
 
 - For security policy you can read the right section: [https://github.com/PeopleInside/WebyMail/security](https://github.com/PeopleInside/WebyMail/security/policy)
 
+## Installation
+1. Upload the files to your web server.
+2. Ensure the `config/` and `data/` directories are writable by the web server.
+3. Visit `setup.php` in your browser to configure the application.
+4. After setup, `setup.php` is automatically renamed to `setup.php.bak` for security.
+   - To re-run setup, rename it back to `setup.php` and visit `setup.php?force=1`.
+
 ## Security
-- A self-hosted proof-of-work captcha is enabled by default on login. To disable it, set `'altcha_enabled' => false` in `config/config.php`.
+- A self-hosted proof-of-work captcha is enabled by default on login. To disable it, set `'captcha_enabled' => false` in `config/config.php`.
 - Two factor can be disabled in case of login issue also on `config/config.php`
 
 **Light mode** 
