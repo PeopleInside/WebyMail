@@ -84,6 +84,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
 
                     <!-- Collapsible server settings -->
                     <?php if (!Config::get('hide_server_on_login', true)): ?>
+                    <input type="hidden" name="server_settings_shown" value="1">
                     <details style="margin-bottom:1rem" open>
                         <summary style="font-size:.82rem;color:var(--wm-text-muted);cursor:pointer;padding:.3rem 0">
                             ▸ Server settings (auto-detect or customise)
@@ -105,7 +106,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                             <div>
                                 <label>
                                     <input type="checkbox" name="imap_ssl" value="1"
-                                           <?= (!isset($_POST['imap_ssl']) || !empty($_POST['imap_ssl'])) ? 'checked' : '' ?>>
+                                           <?= (empty($_POST) ? Config::get('imap_ssl', true) : !empty($_POST['imap_ssl'])) ? 'checked' : '' ?>>
                                     Use SSL/TLS
                                 </label>
                             </div>
@@ -120,20 +121,20 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                                     <label for="smtp_port">Port</label>
                                     <input type="number" id="smtp_port" name="smtp_port" class="form-control"
                                            data-smtp-port
-                                           value="<?= htmlspecialchars($_POST['smtp_port'] ?? Config::get('smtp_port', '587')) ?>">
+                                           value="<?= htmlspecialchars($_POST['smtp_port'] ?? Config::get('smtp_port', '465')) ?>">
                                 </div>
                             </div>
                             <div style="display:flex;gap:1.5rem;flex-wrap:wrap">
                                 <label>
                                     <input type="checkbox" name="smtp_ssl" value="1"
                                             data-smtp-ssl
-                                            <?= (!empty($_POST['smtp_ssl'])) ? 'checked' : '' ?>>
+                                            <?= (empty($_POST) ? Config::get('smtp_ssl', true) : !empty($_POST['smtp_ssl'])) ? 'checked' : '' ?>>
                                     SSL (port 465)
                                 </label>
                                 <label>
                                     <input type="checkbox" name="smtp_starttls" value="1"
                                             data-smtp-starttls
-                                            <?= (!isset($_POST['smtp_starttls']) || $_POST['smtp_starttls']) ? 'checked' : '' ?>>
+                                            <?= (empty($_POST) ? Config::get('smtp_starttls', false) : !empty($_POST['smtp_starttls'])) ? 'checked' : '' ?>>
                                     STARTTLS (port 587)
                                 </label>
                             </div>
@@ -146,12 +147,24 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                     <div class="form-group" id="pow-widget"
                          data-challenge='<?= htmlspecialchars(json_encode($challenge), ENT_QUOTES, 'UTF-8') ?>'
                          data-endpoint="?action=pow_challenge">
-                        <div class="pow-box border rounded p-3" style="display:flex;gap:1rem;justify-content:space-between;align-items:center">
-                            <div>
-                                <div class="fw-bold">Security check</div>
-                                <div class="fs-sm text-muted" data-pow-status>Preparing challenge...</div>
+                        <div class="pow-box border rounded p-3" style="background:var(--wm-bg-subtle);border-color:var(--wm-border)">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+                                <div style="display:flex;align-items:center;gap:.5rem">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                    <span class="fw-bold" style="font-size:.9rem">Security check</span>
+                                </div>
+                                <button type="button" class="btn btn-ghost btn-sm" data-pow-refresh style="padding:.2rem .4rem;font-size:.75rem">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                                    Refresh
+                                </button>
                             </div>
-                            <button type="button" class="btn btn-outline btn-sm" data-pow-refresh>Refresh</button>
+                            <div class="fs-sm text-muted" style="margin-bottom:.5rem;display:flex;align-items:center;gap:.5rem">
+                                <svg class="pow-spinner" data-pow-spinner width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="display:none;animation:pow-spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                                <span data-pow-status>Preparing challenge...</span>
+                            </div>
+                            <div style="height:4px;background:var(--wm-border);border-radius:2px;overflow:hidden">
+                                <div data-pow-progress style="height:100%;width:0%;background:var(--wm-primary);transition:width 0.3s ease, background-color 0.3s"></div>
+                            </div>
                         </div>
                         <input type="hidden" name="pow_solution" id="pow-solution" value="">
                         <input type="hidden" name="pow_token" id="pow-token" value="">

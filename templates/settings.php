@@ -104,7 +104,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             editor.innerHTML = <?= json_encode($activeSignature) ?> || '<p><br></p>';
             try { document.execCommand('enableObjectResizing', false, true); } catch (e) {}
 
-            toolbar.querySelectorAll('[data-sig-cmd]').forEach(function(btn) {
+            toolbar.querySelectorAll('button[data-sig-cmd]').forEach(function(btn) {
                 btn.addEventListener('click', function(e) {
                     e.preventDefault();
                     var cmd = btn.dataset.sigCmd;
@@ -113,13 +113,11 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                         val = prompt('Enter URL');
                         if (!val) return;
                     }
-                    if (btn.type === 'color' || btn.tagName === 'INPUT') {
-                        val = btn.value;
-                    }
                     document.execCommand(cmd, false, val);
                     editor.focus();
                 });
             });
+
             toolbar.querySelectorAll('input[data-sig-cmd]').forEach(function(input) {
                 input.addEventListener('change', function() {
                     var cmd = input.dataset.sigCmd;
@@ -128,14 +126,13 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 });
             });
 
-            toolbar.querySelectorAll('[data-sig-apply-color]').forEach(function(btn) {
-                btn.addEventListener('click', function() {
-                    var picker = toolbar.querySelector('input[data-sig-cmd="foreColor"]');
-                    if (picker) {
-                        document.execCommand('foreColor', false, picker.value);
-                        editor.focus();
-                    }
-                });
+            toolbar.querySelector('[data-sig-apply-color]')?.addEventListener('click', function(e) {
+                e.preventDefault();
+                var picker = toolbar.querySelector('input[data-sig-cmd="foreColor"]');
+                if (picker) {
+                    document.execCommand('foreColor', false, picker.value);
+                    editor.focus();
+                }
             });
 
             function syncSourceFromEditor() {
@@ -170,6 +167,16 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
         <!-- ── Security ── -->
         <?php elseif ($tab === 'security'): ?>
         <h2 style="margin-top:0;font-size:1.1rem">Security & Two-Factor Authentication</h2>
+
+        <?php if (!Config::get('2fa_enabled', true)): ?>
+        <div class="alert alert-danger" style="display:flex;align-items:center;gap:.75rem">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div>
+                <strong>2FA is globally disabled.</strong>
+                <p style="margin:.25rem 0 0;font-size:.82rem">The administrator has disabled Two-Factor Authentication in the configuration file. Individual settings are currently ignored.</p>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <?php if (!empty($totpSecret)): ?>
         <!-- Enroll 2FA -->
