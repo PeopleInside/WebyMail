@@ -1,16 +1,6 @@
 # WebyMail
 A PHP Web Mail Client
 
-
-#### ⚠️ Disclaimer: ⚠️
-
-WebyMail is provided "as is."  
-While we strive for security, we don't assume no liability.
-
-This is an AI software.
-
-You use this software at your own risk!
-
 ---
 
 ### Features:
@@ -20,10 +10,11 @@ You use this software at your own risk!
 4. Reply-To option during email composing
 5. HTML signature
 6. A modern look
-7. Easy to install without use of the SSH terminal
-8. Possibility to use without MySQL database. SQL Lite is used and some config are stored in PHP config file.
-9. Headers check
-10. Folders manager
+7. An updated and maintained code
+8. Easy to install without use of the SSH terminal
+9. Possibility to use without MySQL database. SQL Lite is used and some config are stored in PHP config file.
+10. Headers check
+11. Folders manager
 
 ---
 

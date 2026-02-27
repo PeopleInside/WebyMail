@@ -257,15 +257,20 @@ if ($action === 'login') {
         }
         if ($captchaCheckPassed && $error === null) {
             $auth     = new Auth();
+            $serverSettingsShown = !empty($_POST['server_settings_shown']);
+
             $host     = trim($_POST['imap_host'] ?? Config::get('imap_host', ''));
             $port     = (int) ($_POST['imap_port'] ?? Config::get('imap_port', 993));
-            $ssl      = !empty($_POST['imap_ssl']);
+            $ssl      = $serverSettingsShown ? !empty($_POST['imap_ssl']) : (bool) Config::get('imap_ssl', true);
+            
             $username = trim($_POST['username'] ?? '');
             $password = $_POST['password'] ?? '';
+            
             $smtpHost = trim($_POST['smtp_host'] ?? Config::get('smtp_host', $host));
-            $smtpPort = (int) ($_POST['smtp_port'] ?? Config::get('smtp_port', 587));
-            $smtpSsl  = !empty($_POST['smtp_ssl']);
-            $smtpTls  = !empty($_POST['smtp_starttls']);
+            $smtpPort = (int) ($_POST['smtp_port'] ?? Config::get('smtp_port', 465));
+            $smtpSsl  = $serverSettingsShown ? !empty($_POST['smtp_ssl']) : (bool) Config::get('smtp_ssl', true);
+            $smtpTls  = $serverSettingsShown ? !empty($_POST['smtp_starttls']) : (bool) Config::get('smtp_starttls', false);
+
             if ($smtpSsl) {
                 $smtpTls = false;
             }
@@ -341,6 +346,12 @@ $accountMgr = new Account();
 $accounts   = $accountMgr->getForUser($userId);
 $flash      = flashGet();
 
+// Check if setup.php still exists to show a warning banner
+$setupBanner = null;
+if (file_exists(WEBYMAIL_ROOT . '/setup.php')) {
+    $setupBanner = 'Setup is incomplete. Please open <a href="setup.php?force=1">setup.php?force=1</a> to finish configuration.';
+}
+
 // Build folder list (from IMAP)
 $folders       = [];
 $currentFolder = $_GET['folder'] ?? 'INBOX';
@@ -380,6 +391,7 @@ $layoutCommon = [
     'folders'       => $folders,
     'currentFolder' => $currentFolder,
     'flash'         => $flash,
+    'setupBanner'   => $setupBanner,
 ];
 
 // ── Account switch ────────────────────────────────────────────────────────────
