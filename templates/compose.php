@@ -34,6 +34,7 @@ $signature = $signature ?? '';
     </div>
 
     <form id="compose-form" method="post" action="?action=send" enctype="multipart/form-data" style="display:contents">
+        <?= csrfInput() ?>
         <!-- Hidden fields -->
         <input type="hidden" name="folder"       value="<?= htmlspecialchars($folder) ?>">
         <input type="hidden" name="in_reply_to"  value="<?= htmlspecialchars($prefill['in_reply_to'] ?? '') ?>">
@@ -181,10 +182,10 @@ $signature = $signature ?? '';
 
     function buildInitialContent() {
         var content = '';
-        if (initialHtml) content += initialHtml;
         if (signature) {
-            content += '<br><br>' + signature;
+            content += '<p><br></p>' + signature + '<br><br>';
         }
+        if (initialHtml) content += initialHtml;
         return content;
     }
 

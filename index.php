@@ -31,6 +31,9 @@ spl_autoload_register(function (string $class): void {
 
 require_once __DIR__ . '/src/Config.php';
 
+// Set timezone from config
+date_default_timezone_set(Config::get('timezone', 'Europe/Rome'));
+
 function appName(): string
 {
     return (string) Config::get('app_name', 'WebyMail');
@@ -171,11 +174,38 @@ function flashGet(): ?array
 
 function requireAuth(): array
 {
-    $session = (new Session())->current();
+    $sessionObj = new Session();
+    $session = $sessionObj->current();
     if ($session === null) {
         redirect('?action=login');
     }
+
+    // Validate CSRF for all POST requests when authenticated
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $token = $_POST['csrf_token'] ?? '';
+        if ($token === '' && isAjax()) {
+            $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+        }
+        if ($token === '' || $token !== $sessionObj->getCsrfToken()) {
+            if (isAjax()) {
+                jsonResponse(['ok' => false, 'error' => 'Security token mismatch. Please refresh the page.']);
+            }
+            flashSet('danger', 'Security token mismatch. Please try again.');
+            redirect($_SERVER['HTTP_REFERER'] ?? '?action=inbox');
+        }
+    }
+
     return $session;
+}
+
+function csrfToken(): string
+{
+    return (new Session())->getCsrfToken();
+}
+
+function csrfInput(): string
+{
+    return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars(csrfToken()) . '">';
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────
@@ -184,7 +214,7 @@ $action = $_GET['action'] ?? 'inbox';
 
 // ── Proof-of-Work captcha challenge endpoint (GET, public) ─────────────────────
 if ($action === 'pow_challenge') {
-    if (!Config::get('altcha_enabled', true)) {
+    if (!Config::get('captcha_enabled', true)) {
         http_response_code(404);
         exit;
     }
@@ -205,7 +235,7 @@ if ($action === 'login') {
 
     $error   = null;
     $needs2fa = isset($_SESSION['pending_2fa']) && time() < ($_SESSION['pending_2fa']['expires'] ?? 0);
-    $captchaEnabled = (bool) Config::get('altcha_enabled', true);
+    $captchaEnabled = (bool) Config::get('captcha_enabled', true);
     $captcha = new Captcha();
 
     // Pick up any flash error (e.g. from a failed 2FA attempt)
@@ -254,6 +284,7 @@ if ($action === 'login') {
 
             if (!$result['ok']) {
                 $error = $result['error'];
+                sleep(1); // Deter brute force
             } elseif ($result['needs_2fa']) {
                 $needs2fa = true;
                 redirect('?action=login');
@@ -650,10 +681,54 @@ if ($action === 'bulk' && isAjax()) {
 }
 
 // ── Attachment download ───────────────────────────────────────────────────────
-if ($action === 'attachment') {
+if ($action === 'attachment' || $action === 'download_all') {
     $msgNo   = (int) ($_GET['msg']     ?? 0);
-    $section = $_GET['section'] ?? '';
     $folder  = $_GET['folder']  ?? 'INBOX';
+
+    if ($action === 'download_all') {
+        if (!class_exists('ZipArchive')) {
+            exit('Error: ZipArchive extension is not enabled on this server.');
+        }
+
+        try {
+            $imap = $accountMgr->imapConnect($accountId);
+            $imap->selectFolder($folder);
+            $structure = $imap->fetchStructure($msgNo);
+            $attachments = $imap->getAttachments($structure);
+
+            if (empty($attachments)) {
+                exit('No attachments found.');
+            }
+
+            $zip = new ZipArchive();
+            $zipFile = tempnam(sys_get_temp_dir(), 'wm_zip');
+            if ($zip->open($zipFile, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+                exit('Failed to create ZIP file.');
+            }
+
+            foreach ($attachments as $att) {
+                $data = $imap->fetchAttachment($msgNo, $att['section']);
+                $zip->addFromString($att['filename'], $data);
+            }
+            $zip->close();
+            $imap->disconnect();
+
+            if (ob_get_level()) ob_clean();
+            header('Content-Type: application/zip');
+            header('Content-Disposition: attachment; filename="attachments_' . $msgNo . '.zip"');
+            header('Content-Length: ' . filesize($zipFile));
+            header('Cache-Control: no-cache, must-revalidate');
+            header('Pragma: no-cache');
+            readfile($zipFile);
+            unlink($zipFile);
+            exit;
+        } catch (RuntimeException $e) {
+            http_response_code(500);
+            exit('Error: ' . htmlspecialchars($e->getMessage()));
+        }
+    }
+
+    $section = $_GET['section'] ?? '';
     $name    = basename($_GET['name'] ?? 'attachment');
 
     try {
@@ -665,11 +740,75 @@ if ($action === 'attachment') {
         exit('Error: ' . htmlspecialchars($e->getMessage()));
     }
 
+    if (ob_get_level()) ob_clean();
+    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    $ctype = 'application/octet-stream';
+    if ($ext === 'eml') $ctype = 'message/rfc822';
+
     header('Content-Disposition: attachment; filename="' . $name . '"');
-    header('Content-Type: application/octet-stream');
+    header('Content-Type: ' . $ctype);
     header('Content-Length: ' . strlen($data));
+    header('Cache-Control: no-cache, must-revalidate');
+    header('Pragma: no-cache');
     echo $data;
     exit;
+}
+
+// ── Email Export (EML / ZIP) ──────────────────────────────────────────────────
+if ($action === 'export_eml') {
+    $msgNo   = (int) ($_GET['msg'] ?? 0);
+    $folder  = $_GET['folder'] ?? 'INBOX';
+
+    try {
+        $imap = $accountMgr->imapConnect($accountId);
+        $raw  = $imap->getRawMessage($folder, $msgNo);
+        $imap->disconnect();
+
+        if (ob_get_level()) ob_clean();
+        header('Content-Type: message/rfc822');
+        header('Content-Disposition: attachment; filename="email_' . $msgNo . '.eml"');
+        header('Content-Length: ' . strlen($raw));
+        echo $raw;
+        exit;
+    } catch (RuntimeException $e) {
+        http_response_code(500);
+        exit('Error: ' . htmlspecialchars($e->getMessage()));
+    }
+}
+
+if ($action === 'export_zip') {
+    $uids   = array_map('intval', explode(',', $_GET['uids'] ?? ''));
+    $folder = $_GET['folder'] ?? 'INBOX';
+
+    if (empty($uids)) exit('No emails selected.');
+    if (!class_exists('ZipArchive')) exit('Error: ZipArchive extension is not enabled.');
+
+    try {
+        $imap = $accountMgr->imapConnect($accountId);
+        $zip = new ZipArchive();
+        $zipFile = tempnam(sys_get_temp_dir(), 'wm_export');
+        if ($zip->open($zipFile, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            exit('Failed to create ZIP.');
+        }
+
+        foreach ($uids as $uid) {
+            $raw = $imap->getRawMessage($folder, $uid);
+            $zip->addFromString("email_{$uid}.eml", $raw);
+        }
+        $zip->close();
+        $imap->disconnect();
+
+        if (ob_get_level()) ob_clean();
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="emails_export.zip"');
+        header('Content-Length: ' . filesize($zipFile));
+        readfile($zipFile);
+        unlink($zipFile);
+        exit;
+    } catch (RuntimeException $e) {
+        http_response_code(500);
+        exit('Error: ' . htmlspecialchars($e->getMessage()));
+    }
 }
 
 // ── Compose / Reply / Forward ─────────────────────────────────────────────────
@@ -689,6 +828,7 @@ if ($action === 'compose') {
             $isReplyAll = isset($_GET['reply_all']);
 
             $replyAddress = $orig['reply_to'] ?: $orig['from'];
+            $quoteHeader = sprintf('Il %s, %s ha scritto:', $orig['date'], $orig['from']);
 
             $prefill = [
                 'to'          => $isForward ? '' : $replyAddress,
@@ -698,7 +838,7 @@ if ($action === 'compose') {
                 'reply_to'    => '',
                 'body_html'   => $isForward
                     ? '<br><br><hr><b>--- Forwarded message ---</b><br>' . $orig['body_html']
-                    : '<br><br><blockquote style="border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666">' . $orig['body_html'] . '</blockquote>',
+                    : '<br><br>' . htmlspecialchars($quoteHeader) . '<br><blockquote style="border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666">' . $orig['body_html'] . '</blockquote>',
             ];
             $replyMsg = $origNo;
         } catch (RuntimeException $e) {

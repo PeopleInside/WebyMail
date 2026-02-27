@@ -83,7 +83,8 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                     </div>
 
                     <!-- Collapsible server settings -->
-                    <details style="margin-bottom:1rem">
+                    <?php if (!Config::get('hide_server_on_login', true)): ?>
+                    <details style="margin-bottom:1rem" open>
                         <summary style="font-size:.82rem;color:var(--wm-text-muted);cursor:pointer;padding:.3rem 0">
                             ▸ Server settings (auto-detect or customise)
                         </summary>
@@ -138,6 +139,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                             </div>
                         </div>
                     </details>
+                    <?php endif; ?>
 
                     <!-- Self-hosted proof-of-work captcha -->
                     <?php if (!empty($challenge)): ?>
@@ -192,5 +194,32 @@ document.getElementById('username')?.addEventListener('blur', function() {
     if (imapHost && !imapHost.value) imapHost.value = 'mail.' + domain;
     if (smtpHost && !smtpHost.value) smtpHost.value = 'mail.' + domain;
 });
+
+// SMTP Port auto-switching
+(function() {
+    const sslCheck = document.querySelector('[data-smtp-ssl]');
+    const tlsCheck = document.querySelector('[data-smtp-starttls]');
+    const portInput = document.querySelector('[data-smtp-port]');
+
+    if (!sslCheck || !tlsCheck || !portInput) return;
+
+    sslCheck.addEventListener('change', function() {
+        if (this.checked) {
+            tlsCheck.checked = false;
+            portInput.value = '465';
+        } else if (!tlsCheck.checked) {
+            portInput.value = '25';
+        }
+    });
+
+    tlsCheck.addEventListener('change', function() {
+        if (this.checked) {
+            sslCheck.checked = false;
+            portInput.value = '587';
+        } else if (!sslCheck.checked) {
+            portInput.value = '25';
+        }
+    });
+})();
 </script>
 <script src="assets/js/pow.js"></script>

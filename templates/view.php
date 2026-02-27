@@ -34,6 +34,11 @@ $isInbox   = strtoupper($folder) === 'INBOX';
         Forward
     </a>
 
+    <a href="?action=export_eml&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" class="btn btn-outline btn-sm" title="Download as .eml">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export
+    </a>
+
     <div class="wm-topbar-spacer"></div>
 
     <button class="btn btn-ghost btn-sm" id="show-headers-btn" title="View original headers">
@@ -43,6 +48,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
 
     <?php if ($isInbox): ?>
     <form method="post" action="?action=spam&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" style="display:inline">
+        <?= csrfInput() ?>
         <button class="btn btn-ghost btn-sm text-danger" title="Mark as spam">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
             Spam
@@ -52,6 +58,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
 
     <form method="post" action="?action=delete&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" style="display:inline"
           onsubmit="return confirm('Delete this message?')">
+        <?= csrfInput() ?>
         <button class="btn btn-ghost btn-sm text-danger" title="Delete">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
             Delete
@@ -114,8 +121,16 @@ $isInbox   = strtoupper($folder) === 'INBOX';
     <!-- Attachments -->
     <?php if (!empty($message['attachments'])): ?>
     <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--wm-border)">
-        <div style="font-size:.82rem;font-weight:600;color:var(--wm-text-muted);margin-bottom:.6rem">
-            <?= count($message['attachments']) ?> Attachment<?= count($message['attachments']) > 1 ? 's' : '' ?>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem">
+            <div style="font-size:.82rem;font-weight:600;color:var(--wm-text-muted)">
+                <?= count($message['attachments']) ?> Attachment<?= count($message['attachments']) > 1 ? 's' : '' ?>
+            </div>
+            <?php if (count($message['attachments']) > 1): ?>
+            <a href="?action=download_all&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" class="btn btn-outline btn-xs" style="font-size:.7rem">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download all (ZIP)
+            </a>
+            <?php endif; ?>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:.5rem">
             <?php foreach ($message['attachments'] as $att): ?>

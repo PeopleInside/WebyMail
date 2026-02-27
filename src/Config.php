@@ -25,6 +25,9 @@ class Config
     public static function save(): void
     {
         self::load();
+        // Remove null values (cleanup)
+        self::$data = array_filter(self::$data, fn($v) => $v !== null);
+        
         $export = var_export(self::$data, true);
         $content = "<?php\nreturn {$export};\n";
         if (!is_dir(dirname(self::$configFile))) {
@@ -54,19 +57,21 @@ class Config
     {
         return [
             'app_name'        => 'WebyMail',
+            'version'         => '0.2',
             'app_secret'      => bin2hex(random_bytes(32)),
-            'altcha_hmac_key' => bin2hex(random_bytes(32)),
-            'altcha_enabled'  => true,
+            'captcha_enabled'  => true,
             'session_lifetime' => 15552000, // 6 months in seconds
             'imap_host'       => '',
             'imap_port'       => 993,
             'imap_ssl'        => true,
             'smtp_host'       => '',
-            'smtp_port'       => 587,
-            'smtp_ssl'        => false,
-            'smtp_starttls'   => true,
-            'db_path'         => __DIR__ . '/../data/webymail.db',
+            'smtp_port'       => 465,
+            'smtp_ssl'        => true,
+            'smtp_starttls'   => false,
+            'db_path'         => 'data/webymail.db',
             'setup_complete'  => false,
+            'timezone'        => 'Europe/Rome',
+            'hide_server_on_login' => true,
         ];
     }
 }

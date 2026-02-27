@@ -122,6 +122,18 @@ class Session
     }
 
     /**
+     * Get a CSRF token derived from the current session.
+     */
+    public function getCsrfToken(): string
+    {
+        $token = $_COOKIE[self::COOKIE_NAME] ?? '';
+        if ($token === '') {
+            return '';
+        }
+        return hash_hmac('sha256', $token, Config::get('app_secret', ''));
+    }
+
+    /**
      * Remove expired sessions from the database.
      */
     public function cleanup(): void

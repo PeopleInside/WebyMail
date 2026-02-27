@@ -56,6 +56,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             <div class="wm-card-header">Display Name (account specific)</div>
             <div class="wm-card-body">
                 <form method="post" action="?action=settings_save&tab=profile">
+                    <?= csrfInput() ?>
                     <div class="form-group">
                         <label for="display_name">Display name</label>
                         <input type="text" id="display_name" name="display_name" class="form-control"
@@ -74,6 +75,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             <div class="wm-card-header">Email Signature</div>
             <div class="wm-card-body">
                 <form method="post" action="?action=settings_save&tab=signature" id="sig-form">
+                    <?= csrfInput() ?>
                     <input type="hidden" name="signature" id="sig-hidden">
                     <div id="sig-toolbar" class="wm-editor-group" style="margin-bottom:.5rem;align-items:center;gap:.5rem;flex-wrap:wrap">
                         <button type="button" data-sig-cmd="bold"><b>B</b></button>
@@ -197,6 +199,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 <button class="btn btn-outline btn-sm" data-copy="#recovery-codes-list">Copy codes</button>
 
                 <form method="post" action="?action=settings_save&tab=enable_2fa" style="margin-top:1.25rem">
+                    <?= csrfInput() ?>
                     <input type="hidden" name="totp_secret" value="<?= htmlspecialchars($totpSecret) ?>">
                     <input type="hidden" name="recovery_codes" value="<?= htmlspecialchars(json_encode($recoveryCodes)) ?>">
                     <div class="form-group">
@@ -223,6 +226,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 </p>
                 <form method="post" action="?action=settings_save&tab=disable_2fa"
                       onsubmit="return confirm('Are you sure? This will disable 2FA protection.')">
+                    <?= csrfInput() ?>
                     <button class="btn btn-danger btn-sm">Disable 2FA</button>
                 </form>
             </div>
@@ -238,6 +242,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                     such as Google Authenticator, Authy, or Bitwarden.
                 </p>
                 <form method="post" action="?action=settings&tab=security">
+                    <?= csrfInput() ?>
                     <input type="hidden" name="start_2fa" value="1">
                     <button class="btn btn-primary btn-sm">Set up 2FA →</button>
                 </form>
@@ -254,6 +259,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 </p>
                 <form method="post" action="?action=settings_save&tab=revoke_sessions"
                       onsubmit="return confirm('This will sign you out of all devices including this one.')">
+                    <?= csrfInput() ?>
                     <button class="btn btn-danger btn-sm">Revoke all sessions</button>
                 </form>
             </div>
@@ -275,6 +281,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             <div class="wm-card-header">Add Email Account</div>
             <div class="wm-card-body">
                 <form method="post" action="?action=settings_save&tab=add_account">
+                    <?= csrfInput() ?>
                     <div class="form-group">
                         <label>Label</label>
                         <input type="text" name="label" class="form-control" placeholder="Work, Personal…" required>
@@ -349,6 +356,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                     <?php if (!$acc['is_primary']): ?>
                     <form method="post" action="?action=settings_save&tab=delete_account"
                           onsubmit="return confirm('Remove this account?')">
+                        <?= csrfInput() ?>
                         <input type="hidden" name="account_id" value="<?= (int)$acc['id'] ?>">
                         <button class="btn btn-ghost btn-sm text-danger" title="Remove">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
@@ -360,6 +368,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             <div class="wm-card-body" style="padding:.75rem 1.25rem">
                 <?php if ($isEditing): ?>
                 <form method="post" action="?action=settings_save&tab=edit_account">
+                    <?= csrfInput() ?>
                     <input type="hidden" name="account_id" value="<?= (int)$acc['id'] ?>">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
                         <div class="form-group">
@@ -431,6 +440,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                     operating system's dark/light preference.
                 </p>
                 <form method="post" action="?action=settings_save&tab=appearance" id="theme-form">
+                    <?= csrfInput() ?>
                     <div style="display:flex;gap:.75rem;flex-wrap:wrap">
                         <button type="submit" name="theme" value="system"
                                 onclick="return applyAndSubmitTheme('system')"

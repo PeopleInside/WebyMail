@@ -16,7 +16,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
 
         <div class="wm-auth-logo">
             <h1>Weby<span>Mail</span></h1>
-            <p>Initial Setup Wizard</p>
+            <p>Initial Setup Wizard &mdash; v<?= Config::get('version', '0.2') ?></p>
         </div>
 
         <!-- Steps indicator -->
@@ -77,7 +77,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                 Mail Server Settings
             </div>
             <div class="wm-card-body">
-                <form method="post" action="?action=setup">
+                <form method="post" action="?action=setup" enctype="multipart/form-data">
                     <input type="hidden" name="step" value="save">
 
                     <p style="font-size:.82rem;color:var(--wm-text-muted);margin-top:0">
@@ -88,7 +88,28 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                     <div class="form-group">
                         <label>Application name</label>
                         <input type="text" name="app_name" class="form-control"
-                               value="<?= htmlspecialchars($_POST['app_name'] ?? $brandName) ?>">
+                               value="<?= htmlspecialchars($_POST['app_name'] ?? Config::get('app_name', 'WebyMail')) ?>">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Timezone</label>
+                        <select name="timezone" class="form-control">
+                            <?php
+                            $currentTz = $_POST['timezone'] ?? Config::get('timezone', 'Europe/Rome');
+                            $timezones = DateTimeZone::listIdentifiers();
+                            foreach ($timezones as $tz):
+                            ?>
+                                <option value="<?= htmlspecialchars($tz) ?>" <?= $tz === $currentTz ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($tz) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Favicon (ico, png, svg)</label>
+                        <input type="file" name="favicon" class="form-control" accept=".ico,.png,.svg">
+                        <p class="form-hint">Optional. Upload a custom icon for the browser tab.</p>
                     </div>
 
                     <fieldset style="border:1px solid var(--wm-border);border-radius:8px;padding:1rem;margin-bottom:1rem">
@@ -98,17 +119,17 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                                 <label>Host</label>
                                 <input type="text" name="imap_host" class="form-control"
                                        placeholder="mail.example.com"
-                                       value="<?= htmlspecialchars($_POST['imap_host'] ?? '') ?>">
+                                       value="<?= htmlspecialchars($_POST['imap_host'] ?? Config::get('imap_host', '')) ?>">
                             </div>
                             <div class="form-group" style="margin:0">
                                 <label>Port</label>
                                 <input type="number" name="imap_port" class="form-control"
-                                       value="<?= htmlspecialchars($_POST['imap_port'] ?? '993') ?>">
+                                       value="<?= htmlspecialchars($_POST['imap_port'] ?? Config::get('imap_port', '993')) ?>">
                             </div>
                         </div>
                         <label style="margin-top:.5rem">
                             <input type="checkbox" name="imap_ssl" value="1"
-                                   <?= empty($_POST) || !empty($_POST['imap_ssl']) ? 'checked' : '' ?>>
+                                   <?= (empty($_POST) && Config::get('imap_ssl', true)) || !empty($_POST['imap_ssl']) ? 'checked' : '' ?>>
                             Use SSL/TLS
                         </label>
                     </fieldset>
@@ -120,26 +141,26 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                                  <label>Host</label>
                                 <input type="text" name="smtp_host" class="form-control"
                                        placeholder="mail.example.com"
-                                       value="<?= htmlspecialchars($_POST['smtp_host'] ?? '') ?>">
+                                       value="<?= htmlspecialchars($_POST['smtp_host'] ?? Config::get('smtp_host', '')) ?>">
                             </div>
                             <div class="form-group" style="margin:0">
                                 <label>Port</label>
                                 <input type="number" name="smtp_port" class="form-control"
                                        data-smtp-port
-                                       value="<?= htmlspecialchars($_POST['smtp_port'] ?? '587') ?>">
+                                       value="<?= htmlspecialchars($_POST['smtp_port'] ?? Config::get('smtp_port', '587')) ?>">
                             </div>
                         </div>
                         <div style="display:flex;gap:1.5rem;margin-top:.5rem;flex-wrap:wrap">
                                  <label>
                                      <input type="checkbox" name="smtp_ssl" value="1"
                                             data-smtp-ssl
-                                            <?= !empty($_POST['smtp_ssl']) ? 'checked' : '' ?>>
+                                            <?= (empty($_POST) && Config::get('smtp_ssl', false)) || !empty($_POST['smtp_ssl']) ? 'checked' : '' ?>>
                                      SSL (port 465)
                                  </label>
                                  <label>
                                      <input type="checkbox" name="smtp_starttls" value="1"
                                             data-smtp-starttls
-                                            <?= empty($_POST) || !empty($_POST['smtp_starttls']) ? 'checked' : '' ?>>
+                                            <?= (empty($_POST) && Config::get('smtp_starttls', true)) || !empty($_POST['smtp_starttls']) ? 'checked' : '' ?>>
                                      STARTTLS (port 587)
                                  </label>
                              </div>
@@ -148,12 +169,24 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                     <div class="form-group" style="margin-top:1rem">
                         <label style="font-weight:600">Login protection</label><br>
                         <label style="font-size:.85rem;color:var(--wm-text-muted)">
-                            <input type="checkbox" name="altcha_enabled" value="1"
-                                   <?= empty($_POST) || !empty($_POST['altcha_enabled']) ? 'checked' : '' ?>>
+                            <input type="checkbox" name="captcha_enabled" value="1"
+                                   <?= (empty($_POST) && Config::get('captcha_enabled', true)) || !empty($_POST['captcha_enabled']) ? 'checked' : '' ?>>
                             Require proof-of-work captcha on login
                         </label>
                         <p class="form-hint" style="font-size:.78rem;color:var(--wm-text-muted);margin:.35rem 0 0">
                             Disable if the captcha causes trouble; you can re-enable later by editing <code>config/config.php</code>.
+                        </p>
+                    </div>
+
+                    <div class="form-group" style="margin-top:1rem">
+                        <label style="font-weight:600">Login page options</label><br>
+                        <label style="font-size:.85rem;color:var(--wm-text-muted)">
+                            <input type="checkbox" name="hide_server_on_login" value="1"
+                                   <?= (empty($_POST) && Config::get('hide_server_on_login', true)) || !empty($_POST['hide_server_on_login']) ? 'checked' : '' ?>>
+                            Hide server settings by default
+                        </label>
+                        <p class="form-hint" style="font-size:.78rem;color:var(--wm-text-muted);margin:.35rem 0 0">
+                            If enabled, users will only see Email and Password fields. Server settings will be hidden in a collapsed menu.
                         </p>
                     </div>
 
@@ -175,8 +208,8 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                 </p>
                 <div class="alert alert-info" style="font-size:.82rem">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    For security, consider restricting access to <code>setup.php</code>
-                    or deleting it after setup is complete.
+                    For security, <code>setup.php</code> has been renamed to <code>setup.php.bak</code>.
+                    To run setup again, rename it back and visit <code>setup.php?force=1</code>.
                 </div>
                 <a href="index.php" class="btn btn-primary w-100">Go to Login →</a>
             </div>
@@ -184,3 +217,32 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
         <?php endif; ?>
     </div>
 </div>
+
+<script>
+// SMTP Port auto-switching
+(function() {
+    const sslCheck = document.querySelector('[data-smtp-ssl]');
+    const tlsCheck = document.querySelector('[data-smtp-starttls]');
+    const portInput = document.querySelector('[data-smtp-port]');
+
+    if (!sslCheck || !tlsCheck || !portInput) return;
+
+    sslCheck.addEventListener('change', function() {
+        if (this.checked) {
+            tlsCheck.checked = false;
+            portInput.value = '465';
+        } else if (!tlsCheck.checked) {
+            portInput.value = '25';
+        }
+    });
+
+    tlsCheck.addEventListener('change', function() {
+        if (this.checked) {
+            sslCheck.checked = false;
+            portInput.value = '587';
+        } else if (!sslCheck.checked) {
+            portInput.value = '25';
+        }
+    });
+})();
+</script>
