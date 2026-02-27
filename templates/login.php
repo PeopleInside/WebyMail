@@ -44,6 +44,11 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                                style="text-align:center;letter-spacing:.2em;font-size:1.3rem">
                     </div>
                     <button type="submit" class="btn btn-primary w-100">Verify</button>
+                    <div style="text-align:center;margin-top:1rem">
+                        <a href="?action=cancel_2fa" class="btn btn-ghost btn-sm" style="font-size:.82rem">
+                            Cancel and return to login
+                        </a>
+                    </div>
                 </form>
                 <p style="font-size:.78rem;text-align:center;margin-top:.75rem;color:var(--wm-text-muted)">
                     Lost access? Enter a recovery code above.
