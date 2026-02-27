@@ -18,6 +18,15 @@ spl_autoload_register(function (string $class): void {
 
 require_once __DIR__ . '/src/Config.php';
 
+// Check if version needs update in config/config.php
+if (Config::isSetup()) {
+    $storedVersion = Config::get('version');
+    if ($storedVersion !== Config::VERSION) {
+        Config::set('version', Config::VERSION);
+        Config::save();
+    }
+}
+
 // If already set up, redirect to main app unless force setup is requested
 if (Config::get('setup_complete') && ($_GET['force'] ?? '') !== '1' && ($_GET['action'] ?? '') !== 'setup') {
     header('Location: index.php');
@@ -26,11 +35,26 @@ if (Config::get('setup_complete') && ($_GET['force'] ?? '') !== '1' && ($_GET['a
 
 $step  = (Config::get('setup_complete') && ($_GET['force'] ?? '') === '1') ? 'server' : 'welcome';
 $error = null;
+$requirements = [];
+$securityChecks = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $step = $_POST['step'] ?? 'welcome';
 
-    if ($step === 'server') {
+    if ($step === 'requirements') {
+        $needed = ['imap', 'pdo_sqlite', 'openssl', 'mbstring', 'iconv'];
+        $allOk = true;
+        foreach ($needed as $ext) {
+            $ok = extension_loaded($ext);
+            $requirements[$ext] = $ok;
+            if (!$ok) $allOk = false;
+        }
+        if (!$allOk && !isset($_POST['ignore_requirements'])) {
+            $step = 'requirements';
+        } else {
+            $step = 'server';
+        }
+    } elseif ($step === 'server') {
         // Just show server settings form
     } elseif ($step === 'save') {
         // Validate and save
@@ -60,6 +84,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Config::set('timezone',       $timezone);
         Config::set('hide_server_on_login', $hideServer);
         Config::set('setup_complete', true);
+        Config::set('version', Config::VERSION);
+        Config::set('update_url', Config::UPDATE_URL);
 
         // Cleanup obsolete keys
         Config::set('altcha_hmac_key', null);
@@ -101,11 +127,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($error === null) {
-                $step = 'done';
-                // Auto-rename setup.php to prevent accidental re-runs
-                @rename(__FILE__, __FILE__ . '.bak');
+                $step = 'security';
+                $sys = Config::checkSystem();
+                $securityChecks = $sys['security'];
             }
         }
+    } elseif ($step === 'finish') {
+        $step = 'done';
+        // Auto-rename setup.php to prevent accidental re-runs
+        @rename(__FILE__, __FILE__ . '.bak');
     }
 }
 
