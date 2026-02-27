@@ -13,25 +13,27 @@ declare(strict_types=1);
 class Captcha
 {
     private const SESSION_KEY = 'wm_pow_captcha';
-    private const TTL_SECONDS = 600;
-    private const DEFAULT_DIFFICULTY = 4; // number of leading hex zeroes required
+    private const TTL_SECONDS = 300; // 5 minutes
+    private const DEFAULT_DIFFICULTY = 5; // increased difficulty
 
     public function issue(int $difficulty = self::DEFAULT_DIFFICULTY): array
     {
         $challenge = bin2hex(random_bytes(16));
         $token     = bin2hex(random_bytes(16));
+        $expires   = time() + self::TTL_SECONDS;
 
         $_SESSION[self::SESSION_KEY] = [
             'token'      => $token,
             'challenge'  => $challenge,
             'difficulty' => $difficulty,
-            'expires'    => time() + self::TTL_SECONDS,
+            'expires'    => $expires,
         ];
 
         return [
             'token'      => $token,
             'challenge'  => $challenge,
             'difficulty' => $difficulty,
+            'expires'    => $expires,
         ];
     }
 

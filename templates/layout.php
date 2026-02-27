@@ -21,6 +21,8 @@
     <meta name="robots" content="noindex,nofollow">
     <?php if ($fav = Config::get('favicon_path')): ?>
     <link rel="icon" href="<?= htmlspecialchars($fav) ?>">
+    <?php else: ?>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📧</text></svg>">
     <?php endif; ?>
     <?php if (function_exists('csrfToken')): ?>
     <meta name="csrf-token" content="<?= htmlspecialchars(csrfToken()) ?>">
@@ -54,6 +56,12 @@
     <?php if (!empty($extraHead)) echo $extraHead; ?>
 </head>
 <body>
+<?php if (!empty($setupBanner)): ?>
+    <div class="wm-setup-banner">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:.4rem"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <?= $setupBanner ?>
+    </div>
+<?php endif; ?>
 
 <?php if (!empty($shellLayout)): ?>
 <!-- App shell for authenticated pages -->

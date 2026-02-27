@@ -24,7 +24,7 @@ if (Config::get('setup_complete') && ($_GET['force'] ?? '') !== '1' && ($_GET['a
     exit;
 }
 
-$step  = 'welcome';
+$step  = (Config::get('setup_complete') && ($_GET['force'] ?? '') === '1') ? 'server' : 'welcome';
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -45,6 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $captchaOn  = !empty($_POST['captcha_enabled']);
         $timezone  = trim($_POST['timezone'] ?? 'Europe/Rome');
         $hideServer = !empty($_POST['hide_server_on_login']);
+        $removeFavicon = !empty($_POST['remove_favicon']);
 
         Config::set('app_name',       $appName);
         Config::set('imap_host',      $imapHost);
@@ -55,6 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Config::set('smtp_ssl',       $smtpSsl);
         Config::set('smtp_starttls',  $smtpTls);
         Config::set('captcha_enabled', $captchaOn);
+        Config::set('2fa_enabled',     true); // Always enabled by default, can be disabled in config.php manually if needed
         Config::set('timezone',       $timezone);
         Config::set('hide_server_on_login', $hideServer);
         Config::set('setup_complete', true);
@@ -62,6 +64,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Cleanup obsolete keys
         Config::set('altcha_hmac_key', null);
         Config::set('altcha_enabled', null);
+
+        if ($removeFavicon) {
+            Config::set('favicon_path', null);
+        }
 
         // Handle Favicon upload
         if (!empty($_FILES['favicon']['name']) && $_FILES['favicon']['error'] === UPLOAD_ERR_OK) {

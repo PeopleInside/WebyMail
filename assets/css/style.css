@@ -305,6 +305,12 @@ a:hover { text-decoration: underline; }
     color: var(--wm-primary-text);
     text-decoration: none;
 }
+.btn-primary:disabled {
+    background: #4b5563;
+    color: #9ca3af;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
 
 .btn-outline {
     background: transparent;
@@ -359,6 +365,40 @@ label {
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--wm-input-focus) 20%, transparent);
 }
 
+/* Fix autofill background in dark mode */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px var(--wm-input-bg) inset !important;
+    -webkit-text-fill-color: var(--wm-text) !important;
+    caret-color: var(--wm-text) !important;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+/* For Firefox */
+input:autofill {
+    filter: none;
+    background-color: var(--wm-input-bg) !important;
+    color: var(--wm-text) !important;
+}
+
+/* Captcha spinner animation */
+@keyframes pow-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes pow-pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.6; }
+    100% { opacity: 1; }
+}
+
+.pow-pulse {
+    animation: pow-pulse 1.5s ease-in-out infinite;
+}
+
 .form-hint {
     font-size: .78rem;
     color: var(--wm-text-muted);
@@ -398,6 +438,24 @@ label {
 }
 .badge-primary { background: var(--wm-primary); color: var(--wm-primary-text); }
 .badge-muted   { background: var(--wm-border); color: var(--wm-text-muted); }
+
+/* Setup Banner */
+.wm-setup-banner {
+    background: var(--wm-warning);
+    color: #fff;
+    padding: .6rem 1rem;
+    font-size: .85rem;
+    text-align: center;
+    z-index: 1000;
+}
+.wm-setup-banner a {
+    color: #fff;
+    text-decoration: underline;
+    font-weight: 700;
+}
+.wm-setup-banner a:hover {
+    opacity: 0.9;
+}
 
 /* ----------------------------------------------------------
    9. Mail list

@@ -4,6 +4,8 @@
     if (!widget || !window.crypto || !window.crypto.subtle) return;
 
     const statusEl   = widget.querySelector('[data-pow-status]');
+    const spinnerEl  = widget.querySelector('[data-pow-spinner]');
+    const progressEl = widget.querySelector('[data-pow-progress]');
     const refreshBtn = widget.querySelector('[data-pow-refresh]');
     const solutionEl = document.getElementById('pow-solution');
     const tokenEl    = document.getElementById('pow-token');
@@ -17,12 +19,40 @@
     function setStatus(text, isError = false) {
         if (statusEl) {
             statusEl.textContent = text;
-            statusEl.style.color = isError ? '#dc3545' : '';
+            statusEl.style.color = isError ? 'var(--wm-danger)' : '';
+        }
+        if (spinnerEl) {
+            spinnerEl.style.display = (solving && !isError) ? 'block' : 'none';
+        }
+        if (progressEl) {
+            if (isError) progressEl.style.backgroundColor = 'var(--wm-danger)';
+            else progressEl.style.backgroundColor = '';
         }
     }
 
-    function disableSubmit(disabled) {
-        if (submitBtn) submitBtn.disabled = disabled;
+    function setProgress(percent) {
+        if (progressEl) {
+            progressEl.style.width = percent + '%';
+            if (solving && percent < 100) {
+                progressEl.classList.add('pow-pulse');
+            } else {
+                progressEl.classList.remove('pow-pulse');
+            }
+        }
+    }
+
+    function disableSubmit(disabled, text = null) {
+        if (submitBtn) {
+            submitBtn.disabled = disabled;
+            if (text !== null) {
+                if (!submitBtn.dataset.originalText) {
+                    submitBtn.dataset.originalText = submitBtn.textContent;
+                }
+                submitBtn.textContent = text;
+            } else if (submitBtn.dataset.originalText) {
+                submitBtn.textContent = submitBtn.dataset.originalText;
+            }
+        }
     }
 
     async function hashString(str) {
@@ -35,46 +65,82 @@
         current = ch;
         solutionEl.value = '';
         tokenEl.value    = ch.token || '';
-        disableSubmit(true);
-        if (expiryTimer) clearTimeout(expiryTimer);
+        disableSubmit(true, 'Waiting for security check...');
+        setProgress(0);
+        if (expiryTimer) clearInterval(expiryTimer);
 
         if (!ch.challenge || !ch.token) {
             setStatus('Could not load security challenge.', true);
             return;
         }
 
-        // Set expiration timer (10 minutes)
-        expiryTimer = setTimeout(() => {
-            setStatus('Security check expired. Please refresh.', true);
-            disableSubmit(true);
-            solutionEl.value = '';
-            tokenEl.value = '';
-        }, 600000);
+        // Set expiration timer based on server-provided expiry
+        const expiresAt = parseInt(ch.expires || '0', 10) * 1000;
+        const totalTtl  = 300000; // 5 minutes in ms
 
-        setStatus('Solving… this may take a moment.');
+        expiryTimer = setInterval(() => {
+            const now = Date.now();
+            if (now >= expiresAt) {
+                setStatus('Security check expired. Please refresh.', true);
+                disableSubmit(true, 'Security check expired');
+                solutionEl.value = '';
+                tokenEl.value = '';
+                solving = false;
+                setProgress(100);
+                clearInterval(expiryTimer);
+            } else {
+                const remaining = Math.ceil((expiresAt - now) / 1000);
+                if (!solving && solutionEl.value) {
+                    // Already solved, just watch for expiry
+                    if (remaining <= 30) {
+                        setStatus(`Security check expires in ${remaining}s. Submit soon!`, true);
+                    }
+                } else if (!solving && !solutionEl.value) {
+                    // Not solving and not solved (maybe failed)
+                }
+            }
+        }, 1000);
+
         solve(ch).catch(() => setStatus('Security check failed. Refresh to retry.', true));
     }
 
     async function solve(challenge) {
         solving = true;
-        const difficulty = Math.max(1, parseInt(challenge.difficulty || '4', 10));
+        setStatus('Solving… this may take a moment.');
+        
+        const difficulty = Math.max(1, parseInt(challenge.difficulty || '5', 10));
         const target = '0'.repeat(difficulty);
         let nonce = 0;
+        
+        // We can't easily predict the exact number of iterations, 
+        // but we can show some movement.
+        let progress = 0;
 
         while (solving) {
             const candidate = challenge.challenge + ':' + nonce;
             const digest = await hashString(candidate);
+            
             if (digest.startsWith(target)) {
                 solutionEl.value = String(nonce);
-                setStatus('Security check solved.');
-                disableSubmit(false);
                 solving = false;
+                setStatus('Security check solved.');
+                setProgress(100);
+                disableSubmit(false);
                 return;
             }
             nonce++;
-            // Yield to avoid blocking UI
-            if (nonce % 500 === 0) {
+            
+            if (nonce % 250 === 0) {
+                // Update fake progress to show activity
+                progress = Math.min(95, progress + (100 - progress) * 0.05);
+                setProgress(progress);
+
                 await new Promise(r => setTimeout(r, 0));
+                if (Date.now() > (parseInt(challenge.expires || '0', 10) * 1000)) {
+                    solving = false;
+                    setStatus('Security check expired.', true);
+                    return;
+                }
             }
         }
     }
@@ -92,9 +158,9 @@
     }
 
     refreshBtn?.addEventListener('click', async () => {
-        setStatus('Refreshing challenge…');
         solving = false;
-        disableSubmit(true);
+        setStatus('Refreshing challenge…');
+        disableSubmit(true, 'Refreshing security check...');
         const ch = await fetchChallenge();
         if (ch) loadChallenge(ch);
         else setStatus('Could not refresh challenge. Try again.');

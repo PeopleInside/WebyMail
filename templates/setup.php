@@ -62,6 +62,17 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                 </ul>
                 <form method="post" action="?action=setup">
                     <input type="hidden" name="step" value="server">
+                    
+                    <div style="margin: 1.5rem 0; padding: 1rem; background: var(--wm-bg-subtle); border: 1px solid var(--wm-border); border-radius: 8px;">
+                        <p style="font-size: .85rem; margin-top: 0; color: var(--wm-text);">
+                            <strong>Disclaimer:</strong> WebyMail is provided "as is." While we strive for security, you use this software at your own risk.
+                        </p>
+                        <label style="font-size: .85rem; display: flex; align-items: center; gap: .5rem; cursor: pointer;">
+                            <input type="checkbox" name="accept_disclaimer" required>
+                            I accept the terms and conditions
+                        </label>
+                    </div>
+
                     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:.5rem">
                         Continue →
                     </button>
@@ -108,8 +119,23 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
 
                     <div class="form-group">
                         <label>Favicon (ico, png, svg)</label>
-                        <input type="file" name="favicon" class="form-control" accept=".ico,.png,.svg">
-                        <p class="form-hint">Optional. Upload a custom icon for the browser tab.</p>
+                        <?php if ($fav = Config::get('favicon_path')): ?>
+                            <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem">
+                                <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:var(--wm-bg-subtle);border:1px solid var(--wm-border);border-radius:6px">
+                                    <img src="<?= htmlspecialchars($fav) ?>" style="max-width:24px;max-height:24px;object-fit:contain">
+                                </div>
+                                <label style="font-size:.82rem;color:var(--wm-danger);cursor:pointer;display:flex;align-items:center;gap:.3rem;margin:0">
+                                    <input type="checkbox" name="remove_favicon" value="1"> 
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                    Remove current favicon
+                                </label>
+                            </div>
+                        <?php endif; ?>
+                        <div style="display:flex;gap:.5rem;align-items:center">
+                            <input type="file" name="favicon" id="favicon-input" class="form-control" accept=".ico,.png,.svg">
+                            <button type="button" id="clear-favicon" class="btn btn-ghost btn-sm" style="display:none;white-space:nowrap;padding:.2rem .5rem;font-size:.75rem">✕ Clear</button>
+                        </div>
+                        <p class="form-hint">Optional. Upload a custom icon for the browser tab. If none is set, 📧 will be used.</p>
                     </div>
 
                     <fieldset style="border:1px solid var(--wm-border);border-radius:8px;padding:1rem;margin-bottom:1rem">
@@ -129,7 +155,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                         </div>
                         <label style="margin-top:.5rem">
                             <input type="checkbox" name="imap_ssl" value="1"
-                                   <?= (empty($_POST) && Config::get('imap_ssl', true)) || !empty($_POST['imap_ssl']) ? 'checked' : '' ?>>
+                                   <?= (($_POST['step'] ?? '') !== 'save' ? Config::get('imap_ssl', true) : !empty($_POST['imap_ssl'])) ? 'checked' : '' ?>>
                             Use SSL/TLS
                         </label>
                     </fieldset>
@@ -147,20 +173,20 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                                 <label>Port</label>
                                 <input type="number" name="smtp_port" class="form-control"
                                        data-smtp-port
-                                       value="<?= htmlspecialchars($_POST['smtp_port'] ?? Config::get('smtp_port', '587')) ?>">
+                                       value="<?= htmlspecialchars($_POST['smtp_port'] ?? Config::get('smtp_port', '465')) ?>">
                             </div>
                         </div>
                         <div style="display:flex;gap:1.5rem;margin-top:.5rem;flex-wrap:wrap">
                                  <label>
                                      <input type="checkbox" name="smtp_ssl" value="1"
                                             data-smtp-ssl
-                                            <?= (empty($_POST) && Config::get('smtp_ssl', false)) || !empty($_POST['smtp_ssl']) ? 'checked' : '' ?>>
+                                            <?= (($_POST['step'] ?? '') !== 'save' ? Config::get('smtp_ssl', true) : !empty($_POST['smtp_ssl'])) ? 'checked' : '' ?>>
                                      SSL (port 465)
                                  </label>
                                  <label>
                                      <input type="checkbox" name="smtp_starttls" value="1"
                                             data-smtp-starttls
-                                            <?= (empty($_POST) && Config::get('smtp_starttls', true)) || !empty($_POST['smtp_starttls']) ? 'checked' : '' ?>>
+                                            <?= (($_POST['step'] ?? '') !== 'save' ? Config::get('smtp_starttls', false) : !empty($_POST['smtp_starttls'])) ? 'checked' : '' ?>>
                                      STARTTLS (port 587)
                                  </label>
                              </div>
@@ -170,19 +196,16 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                         <label style="font-weight:600">Login protection</label><br>
                         <label style="font-size:.85rem;color:var(--wm-text-muted)">
                             <input type="checkbox" name="captcha_enabled" value="1"
-                                   <?= (empty($_POST) && Config::get('captcha_enabled', true)) || !empty($_POST['captcha_enabled']) ? 'checked' : '' ?>>
+                                   <?= (($_POST['step'] ?? '') !== 'save' ? Config::get('captcha_enabled', true) : !empty($_POST['captcha_enabled'])) ? 'checked' : '' ?>>
                             Require proof-of-work captcha on login
                         </label>
-                        <p class="form-hint" style="font-size:.78rem;color:var(--wm-text-muted);margin:.35rem 0 0">
-                            Disable if the captcha causes trouble; you can re-enable later by editing <code>config/config.php</code>.
-                        </p>
                     </div>
 
                     <div class="form-group" style="margin-top:1rem">
                         <label style="font-weight:600">Login page options</label><br>
                         <label style="font-size:.85rem;color:var(--wm-text-muted)">
                             <input type="checkbox" name="hide_server_on_login" value="1"
-                                   <?= (empty($_POST) && Config::get('hide_server_on_login', true)) || !empty($_POST['hide_server_on_login']) ? 'checked' : '' ?>>
+                                   <?= (($_POST['step'] ?? '') !== 'save' ? Config::get('hide_server_on_login', true) : !empty($_POST['hide_server_on_login'])) ? 'checked' : '' ?>>
                             Hide server settings by default
                         </label>
                         <p class="form-hint" style="font-size:.78rem;color:var(--wm-text-muted);margin:.35rem 0 0">
@@ -224,6 +247,19 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
     const sslCheck = document.querySelector('[data-smtp-ssl]');
     const tlsCheck = document.querySelector('[data-smtp-starttls]');
     const portInput = document.querySelector('[data-smtp-port]');
+
+    // Favicon clear button
+    const favInput = document.getElementById('favicon-input');
+    const favClear = document.getElementById('clear-favicon');
+    if (favInput && favClear) {
+        favInput.addEventListener('change', function() {
+            favClear.style.display = this.value ? 'inline-block' : 'none';
+        });
+        favClear.addEventListener('click', function() {
+            favInput.value = '';
+            this.style.display = 'none';
+        });
+    }
 
     if (!sslCheck || !tlsCheck || !portInput) return;
 
