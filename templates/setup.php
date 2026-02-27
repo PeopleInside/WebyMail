@@ -22,16 +22,19 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
         <!-- Steps indicator -->
         <div style="display:flex;gap:.5rem;margin-bottom:1.5rem;justify-content:center">
             <?php
-            $steps = ['Welcome', 'Server', 'Done'];
-            $stepIdx = array_search($step ?? 'welcome', ['welcome','server','done']);
+            $steps = ['Welcome', 'Requirements', 'Server', 'Security', 'Done'];
+            $stepMap = ['welcome'=>0, 'requirements'=>1, 'server'=>2, 'save'=>2, 'security'=>3, 'done'=>4];
+            $stepIdx = $stepMap[$step ?? 'welcome'] ?? 0;
             foreach ($steps as $i => $label):
                 $cls = $i <= $stepIdx ? 'var(--wm-primary)' : 'var(--wm-border)';
             ?>
             <div style="display:flex;align-items:center;gap:.4rem">
                 <div style="width:24px;height:24px;border-radius:50%;background:<?= $cls ?>;color:<?= $i <= $stepIdx ? 'var(--wm-primary-text)' : 'var(--wm-text-muted)' ?>;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;flex-shrink:0"><?= $i+1 ?></div>
-                <span style="font-size:.78rem;color:<?= $i <= $stepIdx ? 'var(--wm-text)' : 'var(--wm-text-muted)' ?>"><?= $label ?></span>
+                <?php if ($stepIdx === $i): ?>
+                <span style="font-size:.78rem;color:var(--wm-text);font-weight:600"><?= $label ?></span>
+                <?php endif; ?>
                 <?php if ($i < count($steps)-1): ?>
-                <div style="width:30px;height:2px;background:var(--wm-border);margin:0 .2rem"></div>
+                <div style="width:10px;height:2px;background:var(--wm-border);margin:0 .1rem"></div>
                 <?php endif; ?>
             </div>
             <?php endforeach; ?>
@@ -61,7 +64,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                     <li>6-month persistent sessions</li>
                 </ul>
                 <form method="post" action="?action=setup">
-                    <input type="hidden" name="step" value="server">
+                    <input type="hidden" name="step" value="requirements">
                     
                     <div style="margin: 1.5rem 0; padding: 1rem; background: var(--wm-bg-subtle); border: 1px solid var(--wm-border); border-radius: 8px;">
                         <p style="font-size: .85rem; margin-top: 0; color: var(--wm-text);">
@@ -79,6 +82,77 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                 </form>
             </div>
         </div>
+
+        <?php elseif (($step ?? '') === 'requirements'): ?>
+        <!-- Step 1.5: Requirements -->
+        <div class="wm-card">
+            <div class="wm-card-header">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                System Requirements
+            </div>
+            <div class="wm-card-body">
+                <p style="font-size:.9rem;margin-top:0">
+                    Checking for necessary PHP extensions...
+                </p>
+                <div style="display:flex;flex-direction:column;gap:.75rem;margin-bottom:1.5rem">
+                    <?php
+                    $needed = ['imap', 'pdo_sqlite', 'openssl', 'mbstring', 'iconv'];
+                    $allOk = true;
+                    foreach ($needed as $ext):
+                        $ok = extension_loaded($ext);
+                        if (!$ok) $allOk = false;
+                    ?>
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem;background:var(--wm-bg-subtle);border:1px solid var(--wm-border);border-radius:8px">
+                        <div style="display:flex;align-items:center;gap:.75rem">
+                            <div style="color:<?= $ok ? 'var(--wm-success)' : 'var(--wm-danger)' ?>">
+                                <?php if ($ok): ?>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                                <?php else: ?>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                <?php endif; ?>
+                            </div>
+                            <span style="font-family:var(--wm-font-mono);font-size:.85rem"><?= $ext ?></span>
+                        </div>
+                        <?php if (!$ok): ?>
+                        <span style="font-size:.72rem;color:var(--wm-danger);font-weight:600">MISSING</span>
+                        <?php else: ?>
+                        <span style="font-size:.72rem;color:var(--wm-success);font-weight:600">OK</span>
+                        <?php endif; ?>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+
+                <?php if (!$allOk): ?>
+                <div class="alert alert-danger" style="font-size:.82rem">
+                    Some required extensions are missing. Please install them using your package manager (e.g., <code>apt install php-imap</code>) and restart your web server.
+                </div>
+                <?php endif; ?>
+
+                <form method="post" action="?action=setup">
+                    <input type="hidden" name="step" value="requirements">
+                    <?php if (!$allOk): ?>
+                    <label style="display:flex;align-items:center;gap:.5rem;margin-bottom:1rem;font-size:.82rem;cursor:pointer">
+                        <input type="checkbox" name="ignore_requirements" value="1"> I understand the risks and want to continue anyway
+                    </label>
+                    <?php endif; ?>
+                    <div style="display:flex;gap:.75rem">
+                        <a href="?action=setup" class="btn btn-ghost" style="flex:1">← Back</a>
+                        <button type="submit" class="btn btn-primary" style="flex:2" <?= !$allOk ? 'id="req-submit" disabled' : '' ?>>
+                            Continue to Server Config →
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <script>
+            const ignoreCheck = document.querySelector('input[name="ignore_requirements"]');
+            const submitBtn = document.getElementById('req-submit');
+            if (ignoreCheck && submitBtn) {
+                ignoreCheck.addEventListener('change', function() {
+                    submitBtn.disabled = !this.checked;
+                });
+            }
+        </script>
 
         <?php elseif (($step ?? '') === 'server'): ?>
         <!-- Step 2: Server config -->
@@ -214,6 +288,66 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                     </div>
 
                     <button type="submit" class="btn btn-primary w-100">Save & Finish →</button>
+                </form>
+            </div>
+        </div>
+
+        <?php elseif (($step ?? '') === 'security'): ?>
+        <!-- Step 2.5: Security Check -->
+        <div class="wm-card">
+            <div class="wm-card-header">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                Security & Permissions Check
+            </div>
+            <div class="wm-card-body">
+                <p style="font-size:.9rem;margin-top:0">
+                    Verifying file permissions and server security...
+                </p>
+                
+                <div style="display:flex;flex-direction:column;gap:.75rem;margin-bottom:1.5rem">
+                    <?php 
+                    $allSecurityOk = true;
+                    foreach ($securityChecks as $key => $check): 
+                        if (!$check['ok']) $allSecurityOk = false;
+                    ?>
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem;background:var(--wm-bg-subtle);border:1px solid var(--wm-border);border-radius:8px">
+                        <div style="display:flex;align-items:center;gap:.75rem">
+                            <div style="color:<?= $check['ok'] ? 'var(--wm-success)' : 'var(--wm-warning)' ?>">
+                                <?php if ($check['ok']): ?>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                                <?php else: ?>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                <?php endif; ?>
+                            </div>
+                            <div>
+                                <div style="font-family:var(--wm-font-mono);font-size:.85rem"><?= htmlspecialchars($check['path']) ?></div>
+                                <?php if (isset($check['perms'])): ?>
+                                <div style="font-size:.7rem;color:var(--wm-text-muted)">Current perms: <?= $check['perms'] ?></div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <?php if (!$check['ok']): ?>
+                        <span style="font-size:.72rem;color:var(--wm-warning);font-weight:600">INSECURE</span>
+                        <?php else: ?>
+                        <span style="font-size:.72rem;color:var(--wm-success);font-weight:600">SECURE</span>
+                        <?php endif; ?>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+
+                <?php if (!$allSecurityOk): ?>
+                <div class="alert alert-warning" style="font-size:.82rem">
+                    <strong>Security Warning:</strong> Some files or directories have overly permissive settings. 
+                    We recommend setting directories to <code>750</code> and files to <code>640</code>.
+                    If <code>.htaccess</code> is missing, ensure your web server is configured to deny access to <code>config/</code> and <code>data/</code>.
+                </div>
+                <?php endif; ?>
+
+                <form method="post" action="?action=setup">
+                    <input type="hidden" name="step" value="finish">
+                    <button type="submit" class="btn btn-primary w-100">
+                        Finalize Setup →
+                    </button>
                 </form>
             </div>
         </div>

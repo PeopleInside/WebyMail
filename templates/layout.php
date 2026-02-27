@@ -189,6 +189,14 @@
         </form>
         <div style="margin-top:auto;padding:1rem .75rem;font-size:.7rem;color:var(--wm-text-muted);border-top:1px solid var(--wm-border)">
             WebyMail v<?= Config::get('version', '0.2') ?>
+            <?php if ($newVer = Config::getNewerVersion()): ?>
+            <div style="margin-top:.5rem">
+                <a href="<?= Config::UPDATE_URL ?>" target="_blank" class="alert alert-info" style="display:block;padding:.4rem .6rem;font-size:.68rem;text-decoration:none;border-radius:4px;color:var(--wm-primary);border-color:var(--wm-primary);background:rgba(var(--wm-primary-rgb),.1)">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:middle;margin-right:.2rem"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                    Update v<?= htmlspecialchars($newVer) ?> available
+                </a>
+            </div>
+            <?php endif; ?>
         </div>
     </nav>
 
@@ -218,6 +226,16 @@
 
     <!-- Main -->
     <main class="wm-main">
+        <?php if (Config::shouldShowSecurityBanner()): ?>
+        <div class="alert alert-warning" style="margin:1rem;border-radius:8px;display:flex;align-items:center;gap:.75rem">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div style="flex:1">
+                <strong>Security issues detected.</strong> Some system requirements or file permissions are not optimal.
+            </div>
+            <a href="?action=settings&tab=system" class="btn btn-outline btn-sm" style="background:rgba(0,0,0,.05)">Review</a>
+        </div>
+        <?php endif; ?>
+
         <?php if (!empty($flash)): ?>
         <div class="alert alert-<?= htmlspecialchars($flash['type']) ?>" data-dismiss="4000" style="margin:1rem;border-radius:8px">
             <?= htmlspecialchars($flash['message']) ?>

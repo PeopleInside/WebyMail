@@ -226,6 +226,11 @@ if ($action === 'pow_challenge') {
 }
 
 // ── Login ─────────────────────────────────────────────────────────────────────
+if ($action === 'cancel_2fa') {
+    unset($_SESSION['pending_2fa']);
+    redirect('?action=login');
+}
+
 if ($action === 'login') {
     // Already logged in?
     $session = (new Session())->current();
@@ -1176,6 +1181,13 @@ if ($action === 'settings_save') {
             $db->query('UPDATE users SET theme = ? WHERE id = ?', [$theme, $userId]);
             flashSet('success', 'Theme preference saved.');
             redirect('?action=settings&tab=appearance');
+
+        case 'system_banner':
+            $ignore = !empty($_POST['ignore_security_banner']);
+            Config::set('ignore_security_banner', $ignore);
+            Config::save();
+            flashSet('success', 'System preference saved.');
+            redirect('?action=settings&tab=system');
 
         default:
             redirect('?action=settings');

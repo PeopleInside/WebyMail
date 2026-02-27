@@ -37,6 +37,10 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
             Appearance
         </a>
+        <a href="?action=settings&tab=system" class="<?= $tab==='system' ? 'active' : '' ?>">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            System
+        </a>
     </nav>
 
     <!-- Settings content -->
@@ -471,6 +475,71 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 </form>
             </div>
         </div>
+
+        <!-- ── System ── -->
+        <?php elseif ($tab === 'system'): ?>
+        <h2 style="margin-top:0;font-size:1.1rem">System Health & Security</h2>
+        
+        <?php 
+        $sys = Config::checkSystem(); 
+        $ignoreBanner = Config::get('ignore_security_banner', false);
+        ?>
+
+        <div class="wm-card" style="margin-bottom:1.5rem">
+            <div class="wm-card-header">Security Banner</div>
+            <div class="wm-card-body">
+                <form method="post" action="?action=settings_save&tab=system_banner">
+                    <?= csrfInput() ?>
+                    <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+                        <input type="checkbox" name="ignore_security_banner" value="1" <?= $ignoreBanner ? 'checked' : '' ?>>
+                        Ignore security warnings and hide the dashboard banner
+                    </label>
+                    <button class="btn btn-primary btn-sm" style="margin-top:1rem">Save Preference</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="wm-card" style="margin-bottom:1.5rem">
+            <div class="wm-card-header">PHP Extensions</div>
+            <div class="wm-card-body" style="padding:0">
+                <?php foreach ($sys['requirements'] as $ext => $ok): ?>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
+                    <span style="font-family:var(--wm-font-mono);font-size:.85rem"><?= $ext ?></span>
+                    <span style="font-size:.72rem;font-weight:700;color:<?= $ok ? 'var(--wm-success)' : 'var(--wm-danger)' ?>">
+                        <?= $ok ? 'OK' : 'MISSING' ?>
+                    </span>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+
+        <div class="wm-card">
+            <div class="wm-card-header">File Permissions & Security</div>
+            <div class="wm-card-body" style="padding:0">
+                <?php foreach ($sys['security'] as $key => $check): ?>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
+                    <div>
+                        <div style="font-family:var(--wm-font-mono);font-size:.85rem"><?= htmlspecialchars($check['path']) ?></div>
+                        <?php if (isset($check['perms'])): ?>
+                        <div style="font-size:.7rem;color:var(--wm-text-muted)">Perms: <?= $check['perms'] ?></div>
+                        <?php endif; ?>
+                    </div>
+                    <span style="font-size:.72rem;font-weight:700;color:<?= $check['ok'] ? 'var(--wm-success)' : 'var(--wm-warning)' ?>">
+                        <?= $check['ok'] ? 'SECURE' : 'INSECURE' ?>
+                    </span>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+
+        <?php if (!$sys['all_ok']): ?>
+        <div class="alert alert-warning" style="margin-top:1.5rem;font-size:.82rem">
+            <strong>Action Required:</strong> Some security issues were detected. 
+            Ensure your directories are set to <code>750</code> and files to <code>640</code>.
+            Verify that <code>.htaccess</code> is present in the root directory.
+        </div>
+        <?php endif; ?>
+
         <?php endif; ?>
 
     </div><!-- /content -->

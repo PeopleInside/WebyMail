@@ -15,7 +15,6 @@ A PHP Web Mail Client
 9. Possibility to use without MySQL database. SQL Lite is used and some config are stored in PHP config file.
 10. Headers check
 11. Folders manager
-12. Mobile ready
 
 ---
 
