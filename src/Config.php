@@ -6,6 +6,8 @@ declare(strict_types=1);
  */
 class Config
 {
+    public const VERSION = '0.6';
+    public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
     private static string $configFile = __DIR__ . '/../config/config.php';
@@ -41,6 +43,113 @@ class Config
         return file_exists(self::$configFile);
     }
 
+    public static function checkSystem(): array
+    {
+        $results = [
+            'requirements' => [],
+            'security' => [],
+            'all_ok' => true
+        ];
+
+        // Requirements
+        $needed = ['imap', 'pdo_sqlite', 'openssl', 'mbstring', 'iconv'];
+        foreach ($needed as $ext) {
+            $ok = extension_loaded($ext);
+            $results['requirements'][$ext] = $ok;
+            if (!$ok) $results['all_ok'] = false;
+        }
+
+        // Security - Dirs
+        $root = dirname(__DIR__);
+        $dirs = ['config' => $root . '/config', 'data' => $root . '/data'];
+        foreach ($dirs as $name => $path) {
+            if (is_dir($path)) {
+                $perms = fileperms($path) & 0777;
+                $ok = ($perms <= 0755);
+                $results['security']['dir_' . $name] = ['path' => $name . '/', 'perms' => sprintf('%o', $perms), 'ok' => $ok];
+                if (!$ok) $results['all_ok'] = false;
+            }
+        }
+
+        // Security - Files
+        $files = ['config/config.php' => $root . '/config/config.php', 'data/webymail.db' => $root . '/data/webymail.db'];
+        foreach ($files as $name => $path) {
+            if (file_exists($path)) {
+                $perms = fileperms($path) & 0777;
+                $ok = ($perms <= 0644);
+                $results['security']['file_' . $name] = ['path' => $name, 'perms' => sprintf('%o', $perms), 'ok' => $ok];
+                if (!$ok) $results['all_ok'] = false;
+            }
+        }
+
+        // .htaccess
+        $htaccessPath = $root . '/.htaccess';
+        $htaccessOk = false;
+        if (file_exists($htaccessPath)) {
+            $content = file_get_contents($htaccessPath);
+            // Check for common protection patterns
+            if (str_contains($content, 'RedirectMatch 404') || str_contains($content, 'Deny from all') || str_contains($content, 'Require all denied')) {
+                $htaccessOk = true;
+            }
+        }
+        $results['security']['htaccess'] = ['path' => '.htaccess', 'ok' => $htaccessOk];
+        if (!$htaccessOk) $results['all_ok'] = false;
+
+        return $results;
+    }
+
+    public static function shouldShowSecurityBanner(): bool
+    {
+        if (self::get('ignore_security_banner', false)) {
+            return false;
+        }
+        $check = self::checkSystem();
+        return !$check['all_ok'];
+    }
+
+    public static function getNewerVersion(): ?string
+    {
+        // Simple GitHub API check (cached for 24h in session to avoid rate limits)
+        if (isset($_SESSION['github_version_check']) && $_SESSION['github_version_check']['expires'] > time()) {
+            return $_SESSION['github_version_check']['version'];
+        }
+
+        $newerVersion = null;
+        try {
+            $opts = [
+                'http' => [
+                    'method' => 'GET',
+                    'header' => [
+                        'User-Agent: WebyMail-Update-Checker'
+                    ],
+                    'timeout' => 5
+                ]
+            ];
+            $context = stream_context_create($opts);
+            $apiResponse = @file_get_contents('https://api.github.com/repos/PeopleInside/WebyMail/releases/latest', false, $context);
+            
+            if ($apiResponse) {
+                $data = json_decode($apiResponse, true);
+                $latestTag = $data['tag_name'] ?? '';
+                // Strip 'v' prefix if present
+                $latestVersion = ltrim($latestTag, 'v');
+                
+                if (version_compare($latestVersion, self::VERSION, '>')) {
+                    $newerVersion = $latestVersion;
+                }
+            }
+        } catch (Exception $e) {
+            // Ignore errors
+        }
+
+        $_SESSION['github_version_check'] = [
+            'version' => $newerVersion,
+            'expires' => time() + 86400 // 24 hours
+        ];
+
+        return $newerVersion;
+    }
+
     private static function load(): void
     {
         if (self::$data !== null) {
@@ -57,7 +166,8 @@ class Config
     {
         return [
             'app_name'        => 'WebyMail',
-            'version'         => '0.4',
+            'version'         => self::VERSION,
+            'update_url'      => self::UPDATE_URL,
             'app_secret'      => bin2hex(random_bytes(32)),
             'captcha_enabled'  => true,
             '2fa_enabled'      => true,
