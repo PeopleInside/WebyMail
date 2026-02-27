@@ -57,9 +57,10 @@ class Config
     {
         return [
             'app_name'        => 'WebyMail',
-            'version'         => '0.2',
+            'version'         => '0.4',
             'app_secret'      => bin2hex(random_bytes(32)),
             'captcha_enabled'  => true,
+            '2fa_enabled'      => true,
             'session_lifetime' => 15552000, // 6 months in seconds
             'imap_host'       => '',
             'imap_port'       => 993,

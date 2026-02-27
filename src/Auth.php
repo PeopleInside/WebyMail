@@ -97,7 +97,7 @@ class Auth
 
         $user = $this->db->fetch('SELECT * FROM users WHERE id = ?', [$userId]);
 
-        if ((int) $user['totp_enabled'] === 1) {
+        if (Config::get('2fa_enabled', true) && (int) $user['totp_enabled'] === 1) {
             // Store pending auth in a short-lived token so the 2FA page can complete it
             $pending = bin2hex(random_bytes(16));
             $_SESSION['pending_2fa'] = [
