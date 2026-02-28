@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '0.6';
+    public const VERSION = '0.8';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
@@ -95,6 +95,11 @@ class Config
         $results['security']['htaccess'] = ['path' => '.htaccess', 'ok' => $htaccessOk];
         if (!$htaccessOk) $results['all_ok'] = false;
 
+        // Update last check info
+        self::set('last_system_check_at', time());
+        self::set('last_system_check_ok', $results['all_ok']);
+        self::save();
+
         return $results;
     }
 
@@ -103,12 +108,27 @@ class Config
         if (self::get('ignore_security_banner', false)) {
             return false;
         }
-        $check = self::checkSystem();
-        return !$check['all_ok'];
+        
+        $lastCheck = (int)self::get('last_system_check_at', 0);
+        $lastOk    = (bool)self::get('last_system_check_ok', true);
+        
+        // Re-check every 4 hours during normal use
+        if (time() - $lastCheck > 14400) {
+            $check = self::checkSystem();
+            self::set('last_system_check_at', time());
+            self::set('last_system_check_ok', $check['all_ok']);
+            self::save();
+            return !$check['all_ok'];
+        }
+        
+        return !$lastOk;
     }
 
     public static function getNewerVersion(): ?string
     {
+        if (self::get('ignore_update_banner', false)) {
+            return null;
+        }
         // Simple GitHub API check (cached for 24h in session to avoid rate limits)
         if (isset($_SESSION['github_version_check']) && $_SESSION['github_version_check']['expires'] > time()) {
             return $_SESSION['github_version_check']['version'];
@@ -183,6 +203,8 @@ class Config
             'setup_complete'  => false,
             'timezone'        => 'Europe/Rome',
             'hide_server_on_login' => true,
+            'last_system_check_at' => 0,
+            'last_system_check_ok' => true,
         ];
     }
 }

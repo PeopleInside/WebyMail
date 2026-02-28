@@ -82,10 +82,22 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                     <?= csrfInput() ?>
                     <input type="hidden" name="signature" id="sig-hidden">
                     <div id="sig-toolbar" class="wm-editor-group" style="margin-bottom:.5rem;align-items:center;gap:.5rem;flex-wrap:wrap">
-                        <button type="button" data-sig-cmd="bold"><b>B</b></button>
-                        <button type="button" data-sig-cmd="italic"><i>I</i></button>
-                        <button type="button" data-sig-cmd="underline"><u>U</u></button>
-                        <button type="button" data-sig-cmd="createLink">Link</button>
+                        <button type="button" data-sig-cmd="bold" title="Bold"><b>B</b></button>
+                        <button type="button" data-sig-cmd="italic" title="Italic"><i>I</i></button>
+                        <button type="button" data-sig-cmd="underline" title="Underline"><u>U</u></button>
+                        <button type="button" data-sig-cmd="strikeThrough" title="Strike"><s>S</s></button>
+                        <div style="width:1px;height:16px;background:var(--wm-border)"></div>
+                        <button type="button" data-sig-cmd="justifyLeft" title="Align left">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>
+                        </button>
+                        <button type="button" data-sig-cmd="justifyCenter" title="Align center">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="10" x2="6" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="18" y1="18" x2="6" y2="18"/></svg>
+                        </button>
+                        <button type="button" data-sig-cmd="justifyRight" title="Align right">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="10" x2="7" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="21" y1="18" x2="7" y2="18"/></svg>
+                        </button>
+                        <div style="width:1px;height:16px;background:var(--wm-border)"></div>
+                        <button type="button" data-sig-cmd="createLink" title="Link">Link</button>
                         <span style="display:inline-flex;align-items:center;gap:.25rem">
                             <input type="color" data-sig-cmd="foreColor" value="#2563eb" title="Text color">
                             <button type="button" data-sig-apply-color style="padding:.2rem .45rem">Apply</button>
@@ -478,23 +490,69 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
 
         <!-- ── System ── -->
         <?php elseif ($tab === 'system'): ?>
-        <h2 style="margin-top:0;font-size:1.1rem">System Health & Security</h2>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+            <h2 style="margin:0;font-size:1.1rem">System Health & Security</h2>
+            <div style="text-align:right">
+                <div style="font-size:.7rem;color:var(--wm-text-muted);margin-bottom:.25rem">
+                    Last check: <?= ($lastAt = Config::get('last_system_check_at')) ? date('Y-m-d H:i:s', (int)$lastAt) : 'Never' ?>
+                </div>
+                <a href="?action=settings&tab=system&recheck=1" class="btn btn-outline btn-xs">Run check now</a>
+            </div>
+        </div>
         
         <?php 
         $sys = Config::checkSystem(); 
         $ignoreBanner = Config::get('ignore_security_banner', false);
+        $ignoreUpdate = Config::get('ignore_update_banner', false);
         ?>
 
         <div class="wm-card" style="margin-bottom:1.5rem">
-            <div class="wm-card-header">Security Banner</div>
+            <div class="wm-card-header">Legal Disclaimer</div>
+            <div class="wm-card-body">
+                <p style="font-size:.85rem;margin-top:0;color:var(--wm-text-muted)">
+                    <strong>Responsibility:</strong> WebyMail is provided "as is." While we strive for security, you use this software at your own risk.
+                </p>
+                <div style="display:flex;align-items:center;gap:.5rem;color:var(--wm-success);font-size:.82rem;font-weight:600">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                    Accepted during installation
+                </div>
+            </div>
+        </div>
+
+        <div class="wm-card" style="margin-bottom:1.5rem">
+            <div class="wm-card-header">System Information</div>
+            <div class="wm-card-body" style="padding:0">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
+                    <span style="font-size:.85rem">PHP Version</span>
+                    <span style="font-size:.85rem;color:var(--wm-text-muted)"><?= PHP_VERSION ?></span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
+                    <span style="font-size:.85rem">Server IP</span>
+                    <span style="font-size:.85rem;color:var(--wm-text-muted)"><?= $_SERVER['SERVER_ADDR'] ?? 'Unknown' ?></span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
+                    <span style="font-size:.85rem">Server Software</span>
+                    <span style="font-size:.85rem;color:var(--wm-text-muted)"><?= htmlspecialchars($_SERVER['SERVER_SOFTWARE'] ?? 'Unknown') ?></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="wm-card" style="margin-bottom:1.5rem">
+            <div class="wm-card-header">System Banners</div>
             <div class="wm-card-body">
                 <form method="post" action="?action=settings_save&tab=system_banner">
                     <?= csrfInput() ?>
-                    <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
-                        <input type="checkbox" name="ignore_security_banner" value="1" <?= $ignoreBanner ? 'checked' : '' ?>>
-                        Ignore security warnings and hide the dashboard banner
-                    </label>
-                    <button class="btn btn-primary btn-sm" style="margin-top:1rem">Save Preference</button>
+                    <div style="display:flex;flex-direction:column;gap:.75rem">
+                        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+                            <input type="checkbox" name="ignore_security_banner" value="1" <?= $ignoreBanner ? 'checked' : '' ?>>
+                            Ignore security warnings and hide the dashboard banner
+                        </label>
+                        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+                            <input type="checkbox" name="ignore_update_banner" value="1" <?= $ignoreUpdate ? 'checked' : '' ?>>
+                            Ignore update notifications and hide the update banner
+                        </label>
+                    </div>
+                    <button class="btn btn-primary btn-sm" style="margin-top:1rem">Save Preferences</button>
                 </form>
             </div>
         </div>

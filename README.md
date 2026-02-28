@@ -1,6 +1,8 @@
 # WebyMail
 A PHP Web Mail Client
 
+> **Disclaimer:** WebyMail is provided "as is." While we strive for security, you use this software at your own risk.
+
 ---
 
 ### Features:

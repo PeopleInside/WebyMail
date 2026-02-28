@@ -27,12 +27,21 @@ $folderDisplay = htmlspecialchars($folder ?? 'INBOX');
         </button>
     </div>
 
-    <div class="wm-topbar-spacer"></div>
-
-    <span style="font-size:.78rem;color:var(--wm-text-muted)"><?= $total ?> message<?= $total !== 1 ? 's' : '' ?></span>
+    <span style="font-size:.78rem;color:var(--wm-text-muted);margin-left:auto"><?= $total ?> message<?= $total !== 1 ? 's' : '' ?></span>
 
     <button class="btn btn-ghost btn-icon" title="Refresh" onclick="window.location.reload()">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+    </button>
+
+    <div style="width:1px;height:20px;background:var(--wm-border);margin:0 .25rem"></div>
+
+    <form id="import-eml-form" method="post" action="?action=import_eml" enctype="multipart/form-data" style="display:none">
+        <?= csrfInput() ?>
+        <input type="hidden" name="folder" value="<?= htmlspecialchars($folder) ?>">
+        <input type="file" name="eml_file" id="eml-file-input" accept=".eml" onchange="document.getElementById('import-eml-form').submit()">
+    </form>
+    <button class="btn btn-ghost btn-icon" title="Import .eml" onclick="document.getElementById('eml-file-input').click()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     </button>
 </div>
 

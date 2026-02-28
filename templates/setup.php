@@ -16,7 +16,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
 
         <div class="wm-auth-logo">
             <h1>Weby<span>Mail</span></h1>
-            <p>Initial Setup Wizard &mdash; v<?= Config::get('version', '0.2') ?></p>
+            <p>Initial Setup Wizard &mdash; v<?= Config::VERSION ?></p>
         </div>
 
         <!-- Steps indicator -->

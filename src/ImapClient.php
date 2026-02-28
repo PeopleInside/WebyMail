@@ -275,13 +275,31 @@ class ImapClient
     // Attachments
     // -------------------------------------------------------------------------
 
-    private function getAttachments(int $msgNo, object $struct): array
+    public function selectFolder(string $folder): void
+    {
+        $this->reopenFolder($folder);
+    }
+
+    public function fetchStructure(int $msgNo): object
+    {
+        $this->assertConnected();
+        $struct = imap_fetchstructure($this->conn, $msgNo);
+        if (!$struct) {
+            throw new RuntimeException('Could not fetch structure for message ' . $msgNo);
+        }
+        return $struct;
+    }
+
+    public function getAttachments(int $msgNo, object $struct, string $prefix = ''): array
     {
         $attachments = [];
         if (!isset($struct->parts)) {
             return $attachments;
         }
+
         foreach ($struct->parts as $i => $part) {
+            $section = $prefix === '' ? (string)($i + 1) : $prefix . '.' . ($i + 1);
+            
             if ($this->isAttachment($part)) {
                 $filename = '';
                 foreach (($part->dparameters ?? []) as $dp) {
@@ -294,13 +312,22 @@ class ImapClient
                         $filename = $filename ?: $this->decodeHeader($p->value);
                     }
                 }
+
+                // Fallback for message/rfc822 which might not have a filename but is an .eml
+                if (!$filename && strtolower($part->subtype ?? '') === 'rfc822') {
+                    $filename = 'message.eml';
+                }
+
                 $attachments[] = [
-                    'section'  => (string)($i + 1),
-                    'filename' => $filename ?: 'attachment',
+                    'section'  => $section,
+                    'filename' => $filename ?: 'attachment-' . $section,
                     'size'     => $part->bytes ?? 0,
                     'type'     => $part->type ?? 0,
                     'subtype'  => $part->subtype ?? 'octet-stream',
                 ];
+            } elseif (isset($part->parts)) {
+                // Recursively look for attachments in nested parts (common in SpamAssassin emails)
+                $attachments = array_merge($attachments, $this->getAttachments($msgNo, $part, $section));
             }
         }
         return $attachments;
@@ -390,16 +417,28 @@ class ImapClient
 
     private function isAttachment(object $part): bool
     {
+        // Explicit attachment disposition
         if (isset($part->disposition) && strtolower($part->disposition) === 'attachment') {
             return true;
         }
-        if (isset($part->dparameters)) {
-            foreach ($part->dparameters as $dp) {
-                if (strtolower($dp->attribute) === 'filename') {
-                    return true;
-                }
+
+        // Check for filename in parameters or dparameters
+        $params = array_merge($part->parameters ?? [], $part->dparameters ?? []);
+        foreach ($params as $p) {
+            if (isset($p->attribute) && strtolower($p->attribute) === 'filename') {
+                return true;
+            }
+            if (isset($p->attribute) && strtolower($p->attribute) === 'name') {
+                return true;
             }
         }
+
+        // SpamAssassin often wraps original email as message/rfc822
+        // If it's not the main body part, treat it as an attachment
+        if (isset($part->subtype) && strtolower($part->subtype) === 'rfc822') {
+            return true;
+        }
+
         return false;
     }
 
@@ -448,6 +487,18 @@ class ImapClient
             $addr = ($a->mailbox ?? '') . '@' . ($a->host ?? '');
             return $name ? "{$name} <{$addr}>" : $addr;
         }, $addresses));
+    }
+
+    public function appendMessage(string $folder, string $rawMessage): bool
+    {
+        $this->assertConnected();
+        $folderRaw = $this->host . mb_convert_encoding($folder, 'UTF7-IMAP', 'UTF-8');
+        return imap_append($this->conn, $folderRaw, $rawMessage);
+    }
+
+    public function getFriendlyName(string $name): string
+    {
+        return $this->friendlyName($name);
     }
 
     private function friendlyName(string $name): string
