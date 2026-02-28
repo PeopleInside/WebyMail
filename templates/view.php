@@ -14,6 +14,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
 
 <!-- Toolbar -->
 <div class="wm-toolbar">
+    <div class="wm-toolbar-content">
     <a href="?action=inbox&folder=<?= $folderEnc ?>" class="btn btn-ghost btn-sm">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
         Back
@@ -39,14 +40,13 @@ $isInbox   = strtoupper($folder) === 'INBOX';
         Export
     </a>
 
-    <div class="wm-topbar-spacer"></div>
+    <div style="margin-left:auto;display:flex;gap:.25rem">
+        <button class="btn btn-ghost btn-sm" id="show-headers-btn" title="View original headers">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            Headers
+        </button>
 
-    <button class="btn btn-ghost btn-sm" id="show-headers-btn" title="View original headers">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-        Headers
-    </button>
-
-    <?php if ($isInbox): ?>
+        <?php if ($isInbox): ?>
     <form method="post" action="?action=spam&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" style="display:inline">
         <?= csrfInput() ?>
         <button class="btn btn-ghost btn-sm text-danger" title="Mark as spam">
@@ -64,6 +64,8 @@ $isInbox   = strtoupper($folder) === 'INBOX';
             Delete
         </button>
     </form>
+</div>
+</div>
 </div>
 
 <!-- External image protection banner -->
@@ -92,54 +94,61 @@ $isInbox   = strtoupper($folder) === 'INBOX';
 </div>
 
 <!-- Message body -->
-<div class="wm-view-body">
-    <?php if ($hasHtml): ?>
-    <!-- HTML email rendered in sandboxed iframe -->
-    <?php if ($hasExternal ?? false): ?>
-    <iframe id="email-frame" class="wm-email-frame"
-            data-src="?action=email_body&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&images=1"
-            src="?action=email_body&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&images=0"
-            sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-            referrerpolicy="no-referrer"
-            loading="lazy"
-            onload="this.style.height=(this.contentWindow.document.body.scrollHeight+20)+'px'">
-    </iframe>
-    <?php else: ?>
-    <iframe id="email-frame" class="wm-email-frame"
-            src="?action=email_body&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&images=1"
-            sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-            referrerpolicy="no-referrer"
-            loading="lazy"
-            onload="this.style.height=(this.contentWindow.document.body.scrollHeight+20)+'px'">
-    </iframe>
-    <?php endif; ?>
-    <?php else: ?>
-    <!-- Plain-text fallback -->
-    <pre style="font-family:inherit;white-space:pre-wrap;word-break:break-word;font-size:.9rem;line-height:1.7;margin:0"><?= htmlspecialchars($message['body_text'] ?? '') ?></pre>
-    <?php endif; ?>
-
-    <!-- Attachments -->
-    <?php if (!empty($message['attachments'])): ?>
-    <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--wm-border)">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem">
-            <div style="font-size:.82rem;font-weight:600;color:var(--wm-text-muted)">
-                <?= count($message['attachments']) ?> Attachment<?= count($message['attachments']) > 1 ? 's' : '' ?>
+<div class="wm-view-content-layout">
+    <div class="wm-view-main">
+        <?php if ($hasHtml): ?>
+        <div class="wm-email-container">
+            <div id="email-body-shadow" class="wm-email-body-shadow">
+                <div class="wm-email-loading">
+                    <div class="spinner"></div>
+                    <span>Loading message content...</span>
+                </div>
             </div>
+        </div>
+        <?php else: ?>
+        <div class="wm-email-container plain-text">
+            <pre><?= htmlspecialchars($message['body_text'] ?? '') ?></pre>
+        </div>
+        <?php endif; ?>
+    </div>
+
+    <!-- Attachments Sidebar/Section -->
+    <?php if (!empty($message['attachments'])): ?>
+    <div class="wm-view-attachments">
+        <div class="wm-attachments-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+            <span>Attachments (<?= count($message['attachments']) ?>)</span>
             <?php if (count($message['attachments']) > 1): ?>
-            <a href="?action=download_all&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" class="btn btn-outline btn-xs" style="font-size:.7rem">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Download all (ZIP)
+            <a href="?action=download_all&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" class="btn btn-ghost btn-xs" title="Download all as ZIP">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </a>
             <?php endif; ?>
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:.5rem">
+        <div class="wm-attachments-list">
             <?php foreach ($message['attachments'] as $att): ?>
-            <a href="?action=attachment&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&section=<?= urlencode($att['section']) ?>&name=<?= urlencode($att['filename']) ?>"
-               class="btn btn-outline btn-sm" download>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                <?= htmlspecialchars($att['filename']) ?>
-                <span class="text-muted">(<?= number_format($att['size'] / 1024, 1) ?> KB)</span>
-            </a>
+            <div class="wm-attachment-item">
+                <div class="wm-attachment-icon">
+                    <?php 
+                    $ext = strtolower(pathinfo($att['filename'], PATHINFO_EXTENSION));
+                    if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif'])): ?>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    <?php elseif ($ext === 'pdf'): ?>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    <?php elseif ($ext === 'eml'): ?>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                    <?php else: ?>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+                    <?php endif; ?>
+                </div>
+                <div class="wm-attachment-info">
+                    <div class="wm-attachment-name" title="<?= htmlspecialchars($att['filename']) ?>"><?= htmlspecialchars($att['filename']) ?></div>
+                    <div class="wm-attachment-size"><?= number_format($att['size'] / 1024, 1) ?> KB</div>
+                </div>
+                <a href="?action=attachment&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&section=<?= urlencode($att['section']) ?>&name=<?= urlencode($att['filename']) ?>" 
+                   class="wm-attachment-download" download title="Download">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </a>
+            </div>
             <?php endforeach; ?>
         </div>
     </div>
@@ -163,33 +172,139 @@ $isInbox   = strtoupper($folder) === 'INBOX';
 
 <script>
 (function() {
+    // Headers modal logic
     var btn   = document.getElementById('show-headers-btn');
     var modal = document.getElementById('headers-modal');
     var close = document.getElementById('headers-modal-close');
     var pre   = document.getElementById('headers-content');
     var loaded = false;
 
-    if (!btn || !modal) return;
+    if (btn && modal) {
+        btn.addEventListener('click', function() {
+            modal.style.display = 'flex';
+            if (loaded) return;
+            fetch('?action=email_headers&folder=' + <?= json_encode($folderEnc) ?> + '&msg=<?= $msgNo ?>', {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                loaded = true;
+                pre.setAttribute('aria-busy', 'false');
+                pre.textContent = data.ok ? data.headers : ('Error: ' + (data.error || 'Unknown error'));
+            })
+            .catch(function(err) { pre.setAttribute('aria-busy', 'false'); pre.textContent = 'Failed to load headers.'; });
+        });
 
-    btn.addEventListener('click', function() {
-        modal.style.display = 'flex';
-        if (loaded) return;
-        fetch('?action=email_headers&folder=' + <?= json_encode($folderEnc) ?> + '&msg=<?= $msgNo ?>', {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            loaded = true;
-            pre.setAttribute('aria-busy', 'false');
-            pre.textContent = data.ok ? data.headers : ('Error: ' + (data.error || 'Unknown error'));
-        })
-        .catch(function(err) { pre.setAttribute('aria-busy', 'false'); pre.textContent = 'Failed to load headers.'; });
-    });
+        close.addEventListener('click', function() { modal.style.display = 'none'; });
+        modal.addEventListener('click', function(e) { if (e.target === modal) modal.style.display = 'none'; });
+    }
 
-    close.addEventListener('click', function() { modal.style.display = 'none'; });
+    // Shadow DOM Email Body logic
+    var shadowHost = document.getElementById('email-body-shadow');
+    if (shadowHost && <?php echo $hasHtml ? 'true' : 'false'; ?>) {
+        var shadowRoot = shadowHost.attachShadow({mode: 'open'});
+        
+        function loadEmailBody(showImages) {
+            var url = '?action=email_body&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&images=' + (showImages ? '1' : '0');
+            
+            fetch(url)
+            .then(function(r) { return r.text(); })
+            .then(function(html) {
+                // Create a temporary document to parse the HTML
+                var parser = new DOMParser();
+                var doc = parser.parseFromString(html, 'text/html');
+                
+                // Clear shadow root
+                shadowRoot.innerHTML = '';
+                
+                // Inject styles for shadow root
+                var style = document.createElement('style');
+                style.textContent = `
+                    :host { display: block; background: #fff; color: #000; min-height: 200px; overflow-x: auto; }
+                    .email-content-wrapper { padding: 20px; word-break: break-word; }
+                    img { max-width: 100%; height: auto; }
+                    * { max-width: 100%; box-sizing: border-box; }
+                    
+                    /* Dark mode support for shadow DOM */
+                    :host-context([data-theme="dark"]) {
+                        background: #161b22;
+                        color: #e6edf3;
+                    }
+                    :host-context([data-theme="dark"]) a { color: #58a6ff; }
+                    
+                    /* System dark mode support */
+                    @media (prefers-color-scheme: dark) {
+                        :host-context(html:not([data-theme="light"])) {
+                            background: #161b22;
+                            color: #e6edf3;
+                        }
+                        :host-context(html:not([data-theme="light"])) a { color: #58a6ff; }
+                    }
+                    
+                    /* Reset some common email styles that might break layout */
+                    body { margin: 0; padding: 0; }
+                `;
+                shadowRoot.appendChild(style);
+                
+                // Create content wrapper
+                var wrapper = document.createElement('div');
+                wrapper.className = 'email-content-wrapper';
+                
+                // If it's a full document, we take the body content
+                if (doc.body) {
+                    // Copy body attributes (like background color) if they exist
+                    if (doc.body.getAttribute('bgcolor')) wrapper.style.backgroundColor = doc.body.getAttribute('bgcolor');
+                    if (doc.body.getAttribute('text')) wrapper.style.color = doc.body.getAttribute('text');
+                    
+                    // Move all children from doc.body to our wrapper
+                    while (doc.body.firstChild) {
+                        wrapper.appendChild(doc.body.firstChild);
+                    }
+                } else {
+                    wrapper.innerHTML = html;
+                }
+                
+                shadowRoot.appendChild(wrapper);
+                
+                // Handle theme changes
+                function syncTheme() {
+                    var theme = document.documentElement.getAttribute('data-theme') || 'light';
+                    if (theme === 'system') {
+                        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                    }
+                    // We use :host-context in CSS, but we can also manually adjust if needed
+                }
+                
+                // Initial sync
+                syncTheme();
+                
+                // Listen for theme changes from parent
+                window.addEventListener('storage', function(e) {
+                    if (e.key === 'wm_theme') syncTheme();
+                });
+                
+                // Also listen for the custom event if your ThemeManager uses one
+                // (ThemeManager in app.js doesn't dispatch an event, but we can observe the html attribute)
+                var observer = new MutationObserver(syncTheme);
+                observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+            })
+            .catch(function(err) {
+                shadowRoot.innerHTML = '<div style="padding:20px;color:red">Failed to load email content.</div>';
+            });
+        }
 
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) modal.style.display = 'none';
-    });
+        // Initial load
+        loadEmailBody(false);
+
+        // Image protection button
+        var showImagesBtn = document.getElementById('show-images-btn');
+        var banner = document.getElementById('img-protection-banner');
+        if (showImagesBtn) {
+            showImagesBtn.addEventListener('click', function() {
+                loadEmailBody(true);
+                if (banner) banner.style.display = 'none';
+            });
+        }
+    }
 })();
 </script>

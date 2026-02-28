@@ -136,10 +136,18 @@ $signature = $signature ?? '';
                     <button type="button" class="ql-indent" data-cmd="indent" title="Indent">▶</button>
                 </div>
                 <div class="wm-editor-group">
-                    <button type="button" data-cmd="justifyLeft" title="Align left">⬅</button>
-                    <button type="button" data-cmd="justifyCenter" title="Align center">↔</button>
-                    <button type="button" data-cmd="justifyRight" title="Align right">➡</button>
-                    <button type="button" data-cmd="justifyFull" title="Justify">☰</button>
+                    <button type="button" data-cmd="justifyLeft" title="Align left">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>
+                    </button>
+                    <button type="button" data-cmd="justifyCenter" title="Align center">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="10" x2="6" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="18" y1="18" x2="6" y2="18"/></svg>
+                    </button>
+                    <button type="button" data-cmd="justifyRight" title="Align right">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="10" x2="7" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="21" y1="18" x2="7" y2="18"/></svg>
+                    </button>
+                    <button type="button" data-cmd="justifyFull" title="Justify">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="21" y1="18" x2="3" y2="18"/></svg>
+                    </button>
                 </div>
                     <div class="wm-editor-group">
                         <button type="button" class="ql-link" data-cmd="createLink" title="Insert link">🔗</button>

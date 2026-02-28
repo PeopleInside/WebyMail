@@ -76,8 +76,10 @@
         </button>
         <a href="?action=inbox" class="brand">Weby<span>Mail</span></a>
 
+        <div class="wm-topbar-spacer"></div>
+
         <!-- Search -->
-        <div class="input-group" style="max-width:320px;flex:1">
+        <div class="input-group" style="max-width:400px;flex:1">
             <form method="get" action="" style="display:contents">
                 <input type="hidden" name="action" value="search">
                 <input type="text" name="q" class="form-control" placeholder="Search mail…"
@@ -187,8 +189,8 @@
                 <button type="button" id="cancel-new-folder" class="btn btn-ghost btn-sm" style="font-size:.78rem">Cancel</button>
             </div>
         </form>
-        <div style="margin-top:auto;padding:1rem .75rem;font-size:.7rem;color:var(--wm-text-muted);border-top:1px solid var(--wm-border)">
-            WebyMail v<?= Config::get('version', '0.2') ?>
+        <div style="padding:1.5rem .75rem 1rem;font-size:.7rem;color:var(--wm-text-muted);border-top:1px solid rgba(255,255,255,.1)">
+            WebyMail v<?= Config::VERSION ?>
             <?php if ($newVer = Config::getNewerVersion()): ?>
             <div style="margin-top:.5rem">
                 <a href="<?= Config::UPDATE_URL ?>" target="_blank" class="alert alert-info" style="display:block;padding:.4rem .6rem;font-size:.68rem;text-decoration:none;border-radius:4px;color:var(--wm-primary);border-color:var(--wm-primary);background:rgba(var(--wm-primary-rgb),.1)">
@@ -199,30 +201,6 @@
             <?php endif; ?>
         </div>
     </nav>
-
-    <!-- Folder context menu (shared, positioned dynamically) -->
-    <div id="folder-ctx-menu" style="display:none;position:fixed;background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:8px;box-shadow:var(--wm-shadow);z-index:500;min-width:140px;overflow:hidden">
-        <button type="button" id="folder-rename-btn" style="display:flex;width:100%;padding:.55rem 1rem;font-size:.85rem;background:none;border:none;color:var(--wm-text);cursor:pointer;gap:.5rem;align-items:center">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            Rename
-        </button>
-        <div style="height:1px;background:var(--wm-border)"></div>
-        <button type="button" id="folder-delete-btn" style="display:flex;width:100%;padding:.55rem 1rem;font-size:.85rem;background:none;border:none;color:var(--wm-danger);cursor:pointer;gap:.5rem;align-items:center">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-            Delete
-        </button>
-    </div>
-
-    <!-- Hidden forms for folder rename/delete -->
-    <form id="rename-folder-form" method="post" action="?action=rename_folder" style="display:none">
-        <?php if (function_exists('csrfInput')) echo csrfInput(); ?>
-        <input type="hidden" name="old_name" id="rename-old-name">
-        <input type="hidden" name="new_name" id="rename-new-name">
-    </form>
-    <form id="delete-folder-form" method="post" action="?action=delete_folder" style="display:none">
-        <?php if (function_exists('csrfInput')) echo csrfInput(); ?>
-        <input type="hidden" name="name" id="delete-folder-name">
-    </form>
 
     <!-- Main -->
     <main class="wm-main">
@@ -243,8 +221,30 @@
         <?php endif; ?>
         <?= $content ?? '' ?>
     </main>
-
 </div>
+
+<!-- Hidden elements (outside grid shell) -->
+<div id="folder-ctx-menu" style="display:none;position:fixed;background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:8px;box-shadow:var(--wm-shadow);z-index:500;min-width:140px;overflow:hidden">
+    <button type="button" id="folder-rename-btn" style="display:flex;width:100%;padding:.55rem 1rem;font-size:.85rem;background:none;border:none;color:var(--wm-text);cursor:pointer;gap:.5rem;align-items:center">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Rename
+    </button>
+    <div style="height:1px;background:var(--wm-border)"></div>
+    <button type="button" id="folder-delete-btn" style="display:flex;width:100%;padding:.55rem 1rem;font-size:.85rem;background:none;border:none;color:var(--wm-danger);cursor:pointer;gap:.5rem;align-items:center">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+        Delete
+    </button>
+</div>
+
+<form id="rename-folder-form" method="post" action="?action=rename_folder" style="display:none">
+    <?php if (function_exists('csrfInput')) echo csrfInput(); ?>
+    <input type="hidden" name="old_name" id="rename-old-name">
+    <input type="hidden" name="new_name" id="rename-new-name">
+</form>
+<form id="delete-folder-form" method="post" action="?action=delete_folder" style="display:none">
+    <?php if (function_exists('csrfInput')) echo csrfInput(); ?>
+    <input type="hidden" name="name" id="delete-folder-name">
+</form>
 
 <script>
 // User menu toggle
