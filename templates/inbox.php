@@ -64,6 +64,11 @@ $folderDisplay = htmlspecialchars($folder ?? 'INBOX');
         <div class="wm-mail-from"><?= htmlspecialchars($msg['from']) ?></div>
         <div class="wm-mail-date"><?= htmlspecialchars($msg['date']) ?></div>
         <div class="wm-mail-subject">
+            <?php if (($msg['priority'] ?? 'normal') === 'high'): ?>
+            <span title="High Priority" style="color:var(--wm-danger);margin-right:4px;font-weight:bold;font-size:1.1rem;line-height:1">!</span>
+            <?php elseif (($msg['priority'] ?? 'normal') === 'low'): ?>
+            <span title="Low Priority" style="color:var(--wm-primary);margin-right:4px;font-weight:bold;font-size:1.1rem;line-height:1">↓</span>
+            <?php endif; ?>
             <?php if (!empty($msg['has_attachments'])): ?>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px;vertical-align:middle;opacity:.6" title="Has attachments">
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
