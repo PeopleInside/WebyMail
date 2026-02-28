@@ -49,6 +49,9 @@ $signature = $signature ?? '';
                 <input type="text" id="to" name="to" autocomplete="off"
                        value="<?= htmlspecialchars($prefill['to'] ?? '') ?>"
                        placeholder="recipient@example.com">
+                <button type="button" class="btn btn-ghost btn-icon open-contacts" data-target="to" title="Pick from contacts">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                </button>
                 <button type="button" id="show-cc"  class="btn btn-ghost btn-sm" style="font-size:.75rem">Cc</button>
                 <button type="button" id="show-bcc" class="btn btn-ghost btn-sm" style="font-size:.75rem">Bcc</button>
             </div>
@@ -58,12 +61,18 @@ $signature = $signature ?? '';
                 <input type="text" id="cc" name="cc" autocomplete="off"
                        value="<?= htmlspecialchars($prefill['cc'] ?? '') ?>"
                        placeholder="cc@example.com">
+                <button type="button" class="btn btn-ghost btn-icon open-contacts" data-target="cc" title="Pick from contacts">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                </button>
             </div>
 
             <div class="wm-compose-field" id="bcc-row" style="display:none">
                 <label for="bcc">Bcc</label>
                 <input type="text" id="bcc" name="bcc" autocomplete="off"
                        placeholder="bcc@example.com">
+                <button type="button" class="btn btn-ghost btn-icon open-contacts" data-target="bcc" title="Pick from contacts">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                </button>
             </div>
 
             <!-- Reply-To (shown when composing new mail) -->
@@ -541,6 +550,14 @@ $signature = $signature ?? '';
             }
         });
     })();
+
+    // Contact picker integration
+    document.querySelectorAll('.open-contacts').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var target = btn.dataset.target;
+            window.dispatchEvent(new CustomEvent('open-contacts-picker', { detail: { target: target } }));
+        });
+    });
 
 })();
 </script>
