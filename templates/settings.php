@@ -523,6 +523,17 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             <div class="wm-card-header">System Information</div>
             <div class="wm-card-body" style="padding:0">
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
+                    <span style="font-size:.85rem">WebyMail Version</span>
+                    <span style="font-size:.85rem;font-weight:600">v<?= Config::VERSION ?></span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
+                    <span style="font-size:.85rem">Latest Releases</span>
+                    <a href="<?= Config::UPDATE_URL ?>" target="_blank" style="font-size:.85rem;color:var(--wm-primary);text-decoration:none;display:flex;align-items:center;gap:.25rem">
+                        GitHub Releases
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </a>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
                     <span style="font-size:.85rem">PHP Version</span>
                     <span style="font-size:.85rem;color:var(--wm-text-muted)"><?= PHP_VERSION ?></span>
                 </div>
@@ -534,26 +545,6 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                     <span style="font-size:.85rem">Server Software</span>
                     <span style="font-size:.85rem;color:var(--wm-text-muted)"><?= htmlspecialchars($_SERVER['SERVER_SOFTWARE'] ?? 'Unknown') ?></span>
                 </div>
-            </div>
-        </div>
-
-        <div class="wm-card" style="margin-bottom:1.5rem">
-            <div class="wm-card-header">System Banners</div>
-            <div class="wm-card-body">
-                <form method="post" action="?action=settings_save&tab=system_banner">
-                    <?= csrfInput() ?>
-                    <div style="display:flex;flex-direction:column;gap:.75rem">
-                        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
-                            <input type="checkbox" name="ignore_security_banner" value="1" <?= $ignoreBanner ? 'checked' : '' ?>>
-                            Ignore security warnings and hide the dashboard banner
-                        </label>
-                        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
-                            <input type="checkbox" name="ignore_update_banner" value="1" <?= $ignoreUpdate ? 'checked' : '' ?>>
-                            Ignore update notifications and hide the update banner
-                        </label>
-                    </div>
-                    <button class="btn btn-primary btn-sm" style="margin-top:1rem">Save Preferences</button>
-                </form>
             </div>
         </div>
 
@@ -572,7 +563,13 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
         </div>
 
         <div class="wm-card">
-            <div class="wm-card-header">File Permissions & Security</div>
+            <div class="wm-card-header" style="justify-content:space-between">
+                <span>File Permissions & Security</span>
+                <form method="post" action="?action=fix_permissions">
+                    <?= csrfInput() ?>
+                    <button type="submit" class="btn btn-outline btn-xs">Fix Permissions</button>
+                </form>
+            </div>
             <div class="wm-card-body" style="padding:0">
                 <?php foreach ($sys['security'] as $key => $check): ?>
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">

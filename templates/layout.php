@@ -369,8 +369,9 @@ document.addEventListener('click', function() {
                 </button>
             </div>
 
-            <!-- Add Contact Form (Hidden by default) -->
+            <!-- Add/Edit Contact Form (Hidden by default) -->
             <form id="add-contact-form" style="display:none;background:var(--wm-surface-2);padding:1rem;border-radius:8px;margin-bottom:1.5rem;border:1px solid var(--wm-border)">
+                <input type="hidden" name="id" id="contact-id">
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
                     <div>
                         <label style="font-size:.75rem">Name</label>
@@ -381,13 +382,23 @@ document.addEventListener('click', function() {
                         <input type="email" name="email" class="form-control" required>
                     </div>
                 </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
+                    <div>
+                        <label style="font-size:.75rem">Phone</label>
+                        <input type="text" name="phone" class="form-control">
+                    </div>
+                    <div>
+                        <label style="font-size:.75rem">Address</label>
+                        <input type="text" name="address" class="form-control">
+                    </div>
+                </div>
                 <div style="margin-bottom:.75rem">
                     <label style="font-size:.75rem">Notes (optional)</label>
                     <textarea name="notes" class="form-control" rows="2"></textarea>
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:.5rem">
                     <button type="button" id="cancel-add-contact" class="btn btn-ghost btn-sm">Cancel</button>
-                    <button type="submit" class="btn btn-primary btn-sm">Save Contact</button>
+                    <button type="submit" class="btn btn-primary btn-sm" id="save-contact-btn">Save Contact</button>
                 </div>
             </form>
 
@@ -458,9 +469,14 @@ document.addEventListener('click', function() {
                 <div class="contact-info">
                     <span class="contact-name">${escapeHtml(c.name)}</span>
                     <span class="contact-email">${escapeHtml(c.email)}</span>
+                    ${c.phone ? `<span style="font-size:.75rem;display:block;color:var(--wm-text-muted)">📞 ${escapeHtml(c.phone)}</span>` : ''}
+                    ${c.address ? `<span style="font-size:.75rem;display:block;color:var(--wm-text-muted)">📍 ${escapeHtml(c.address)}</span>` : ''}
                 </div>
                 <div style="display:flex;gap:.25rem">
                     ${currentTargetInput ? `<button type="button" class="btn btn-primary btn-sm use-contact" data-email="${escapeHtml(c.email)}">Use</button>` : ''}
+                    <button type="button" class="btn btn-ghost btn-sm edit-contact" data-id="${c.id}" title="Edit">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
                     <button type="button" class="btn btn-ghost btn-sm delete-contact" data-id="${c.id}" title="Delete">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
                     </button>
@@ -471,6 +487,7 @@ document.addEventListener('click', function() {
     }
 
     function escapeHtml(text) {
+        if (!text) return '';
         var div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
@@ -499,6 +516,9 @@ document.addEventListener('click', function() {
     });
 
     addToggle.addEventListener('click', function() {
+        addForm.reset();
+        document.getElementById('contact-id').value = '';
+        document.getElementById('save-contact-btn').textContent = 'Save Contact';
         addForm.style.display = addForm.style.display === 'none' ? 'block' : 'none';
         if (addForm.style.display === 'block') addForm.querySelector('input[name="name"]').focus();
     });
@@ -511,7 +531,10 @@ document.addEventListener('click', function() {
         e.preventDefault();
         var fd = new FormData(addForm);
         fd.append('csrf_token', document.querySelector('meta[name="csrf-token"]').content);
-        fetch('?action=contacts_add', {
+        var id = document.getElementById('contact-id').value;
+        var action = id ? 'contacts_edit' : 'contacts_add';
+        
+        fetch('?action=' + action, {
             method: 'POST',
             body: fd,
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
@@ -523,12 +546,30 @@ document.addEventListener('click', function() {
                 addForm.style.display = 'none';
                 loadContacts();
             } else {
-                alert(data.error || 'Failed to add contact');
+                alert(data.error || 'Failed to save contact');
             }
         });
     });
 
     listContainer.addEventListener('click', function(e) {
+        var editBtn = e.target.closest('.edit-contact');
+        if (editBtn) {
+            var id = parseInt(editBtn.dataset.id);
+            var contact = allContacts.find(c => c.id === id);
+            if (contact) {
+                document.getElementById('contact-id').value = contact.id;
+                addForm.querySelector('input[name="name"]').value = contact.name;
+                addForm.querySelector('input[name="email"]').value = contact.email;
+                addForm.querySelector('input[name="phone"]').value = contact.phone || '';
+                addForm.querySelector('input[name="address"]').value = contact.address || '';
+                addForm.querySelector('textarea[name="notes"]').value = contact.notes || '';
+                document.getElementById('save-contact-btn').textContent = 'Update Contact';
+                addForm.style.display = 'block';
+                addForm.querySelector('input[name="name"]').focus();
+            }
+            return;
+        }
+
         var delBtn = e.target.closest('.delete-contact');
         if (delBtn) {
             if (!confirm('Delete this contact?')) return;

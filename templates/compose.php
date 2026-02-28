@@ -95,15 +95,17 @@ $signature = $signature ?? '';
                 <?php endif; ?>
             </div>
 
-            <div class="wm-compose-field" style="flex-wrap:wrap;gap:.35rem">
-                <label for="attachment-trigger-btn">Attachments</label>
-                <input type="file" id="attachments" name="attachments[]" multiple
-                       style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);border:0;padding:0;">
-                <button type="button" class="btn btn-outline btn-sm" id="attachment-trigger" aria-label="Add attachments">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3.5 3.5 0 114.95 4.95l-8.48 8.48a2 2 0 01-2.83-2.83l7.78-7.78"/></svg>
-                    Add attachment
-                </button>
-                <div id="attachment-list" style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center"></div>
+            <div class="wm-compose-field" style="border-top:1px solid var(--wm-border);padding-top:.5rem;margin-top:.5rem;flex-wrap:wrap;gap:1.5rem">
+                <label>Attachments</label>
+                <div style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center">
+                    <input type="file" id="attachments" name="attachments[]" multiple
+                           style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);border:0;padding:0;">
+                    <button type="button" class="btn btn-outline btn-sm" id="attachment-trigger" aria-label="Add attachments">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3.5 3.5 0 114.95 4.95l-8.48 8.48a2 2 0 01-2.83-2.83l7.78-7.78"/></svg>
+                        Add attachment
+                    </button>
+                    <div id="attachment-list" style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center"></div>
+                </div>
             </div>
         </div>
 

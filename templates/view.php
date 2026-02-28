@@ -77,9 +77,30 @@ $isInbox   = strtoupper($folder) === 'INBOX';
 </div>
 <?php endif; ?>
 
+<!-- Read receipt request alert -->
+<?php if (!empty($message['read_receipt_to'])): ?>
+<div class="alert alert-info" style="margin:1rem;border-radius:8px;display:flex;align-items:center;gap:.75rem">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <div style="flex:1">
+        The sender has requested a read receipt.
+    </div>
+    <form method="post" action="?action=send_read_receipt&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" style="display:inline">
+        <?= csrfInput() ?>
+        <button type="submit" class="btn btn-primary btn-sm">Send Receipt</button>
+    </form>
+</div>
+<?php endif; ?>
+
 <!-- Message header -->
 <div class="wm-view-header">
-    <div class="wm-view-subject"><?= htmlspecialchars($message['subject'] ?? '(no subject)') ?></div>
+    <div class="wm-view-subject">
+        <?php if (($message['priority'] ?? 'normal') === 'high'): ?>
+        <span title="High Priority" style="color:var(--wm-danger);margin-right:8px;font-weight:bold;font-size:1.4rem;line-height:1">!</span>
+        <?php elseif (($message['priority'] ?? 'normal') === 'low'): ?>
+        <span title="Low Priority" style="color:var(--wm-primary);margin-right:8px;font-weight:bold;font-size:1.4rem;line-height:1">↓</span>
+        <?php endif; ?>
+        <?= htmlspecialchars($message['subject'] ?? '(no subject)') ?>
+    </div>
     <div class="wm-view-meta">
         <span><strong>From:</strong> <?= htmlspecialchars($message['from'] ?? '') ?></span>
         <span><strong>To:</strong> <?= htmlspecialchars($message['to'] ?? '') ?></span>

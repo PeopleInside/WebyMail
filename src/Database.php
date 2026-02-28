@@ -117,6 +117,8 @@ class Database
                 user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 name_enc      TEXT    NOT NULL,
                 email_enc     TEXT    NOT NULL,
+                phone_enc     TEXT,
+                address_enc   TEXT,
                 notes_enc     TEXT,
                 created_at    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
             );
@@ -127,6 +129,22 @@ class Database
         $this->ensureUsersColumnExists('theme', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'");
         $this->ensureAccountsColumnExists('sender_name', "ALTER TABLE accounts ADD COLUMN sender_name TEXT NOT NULL DEFAULT ''");
         $this->ensureAccountsColumnExists('signature', "ALTER TABLE accounts ADD COLUMN signature TEXT NOT NULL DEFAULT ''");
+        $this->ensureContactsColumnExists('phone_enc', "ALTER TABLE contacts ADD COLUMN phone_enc TEXT");
+        $this->ensureContactsColumnExists('address_enc', "ALTER TABLE contacts ADD COLUMN address_enc TEXT");
+    }
+
+    /**
+     * Lightweight migration helper for the contacts table.
+     */
+    private function ensureContactsColumnExists(string $column, string $alterSql): void
+    {
+        $cols = $this->pdo->query("PRAGMA table_info(contacts)")->fetchAll();
+        foreach ($cols as $col) {
+            if (($col['name'] ?? '') === $column) {
+                return;
+            }
+        }
+        $this->pdo->exec($alterSql);
     }
 
     /**

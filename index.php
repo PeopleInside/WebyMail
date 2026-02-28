@@ -477,9 +477,11 @@ if ($action === 'contacts_list' && isAjax()) {
 }
 
 if ($action === 'contacts_add' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $name  = trim($_POST['name'] ?? '');
-    $email = trim($_POST['email'] ?? '');
-    $notes = trim($_POST['notes'] ?? '');
+    $name    = trim($_POST['name'] ?? '');
+    $email   = trim($_POST['email'] ?? '');
+    $phone   = trim($_POST['phone'] ?? '');
+    $address = trim($_POST['address'] ?? '');
+    $notes   = trim($_POST['notes'] ?? '');
     
     if ($name === '' || $email === '') {
         if (isAjax()) jsonResponse(['ok' => false, 'error' => 'Name and email are required.']);
@@ -488,10 +490,32 @@ if ($action === 'contacts_add' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     $contactMgr = new Contact($userId);
-    $contactMgr->add($name, $email, $notes);
+    $contactMgr->add($name, $email, $phone, $address, $notes);
     
     if (isAjax()) jsonResponse(['ok' => true]);
     flashSet('success', 'Contact added.');
+    redirect($_SERVER['HTTP_REFERER'] ?? '?action=inbox');
+}
+
+if ($action === 'contacts_edit' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $id      = (int) ($_POST['id'] ?? 0);
+    $name    = trim($_POST['name'] ?? '');
+    $email   = trim($_POST['email'] ?? '');
+    $phone   = trim($_POST['phone'] ?? '');
+    $address = trim($_POST['address'] ?? '');
+    $notes   = trim($_POST['notes'] ?? '');
+    
+    if ($id === 0 || $name === '' || $email === '') {
+        if (isAjax()) jsonResponse(['ok' => false, 'error' => 'ID, name and email are required.']);
+        flashSet('danger', 'ID, name and email are required.');
+        redirect($_SERVER['HTTP_REFERER'] ?? '?action=inbox');
+    }
+    
+    $contactMgr = new Contact($userId);
+    $contactMgr->edit($id, $name, $email, $phone, $address, $notes);
+    
+    if (isAjax()) jsonResponse(['ok' => true]);
+    flashSet('success', 'Contact updated.');
     redirect($_SERVER['HTTP_REFERER'] ?? '?action=inbox');
 }
 
@@ -748,6 +772,41 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         flashSet('danger', 'Delete failed: ' . $e->getMessage());
     }
     redirect('?action=inbox&folder=' . urlencode($folder));
+}
+
+// ── Send read receipt ─────────────────────────────────────────────────────────
+if ($action === 'send_read_receipt' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $msgNo  = (int) ($_GET['msg']    ?? 0);
+    $folder = $_GET['folder'] ?? 'INBOX';
+
+    try {
+        $imap    = $accountMgr->imapConnect($accountId);
+        $message = $imap->getMessage($folder, $msgNo);
+        $imap->disconnect();
+
+        if (!empty($message['read_receipt_to'])) {
+            $smtp   = new SmtpClient();
+            $params = $accountMgr->smtpParams($accountId);
+            $account = $accountMgr->get($accountId);
+            
+            $receiptMsg = [
+                'to'      => $message['read_receipt_to'],
+                'subject' => 'Read Receipt: ' . $message['subject'],
+                'body_text' => "This is a read receipt for the email with subject \"{$message['subject']}\" sent on {$message['date']}.\r\n\r\nThis receipt only confirms that the message was displayed on the recipient's computer.",
+                'body_html' => "<p>This is a read receipt for the email with subject \"<b>" . htmlspecialchars($message['subject']) . "</b>\" sent on " . htmlspecialchars($message['date']) . ".</p><p>This receipt only confirms that the message was displayed on the recipient's computer.</p>",
+                'from_name' => $account['sender_name'] ?: $account['email'],
+            ];
+            
+            if ($smtp->send($params, $receiptMsg)) {
+                flashSet('success', 'Read receipt sent.');
+            } else {
+                flashSet('danger', 'Failed to send read receipt: ' . $smtp->getLog());
+            }
+        }
+    } catch (RuntimeException $e) {
+        flashSet('danger', 'Error: ' . $e->getMessage());
+    }
+    redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
 }
 
 // ── Mark as spam ──────────────────────────────────────────────────────────────
@@ -1023,6 +1082,8 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'in_reply_to' => $_POST['in_reply_to'] ?? '',
         'body_html'   => $_POST['body_html'] ?? '',
         'from_name'   => $fromName,
+        'priority'    => $_POST['priority'] ?? 'normal',
+        'request_read_receipt' => !empty($_POST['request_read_receipt']),
     ];
 
     $attachments = [];
@@ -1298,18 +1359,20 @@ if ($action === 'settings_save') {
             flashSet('success', 'Theme preference saved.');
             redirect('?action=settings&tab=appearance');
 
-        case 'system_banner':
-            $ignoreSec = !empty($_POST['ignore_security_banner']);
-            $ignoreUpd = !empty($_POST['ignore_update_banner']);
-            Config::set('ignore_security_banner', $ignoreSec);
-            Config::set('ignore_update_banner', $ignoreUpd);
-            Config::save();
-            flashSet('success', 'System preferences saved.');
-            redirect('?action=settings&tab=system');
-
         default:
             redirect('?action=settings');
     }
+}
+
+// ── Fix permissions ───────────────────────────────────────────────────────────
+if ($action === 'fix_permissions' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (Config::fixPermissions()) {
+        flashSet('success', 'Permissions have been updated.');
+        $_SESSION['hide_security_banner'] = true;
+    } else {
+        flashSet('warning', 'Some permissions could not be updated. Please check your server configuration.');
+    }
+    redirect('?action=settings&tab=system');
 }
 
 // ── Fallback ──────────────────────────────────────────────────────────────────

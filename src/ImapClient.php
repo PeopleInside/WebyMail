@@ -98,6 +98,9 @@ class ImapClient
         // For each message, if has_attachments is false, do a quick structure check
         // to be more reliable, but only for the current page.
         foreach ($messages as &$msg) {
+            $rawHeaders = imap_fetchheader($this->conn, $msg['msg_no']);
+            $msg['priority'] = $this->parsePriority($rawHeaders);
+
             if (!$msg['has_attachments']) {
                 $struct = imap_fetchstructure($this->conn, $msg['msg_no']);
                 if (isset($struct->parts)) {
@@ -131,6 +134,7 @@ class ImapClient
         $header  = imap_headerinfo($this->conn, $msgNo);
         $body    = $this->getBody($msgNo);
         $struct  = imap_fetchstructure($this->conn, $msgNo);
+        $rawHeaders = imap_fetchheader($this->conn, $msgNo);
 
         // Mark as read
         imap_setflag_full($this->conn, (string) $msgNo, '\\Seen');
@@ -148,6 +152,8 @@ class ImapClient
             'body_text'   => $body['text'],
             'attachments' => $this->getAttachments($msgNo, $struct),
             'is_read'     => (bool) ($header->Seen ?? false),
+            'priority'    => $this->parsePriority($rawHeaders),
+            'read_receipt_to' => $this->parseReadReceipt($rawHeaders),
         ];
     }
 
@@ -451,10 +457,6 @@ class ImapClient
         // Try to detect attachments from overview if possible (some servers support it)
         $hasAttachments = (bool) ($ov->has_attachment ?? false);
 
-        // If not in overview, we might need a more expensive check, but for now
-        // we'll stick to what the server provides or leave it false to avoid performance hits.
-        // In a real-world app, we might fetch STRUCTURE in bulk.
-
         return [
             'msg_no'  => $ov->msgno,
             'uid'     => $ov->uid,
@@ -465,7 +467,31 @@ class ImapClient
             'is_flagged' => (bool) ($ov->flagged ?? false),
             'size'    => (int) ($ov->size ?? 0),
             'has_attachments' => $hasAttachments,
+            'priority' => 'normal', // Will be updated in getMessages loop
         ];
+    }
+
+    private function parsePriority(string $headers): string
+    {
+        if (preg_match('/^X-Priority:\s*([1-5])/mi', $headers, $m)) {
+            return match ((int)$m[1]) {
+                1, 2 => 'high',
+                4, 5 => 'low',
+                default => 'normal'
+            };
+        }
+        if (preg_match('/^Importance:\s*(high|normal|low)/mi', $headers, $m)) {
+            return strtolower($m[1]);
+        }
+        return 'normal';
+    }
+
+    private function parseReadReceipt(string $headers): ?string
+    {
+        if (preg_match('/^Disposition-Notification-To:\s*(.*)$/mi', $headers, $m)) {
+            return trim($m[1]);
+        }
+        return null;
     }
 
     private function decodeHeader(string $str): string

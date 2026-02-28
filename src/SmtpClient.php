@@ -159,6 +159,20 @@ class SmtpClient
         }
         $headers .= "MIME-Version: 1.0\r\n";
 
+        if (!empty($msg['priority'])) {
+            $p = $msg['priority'];
+            if ($p === 'high') {
+                $headers .= "X-Priority: 1 (Highest)\r\n";
+                $headers .= "Importance: High\r\n";
+            } elseif ($p === 'low') {
+                $headers .= "X-Priority: 5 (Lowest)\r\n";
+                $headers .= "Importance: Low\r\n";
+            }
+        }
+        if (!empty($msg['request_read_receipt'])) {
+            $headers .= "Disposition-Notification-To: {$fromFmt}\r\n";
+        }
+
         $attachments = $msg['attachments'] ?? [];
         $hasAttachments = !empty($attachments);
 
