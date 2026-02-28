@@ -18,15 +18,6 @@ spl_autoload_register(function (string $class): void {
 
 require_once __DIR__ . '/src/Config.php';
 
-// Check if version needs update in config/config.php
-if (Config::isSetup()) {
-    $storedVersion = Config::get('version');
-    if ($storedVersion !== Config::VERSION) {
-        Config::set('version', Config::VERSION);
-        Config::save();
-    }
-}
-
 // If already set up, redirect to main app unless force setup is requested
 if (Config::get('setup_complete') && ($_GET['force'] ?? '') !== '1' && ($_GET['action'] ?? '') !== 'setup') {
     header('Location: index.php');
@@ -84,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Config::set('timezone',       $timezone);
         Config::set('hide_server_on_login', $hideServer);
         Config::set('setup_complete', true);
-        Config::set('version', Config::VERSION);
+        Config::set('version', null); // Ensure version is removed from config.php
         Config::set('update_url', Config::UPDATE_URL);
 
         // Cleanup obsolete keys
@@ -116,7 +107,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Cannot create data/ directory. Please create it manually and make it writable.';
             $step  = 'server';
         } else {
-            Config::set('version', Config::VERSION);
             Config::save();
 
             // Initialise the database (creates the SQLite file + schema)
