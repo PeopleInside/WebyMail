@@ -111,6 +111,16 @@ class Database
 
             CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
             CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
+
+            CREATE TABLE IF NOT EXISTS contacts (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                name_enc      TEXT    NOT NULL,
+                email_enc     TEXT    NOT NULL,
+                notes_enc     TEXT,
+                created_at    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id);
         ");
 
         // Lightweight migrations
