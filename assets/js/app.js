@@ -27,13 +27,23 @@ const ThemeManager = (() => {
 
     function apply(mode) {
         const html = document.documentElement;
+        let themeToApply = mode;
         if (mode === 'system') {
             html.removeAttribute('data-theme');
+            themeToApply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         } else {
             html.setAttribute('data-theme', mode);
         }
         localStorage.setItem(KEY, mode);
+        // Set cookie for server-side components (expires in 1 year)
+        document.cookie = `wm_theme=${mode}; path=/; max-age=31536000; SameSite=Strict`;
         updateButtons(mode);
+
+        // Broadcast to email iframe if present
+        const frame = document.getElementById('email-frame');
+        if (frame && frame.contentWindow) {
+            frame.contentWindow.postMessage({ type: 'wm-theme-change', theme: themeToApply }, '*');
+        }
     }
 
     function cycle() {
@@ -54,27 +64,81 @@ const ThemeManager = (() => {
         document.querySelectorAll('.theme-toggle').forEach(btn => {
             btn.addEventListener('click', cycle);
         });
+
+        // Listen for system theme changes
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+            if (current() === 'system') {
+                apply('system');
+            }
+        });
     }
 
     return { init, apply, current, cycle };
 })();
 
 /* =============================================================
-   Sidebar toggle (mobile)
+   Sidebar toggle (mobile & desktop)
    ============================================================= */
 function initSidebar() {
     const toggle = document.getElementById('sidebar-toggle');
+    const shell = document.querySelector('.wm-shell');
     const sidebar = document.querySelector('.wm-sidebar');
+    
     if (!toggle || !sidebar) return;
 
-    toggle.addEventListener('click', () => {
-        sidebar.classList.toggle('open');
+    // Create backdrop for mobile if it doesn't exist
+    let backdrop = document.querySelector('.wm-sidebar-backdrop');
+    if (!backdrop) {
+        backdrop = document.createElement('div');
+        backdrop.className = 'wm-sidebar-backdrop';
+        document.body.appendChild(backdrop);
+    }
+
+    toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (window.innerWidth <= 768) {
+            sidebar.classList.toggle('open');
+            backdrop.style.display = sidebar.classList.contains('open') ? 'block' : 'none';
+        } else {
+            shell?.classList.toggle('sidebar-collapsed');
+        }
     });
 
-    // Close on outside click
+    // Close on outside click (mobile)
     document.addEventListener('click', (e) => {
-        if (!sidebar.contains(e.target) && e.target !== toggle) {
-            sidebar.classList.remove('open');
+        if (window.innerWidth <= 768) {
+            if (!sidebar.contains(e.target) && !toggle.contains(e.target)) {
+                sidebar.classList.remove('open');
+                backdrop.style.display = 'none';
+            }
+        }
+    });
+
+    backdrop.addEventListener('click', () => {
+        sidebar.classList.remove('open');
+        backdrop.style.display = 'none';
+    });
+}
+
+/* =============================================================
+   Mobile Search Toggle
+   ============================================================= */
+function initMobileSearch() {
+    const searchBtn = document.getElementById('mobile-search-toggle');
+    const searchGroup = document.querySelector('.wm-topbar .input-group');
+    if (!searchBtn || !searchGroup) return;
+
+    searchBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        searchGroup.classList.toggle('show-mobile');
+        if (searchGroup.classList.contains('show-mobile')) {
+            searchGroup.querySelector('input')?.focus();
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!searchGroup.contains(e.target) && !searchBtn.contains(e.target)) {
+            searchGroup.classList.remove('show-mobile');
         }
     });
 }
@@ -274,6 +338,7 @@ function initSmtpPortSync(container) {
 document.addEventListener('DOMContentLoaded', () => {
     ThemeManager.init();
     initSidebar();
+    initMobileSearch();
     initMailList();
     initMailRows();
     initImageProtection();
