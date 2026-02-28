@@ -153,6 +153,11 @@
             Compose
         </a>
 
+        <button type="button" id="contacts-btn" class="btn btn-outline" style="margin:0 .75rem .75rem;justify-content:center;gap:.5rem">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+            Contacts
+        </button>
+
         <div class="wm-sidebar-section" style="display:flex;align-items:center;justify-content:space-between">
             <span>Folders</span>
             <button type="button" id="new-folder-btn" title="New folder"
@@ -347,6 +352,226 @@ document.addEventListener('click', function() {
 <!-- Auth page (no shell) – just render content -->
 <?= $content ?? '' ?>
 <?php endif; ?>
+
+<!-- Contacts Modal -->
+<div id="contacts-modal" class="wm-modal" style="display:none">
+    <div class="wm-modal-content" style="max-width:600px">
+        <div class="wm-modal-header">
+            <h3 style="margin:0;font-size:1.1rem">Address Book</h3>
+            <button type="button" class="btn-ghost btn-icon close-modal">&times;</button>
+        </div>
+        <div class="wm-modal-body">
+            <div style="display:flex;gap:.5rem;margin-bottom:1.5rem">
+                <input type="text" id="contact-search" class="form-control" placeholder="Search contacts..." style="flex:1">
+                <button type="button" id="add-contact-toggle" class="btn btn-primary">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    New
+                </button>
+            </div>
+
+            <!-- Add Contact Form (Hidden by default) -->
+            <form id="add-contact-form" style="display:none;background:var(--wm-surface-2);padding:1rem;border-radius:8px;margin-bottom:1.5rem;border:1px solid var(--wm-border)">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
+                    <div>
+                        <label style="font-size:.75rem">Name</label>
+                        <input type="text" name="name" class="form-control" required>
+                    </div>
+                    <div>
+                        <label style="font-size:.75rem">Email</label>
+                        <input type="email" name="email" class="form-control" required>
+                    </div>
+                </div>
+                <div style="margin-bottom:.75rem">
+                    <label style="font-size:.75rem">Notes (optional)</label>
+                    <textarea name="notes" class="form-control" rows="2"></textarea>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:.5rem">
+                    <button type="button" id="cancel-add-contact" class="btn btn-ghost btn-sm">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Save Contact</button>
+                </div>
+            </form>
+
+            <div id="contacts-list-container" style="max-height:400px;overflow-y:auto">
+                <div class="wm-email-loading">
+                    <div class="spinner"></div>
+                    <span>Loading contacts...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.wm-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,.5); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.wm-modal-content { background: var(--wm-surface); border-radius: 12px; width: 100%; box-shadow: var(--wm-shadow); display: flex; flex-direction: column; overflow: hidden; }
+.wm-modal-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--wm-border); display: flex; align-items: center; justify-content: space-between; }
+.wm-modal-body { padding: 1.25rem; overflow-y: auto; }
+.wm-modal-header .close-modal { font-size: 1.5rem; line-height: 1; padding: 0 .5rem; }
+.contact-item { display: flex; align-items: center; gap: .75rem; padding: .75rem; border-bottom: 1px solid var(--wm-border); border-radius: 8px; transition: background .15s; }
+.contact-item:hover { background: var(--wm-surface-2); }
+.contact-item:last-child { border-bottom: none; }
+.contact-info { flex: 1; min-width: 0; }
+.contact-name { font-weight: 600; font-size: .9rem; display: block; }
+.contact-email { font-size: .8rem; color: var(--wm-text-muted); display: block; }
+</style>
+
+<script>
+(function() {
+    var contactsBtn = document.getElementById('contacts-btn');
+    var modal = document.getElementById('contacts-modal');
+    var closeBtn = modal.querySelector('.close-modal');
+    var listContainer = document.getElementById('contacts-list-container');
+    var addToggle = document.getElementById('add-contact-toggle');
+    var addForm = document.getElementById('add-contact-form');
+    var cancelAdd = document.getElementById('cancel-add-contact');
+    var searchInput = document.getElementById('contact-search');
+    var allContacts = [];
+    var currentTargetInput = null;
+
+    function loadContacts() {
+        listContainer.innerHTML = '<div class="wm-email-loading"><div class="spinner"></div><span>Loading contacts...</span></div>';
+        fetch('?action=contacts_list', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                allContacts = data.contacts;
+                renderContacts(allContacts);
+            }
+        });
+    }
+
+    function renderContacts(contacts) {
+        if (contacts.length === 0) {
+            listContainer.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--wm-text-muted)">No contacts found.</div>';
+            return;
+        }
+        listContainer.innerHTML = '';
+        contacts.forEach(c => {
+            var div = document.createElement('div');
+            div.className = 'contact-item';
+            div.innerHTML = `
+                <div class="wm-account-avatar" style="width:36px;height:36px;font-size:.9rem">
+                    ${(c.name || c.email).charAt(0).toUpperCase()}
+                </div>
+                <div class="contact-info">
+                    <span class="contact-name">${escapeHtml(c.name)}</span>
+                    <span class="contact-email">${escapeHtml(c.email)}</span>
+                </div>
+                <div style="display:flex;gap:.25rem">
+                    ${currentTargetInput ? `<button type="button" class="btn btn-primary btn-sm use-contact" data-email="${escapeHtml(c.email)}">Use</button>` : ''}
+                    <button type="button" class="btn btn-ghost btn-sm delete-contact" data-id="${c.id}" title="Delete">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                    </button>
+                </div>
+            `;
+            listContainer.appendChild(div);
+        });
+    }
+
+    function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    contactsBtn.addEventListener('click', function() {
+        currentTargetInput = null;
+        modal.style.display = 'flex';
+        loadContacts();
+    });
+
+    // Listen for custom event from compose page
+    window.addEventListener('open-contacts-picker', function(e) {
+        currentTargetInput = e.detail.target;
+        modal.style.display = 'flex';
+        loadContacts();
+    });
+
+    closeBtn.addEventListener('click', function() {
+        modal.style.display = 'none';
+        addForm.style.display = 'none';
+    });
+
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) closeBtn.click();
+    });
+
+    addToggle.addEventListener('click', function() {
+        addForm.style.display = addForm.style.display === 'none' ? 'block' : 'none';
+        if (addForm.style.display === 'block') addForm.querySelector('input[name="name"]').focus();
+    });
+
+    cancelAdd.addEventListener('click', function() {
+        addForm.style.display = 'none';
+    });
+
+    addForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var fd = new FormData(addForm);
+        fd.append('csrf_token', document.querySelector('meta[name="csrf-token"]').content);
+        fetch('?action=contacts_add', {
+            method: 'POST',
+            body: fd,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                addForm.reset();
+                addForm.style.display = 'none';
+                loadContacts();
+            } else {
+                alert(data.error || 'Failed to add contact');
+            }
+        });
+    });
+
+    listContainer.addEventListener('click', function(e) {
+        var delBtn = e.target.closest('.delete-contact');
+        if (delBtn) {
+            if (!confirm('Delete this contact?')) return;
+            var fd = new FormData();
+            fd.append('id', delBtn.dataset.id);
+            fd.append('csrf_token', document.querySelector('meta[name="csrf-token"]').content);
+            fetch('?action=contacts_delete', {
+                method: 'POST',
+                body: fd,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) loadContacts();
+            });
+            return;
+        }
+
+        var useBtn = e.target.closest('.use-contact');
+        if (useBtn && currentTargetInput) {
+            var email = useBtn.dataset.email;
+            var input = document.getElementById(currentTargetInput);
+            if (input) {
+                var val = input.value.trim();
+                if (val) {
+                    input.value = val + ', ' + email;
+                } else {
+                    input.value = email;
+                }
+                modal.style.display = 'none';
+            }
+        }
+    });
+
+    searchInput.addEventListener('input', function() {
+        var q = searchInput.value.toLowerCase();
+        var filtered = allContacts.filter(c => 
+            c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)
+        );
+        renderContacts(filtered);
+    });
+})();
+</script>
 
 <script src="assets/js/app.js"></script>
 <?php if (!empty($extraScripts)) echo $extraScripts; ?>
