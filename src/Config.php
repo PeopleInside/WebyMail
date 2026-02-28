@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '0.8';
+    public const VERSION = '1.0';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
@@ -186,7 +186,6 @@ class Config
     {
         return [
             'app_name'        => 'WebyMail',
-            'version'         => self::VERSION,
             'update_url'      => self::UPDATE_URL,
             'app_secret'      => bin2hex(random_bytes(32)),
             'captcha_enabled'  => true,
