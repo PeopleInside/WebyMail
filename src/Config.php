@@ -7,7 +7,7 @@ declare(strict_types=1);
 class Config
 {
     public const VERSION = '1.0';
-    public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases';
+    public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
     private static string $configFile = __DIR__ . '/../config/config.php';
