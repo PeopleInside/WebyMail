@@ -486,7 +486,7 @@ if ($action === 'inbox' || $action === 'search') {
     render('inbox', $layoutCommon + [
         'mailData'     => $mailData,
         'folder'       => $currentFolder,
-        'pageTitle'    => pageTitle('Inbox'),
+        'pageTitle'    => pageTitle($imap->getFriendlyName($currentFolder)),
     ]);
     exit;
 }
@@ -540,26 +540,35 @@ if ($action === 'email_body') {
     }
 
     $html = $message['body_html'] ?? '';
+    $isAjax = !empty($_GET['ajax']) && $_GET['ajax'] === '1';
 
-    // Strip external images if not allowed
-    if (!$showImages) {
-        $html = preg_replace_callback(
-            '/<img([^>]*)\bsrc\s*=\s*(["\'])(https?:\/\/[^"\']+)\2([^>]*)>/i',
-            fn($m) => '<img' . $m[1] . ' src="" data-blocked-src=' . $m[2] . $m[3] . $m[2] . $m[4] . ' alt="[image blocked]">',
-            $html
-        );
-    }
+    // Determine initial theme from cookie
+    $theme = $_COOKIE['wm_theme'] ?? 'system';
+    
+    // We use CSS variables so we can toggle them via JS without reload
+    $lightBg = '#ffffff';
+    $lightColor = '#1a2332';
+    $darkBg = '#161b22';
+    $darkColor = '#e6edf3';
 
-    // Sanitize links: remove javascript: hrefs and add target="_blank" rel="noopener noreferrer"
-    // Use DOMDocument when available for reliable link sanitization
+    // Sanitize and process HTML
     if (class_exists('DOMDocument') && trim($html) !== '') {
         $doc = new DOMDocument('1.0', 'UTF-8');
         libxml_use_internal_errors(true);
-        $doc->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        
+        // Check if it's a full document or a fragment
+        $isFullDoc = str_contains(strtolower($html), '<html');
+        
+        if ($isFullDoc) {
+            $doc->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NODEFDTD);
+        } else {
+            $doc->loadHTML('<?xml encoding="UTF-8"><html><body>' . $html . '</body></html>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        }
         libxml_clear_errors();
+
+        // Sanitize links
         foreach ($doc->getElementsByTagName('a') as $a) {
             $href = $a->getAttribute('href');
-            // Normalise: decode HTML entities, remove whitespace chars, lowercase
             $normalised = strtolower(preg_replace('/[\x00-\x20]+/', '', html_entity_decode($href, ENT_QUOTES | ENT_HTML5)));
             if (str_starts_with($normalised, 'javascript:') || str_starts_with($normalised, 'vbscript:') || str_starts_with($normalised, 'data:text/html')) {
                 $a->setAttribute('href', '#');
@@ -567,53 +576,125 @@ if ($action === 'email_body') {
             $a->setAttribute('target', '_blank');
             $a->setAttribute('rel', 'noopener noreferrer');
         }
-        $html = '';
-        foreach ($doc->getElementsByTagName('body')->item(0)?->childNodes ?? [] as $node) {
-            $html .= $doc->saveHTML($node);
+
+        // Handle images (blocking)
+        if (!$showImages) {
+            foreach ($doc->getElementsByTagName('img') as $img) {
+                $src = $img->getAttribute('src');
+                if (str_starts_with(strtolower($src), 'http')) {
+                    $img->setAttribute('data-blocked-src', $src);
+                    $img->setAttribute('src', '');
+                    $img->setAttribute('alt', '[image blocked]');
+                }
+            }
         }
-        if ($html === '') {
-            // Fallback: just save the full document body
-            $html = $doc->saveHTML();
+
+        // Set initial theme
+        $doc->documentElement->setAttribute('data-theme', $theme);
+
+        // Inject base styles and meta
+        $head = $doc->getElementsByTagName('head')->item(0);
+        if (!$head) {
+            $head = $doc->createElement('head');
+            $doc->documentElement->insertBefore($head, $doc->documentElement->firstChild);
         }
+        
+        // Add base target
+        $base = $doc->createElement('base');
+        $base->setAttribute('target', '_blank');
+        $base->setAttribute('rel', 'noopener noreferrer');
+        $head->appendChild($base);
+
+        // Add our styles with CSS variables for dynamic theming
+        $styleStr = '
+            :root { --bg: ' . $lightBg . '; --color: ' . $lightColor . '; }
+            [data-theme="dark"] { --bg: ' . $darkBg . '; --color: ' . $darkColor . '; }
+            @media (prefers-color-scheme: dark) {
+                :root:not([data-theme="light"]) { --bg: ' . $darkBg . '; --color: ' . $darkColor . '; }
+            }
+            body {
+                margin: 0;
+                padding: 1.5rem;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                font-size: .95rem;
+                line-height: 1.6;
+                background: var(--bg);
+                color: var(--color);
+                word-break: break-word;
+                height: auto;
+                min-height: auto;
+                transition: background-color .2s, color .2s;
+            }
+            img { max-width: 100%; height: auto; }
+            a { color: #2563eb; }
+        ';
+        $style = $doc->createElement('style', $styleStr);
+        $head->appendChild($style);
+
+        // Add script for live theme updates
+        $scriptStr = "
+            window.addEventListener('message', function(e) {
+                if (e.data && e.data.type === 'wm-theme-change') {
+                    document.documentElement.setAttribute('data-theme', e.data.theme);
+                }
+            });
+        ";
+        $script = $doc->createElement('script', $scriptStr);
+        $head->appendChild($script);
+
+        $html = $doc->saveHTML();
     } else {
-        // Regex fallback: strip known dangerous schemes and rewrite anchors
-        $html = preg_replace_callback(
-            '/<a\b([^>]*)>/i',
-            function (array $m): string {
-                $attrs = $m[1];
-                // Strip any href whose value (normalised) starts with javascript: or vbscript:
-                $attrs = preg_replace_callback(
-                    '/\bhref\s*=\s*(["\'])(.*?)\1/is',
-                    function (array $hm): string {
-                        $normalised = strtolower(preg_replace('/[\x00-\x20]+/', '', html_entity_decode($hm[2], ENT_QUOTES | ENT_HTML5)));
-                        if (str_starts_with($normalised, 'javascript:') || str_starts_with($normalised, 'vbscript:') || str_starts_with($normalised, 'data:text/html')) {
-                            return 'href="#"';
-                        }
-                        return $hm[0];
-                    },
-                    $attrs
-                );
-                // Remove existing target and rel attributes so we can set our own
-                $attrs = preg_replace('/\s*\btarget\s*=\s*(["\'])[^"\']*\1/i', '', $attrs);
-                $attrs = preg_replace('/\s*\brel\s*=\s*(["\'])[^"\']*\1/i', '', $attrs);
-                return '<a' . $attrs . ' target="_blank" rel="noopener noreferrer">';
-            },
-            $html
-        );
+        // Fallback simple wrap if DOMDocument fails or is missing
+        $styleStr = '
+            :root { --bg: ' . $lightBg . '; --color: ' . $lightColor . '; }
+            [data-theme="dark"] { --bg: ' . $darkBg . '; --color: ' . $darkColor . '; }
+            body {
+                margin: 0;
+                padding: 1.5rem;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                font-size: .95rem;
+                line-height: 1.6;
+                background: var(--bg);
+                color: var(--color);
+                word-break: break-word;
+            }
+            img { max-width: 100%; height: auto; }
+            a { color: #2563eb; }
+        ';
+        $scriptStr = "<script>window.addEventListener('message', function(e) { if (e.data && e.data.type === 'wm-theme-change') { document.documentElement.setAttribute('data-theme', e.data.theme); } });</script>";
+        $html = '<!DOCTYPE html><html data-theme="' . htmlspecialchars($theme) . '"><head><meta charset="UTF-8"><style>' . $styleStr . '</style>' . $scriptStr . '</head><body>' . $html . '</body></html>';
     }
 
-    // Determine dark/light from cookie preference for iframe body color
-    $theme = $_COOKIE['wm_theme'] ?? 'system';
-    $bodyBg = $theme === 'dark' ? '#161b22' : ($theme === 'light' ? '#ffffff' : '#ffffff');
-    $bodyColor = $theme === 'dark' ? '#e6edf3' : '#1a2332';
-
     header('Content-Type: text/html; charset=UTF-8');
-    header('Content-Security-Policy: default-src \'none\'; style-src \'unsafe-inline\'; img-src ' . ($showImages ? 'https: data:' : 'data:') . '; font-src \'none\'');
-    echo '<!DOCTYPE html><html><head><meta charset="UTF-8">';
-    echo '<base target="_blank" rel="noopener noreferrer">';
-    echo '<style>body{margin:0;padding:1rem;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:.9rem;line-height:1.6;background:' . $bodyBg . ';color:' . $bodyColor . '}img{max-width:100%;height:auto}a{color:#2563eb}</style>';
-    echo '</head><body>' . $html . '</body></html>';
+    header('Content-Security-Policy: default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; img-src ' . ($showImages ? 'https: data:' : 'data:') . '; font-src \'none\'');
+    echo $html;
     exit;
+}
+
+// ── Import EML ──────────────────────────────────────────────────────────────
+if ($action === 'import_eml' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $folder = $_POST['folder'] ?? 'INBOX';
+    $file = $_FILES['eml_file'] ?? null;
+
+    if ($file && $file['error'] === UPLOAD_ERR_OK) {
+        $raw = file_get_contents($file['tmp_name']);
+        try {
+            $imap = $accountMgr->imapConnect($accountId);
+            if ($imap->appendMessage($folder, $raw)) {
+                $flash = ['type' => 'success', 'message' => 'Email imported successfully.'];
+            } else {
+                $flash = ['type' => 'danger', 'message' => 'Failed to import email.'];
+            }
+            $imap->disconnect();
+        } catch (Exception $e) {
+            $flash = ['type' => 'danger', 'message' => 'Error: ' . $e->getMessage()];
+        }
+    } else {
+        $flash = ['type' => 'danger', 'message' => 'No file uploaded or upload error.'];
+    }
+    
+    $_SESSION['flash'] = $flash;
+    redirect('?action=inbox&folder=' . urlencode($folder));
 }
 
 // ── Delete message ────────────────────────────────────────────────────────────
@@ -711,7 +792,7 @@ if ($action === 'attachment' || $action === 'download_all') {
             $imap = $accountMgr->imapConnect($accountId);
             $imap->selectFolder($folder);
             $structure = $imap->fetchStructure($msgNo);
-            $attachments = $imap->getAttachments($structure);
+            $attachments = $imap->getAttachments($msgNo, $structure);
 
             if (empty($attachments)) {
                 exit('No attachments found.');
@@ -1183,10 +1264,12 @@ if ($action === 'settings_save') {
             redirect('?action=settings&tab=appearance');
 
         case 'system_banner':
-            $ignore = !empty($_POST['ignore_security_banner']);
-            Config::set('ignore_security_banner', $ignore);
+            $ignoreSec = !empty($_POST['ignore_security_banner']);
+            $ignoreUpd = !empty($_POST['ignore_update_banner']);
+            Config::set('ignore_security_banner', $ignoreSec);
+            Config::set('ignore_update_banner', $ignoreUpd);
             Config::save();
-            flashSet('success', 'System preference saved.');
+            flashSet('success', 'System preferences saved.');
             redirect('?action=settings&tab=system');
 
         default:

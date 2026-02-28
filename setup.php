@@ -33,7 +33,7 @@ if (Config::get('setup_complete') && ($_GET['force'] ?? '') !== '1' && ($_GET['a
     exit;
 }
 
-$step  = (Config::get('setup_complete') && ($_GET['force'] ?? '') === '1') ? 'server' : 'welcome';
+$step  = 'welcome';
 $error = null;
 $requirements = [];
 $securityChecks = [];
@@ -116,6 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Cannot create data/ directory. Please create it manually and make it writable.';
             $step  = 'server';
         } else {
+            Config::set('version', Config::VERSION);
             Config::save();
 
             // Initialise the database (creates the SQLite file + schema)
