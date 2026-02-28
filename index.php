@@ -470,6 +470,41 @@ if ($action === 'delete_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('?action=inbox');
 }
 
+// ── Contacts ──────────────────────────────────────────────────────────────────
+if ($action === 'contacts_list' && isAjax()) {
+    $contactMgr = new Contact($userId);
+    jsonResponse(['ok' => true, 'contacts' => $contactMgr->list()]);
+}
+
+if ($action === 'contacts_add' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $name  = trim($_POST['name'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $notes = trim($_POST['notes'] ?? '');
+    
+    if ($name === '' || $email === '') {
+        if (isAjax()) jsonResponse(['ok' => false, 'error' => 'Name and email are required.']);
+        flashSet('danger', 'Name and email are required.');
+        redirect($_SERVER['HTTP_REFERER'] ?? '?action=inbox');
+    }
+    
+    $contactMgr = new Contact($userId);
+    $contactMgr->add($name, $email, $notes);
+    
+    if (isAjax()) jsonResponse(['ok' => true]);
+    flashSet('success', 'Contact added.');
+    redirect($_SERVER['HTTP_REFERER'] ?? '?action=inbox');
+}
+
+if ($action === 'contacts_delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $id = (int) ($_POST['id'] ?? 0);
+    $contactMgr = new Contact($userId);
+    $contactMgr->delete($id);
+    
+    if (isAjax()) jsonResponse(['ok' => true]);
+    flashSet('success', 'Contact deleted.');
+    redirect($_SERVER['HTTP_REFERER'] ?? '?action=inbox');
+}
+
 // ── Inbox ─────────────────────────────────────────────────────────────────────
 if ($action === 'inbox' || $action === 'search') {
     $page    = max(1, (int) ($_GET['page'] ?? 1));
