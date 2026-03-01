@@ -50,7 +50,7 @@ class SmtpClient
     // Connection
     // -------------------------------------------------------------------------
 
-    private function connect(string $host, int $port, bool $ssl, bool $starttls): void
+    public function connect(string $host, int $port, bool $ssl, bool $starttls): void
     {
         $proto  = $ssl ? 'ssl' : 'tcp';
         $ctx    = stream_context_create([
@@ -63,7 +63,7 @@ class SmtpClient
             "{$proto}://{$host}:{$port}",
             $errno,
             $errstr,
-            30,
+            15,
             STREAM_CLIENT_CONNECT,
             $ctx
         );
@@ -72,7 +72,7 @@ class SmtpClient
             throw new RuntimeException("Cannot connect to {$host}:{$port}: {$errstr}");
         }
 
-        stream_set_timeout($this->socket, 30);
+        stream_set_timeout($this->socket, 15);
         $this->expect('220');
 
         // Send EHLO
@@ -94,7 +94,7 @@ class SmtpClient
         }
     }
 
-    private function authenticate(string $username, string $password): void
+    public function authenticate(string $username, string $password): void
     {
         $this->cmd('AUTH LOGIN');
         $this->expect('334');
@@ -294,13 +294,13 @@ class SmtpClient
         return $response;
     }
 
-    private function quit(): void
+    public function quit(): void
     {
         $this->cmd('QUIT');
         $this->close();
     }
 
-    private function close(): void
+    public function close(): void
     {
         if ($this->socket !== false) {
             fclose($this->socket);

@@ -31,7 +31,8 @@ class Account
     {
         return $this->db->fetchAll(
             'SELECT id, user_id, label, sender_name, signature, email, imap_host, imap_port, imap_ssl,
-                    smtp_host, smtp_port, smtp_ssl, smtp_starttls, username, is_primary, created_at
+                    smtp_host, smtp_port, smtp_ssl, smtp_starttls, username, is_primary, created_at,
+                    validation_status
               FROM accounts WHERE user_id = ? ORDER BY is_primary DESC, id ASC',
             [$userId]
         );
@@ -39,11 +40,14 @@ class Account
 
     public function add(int $userId, array $data): int
     {
+        // Validate credentials before adding
+        $this->validateCredentials($data);
+
         $this->db->query(
             'INSERT INTO accounts
                 (user_id, label, sender_name, signature, email, imap_host, imap_port, imap_ssl,
-                 smtp_host, smtp_port, smtp_ssl, smtp_starttls, username, password, is_primary)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)',
+                 smtp_host, smtp_port, smtp_ssl, smtp_starttls, username, password, is_primary, validation_status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, "valid")',
             [
                 $userId,
                 $data['label'],
@@ -66,6 +70,30 @@ class Account
 
     public function update(int $id, int $userId, array $data): bool
     {
+        $existing = $this->get($id);
+        if (!$existing) return false;
+
+        // If credentials changed, validate them
+        $credsChanged = ($data['username'] !== $existing['username'] || 
+                         $data['imap_host'] !== $existing['imap_host'] ||
+                         (int)$data['imap_port'] !== (int)$existing['imap_port'] ||
+                         (int)$data['imap_ssl'] !== (int)$existing['imap_ssl'] ||
+                         $data['smtp_host'] !== $existing['smtp_host'] ||
+                         (int)$data['smtp_port'] !== (int)$existing['smtp_port'] ||
+                         (int)$data['smtp_ssl'] !== (int)$existing['smtp_ssl'] ||
+                         (int)$data['smtp_starttls'] !== (int)$existing['smtp_starttls'] ||
+                         !empty($data['password']));
+        
+        if ($credsChanged) {
+            $testData = array_merge($existing, $data);
+            if (!empty($data['password'])) {
+                $testData['password'] = $data['password'];
+            } else {
+                $testData['password'] = $existing['password_plain'];
+            }
+            $this->validateCredentials($testData);
+        }
+
         $data['sender_name'] = $data['sender_name'] ?? '';
         $data['signature'] = $data['signature'] ?? '';
         $fields = ['label', 'sender_name', 'signature', 'email', 'imap_host', 'imap_port', 'imap_ssl',
@@ -78,6 +106,11 @@ class Account
             $values[]  = $this->auth->encryptPassword($data['password']);
         }
 
+        // Set status to valid if we just validated it, otherwise keep existing
+        if ($credsChanged) {
+            $set .= ', validation_status = "valid"';
+        }
+
         $values[] = $id;
         $values[] = $userId;
 
@@ -86,6 +119,77 @@ class Account
             $values
         );
         return true;
+    }
+
+    public function validateCredentials(array $data): void
+    {
+        // IMAP check
+        try {
+            $imap = new ImapClient();
+            $imap->connect(
+                $data['imap_host'],
+                (int)$data['imap_port'],
+                (bool)$data['imap_ssl'],
+                $data['username'],
+                $data['password']
+            );
+            $imap->disconnect();
+        } catch (Exception $e) {
+            throw new RuntimeException("IMAP connection failed: " . $e->getMessage());
+        }
+
+        // SMTP check
+        try {
+            $smtp = new SmtpClient();
+            $smtp->connect(
+                $data['smtp_host'],
+                (int)$data['smtp_port'],
+                (bool)$data['smtp_ssl'],
+                (bool)$data['smtp_starttls']
+            );
+            $smtp->authenticate($data['username'], $data['password']);
+            $smtp->quit();
+        } catch (Exception $e) {
+            throw new RuntimeException("SMTP connection failed: " . $e->getMessage());
+        }
+    }
+
+    public function checkCredentials(int $accountId, int $userId): string
+    {
+        $account = $this->get($accountId);
+        if ($account === null || (int)$account['user_id'] !== $userId) {
+            return 'error';
+        }
+
+        $this->db->query("UPDATE accounts SET validation_status = 'checking' WHERE id = ?", [$accountId]);
+
+        try {
+            $this->validateCredentials([
+                'imap_host'     => $account['imap_host'],
+                'imap_port'     => $account['imap_port'],
+                'imap_ssl'      => $account['imap_ssl'],
+                'smtp_host'     => $account['smtp_host'],
+                'smtp_port'     => $account['smtp_port'],
+                'smtp_ssl'      => $account['smtp_ssl'],
+                'smtp_starttls' => $account['smtp_starttls'],
+                'username'      => $account['username'],
+                'password'      => $account['password_plain']
+            ]);
+
+            $this->db->query("UPDATE accounts SET validation_status = 'valid' WHERE id = ?", [$accountId]);
+            return 'valid';
+        } catch (Exception $e) {
+            $this->db->query("UPDATE accounts SET validation_status = 'invalid' WHERE id = ?", [$accountId]);
+            return 'invalid';
+        }
+    }
+
+    public function checkAllUserAccounts(int $userId): void
+    {
+        $accounts = $this->getForUser($userId);
+        foreach ($accounts as $acc) {
+            $this->checkCredentials((int)$acc['id'], $userId);
+        }
     }
 
     public function delete(int $id, int $userId): bool
