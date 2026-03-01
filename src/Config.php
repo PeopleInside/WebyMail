@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '1.9';
+    public const VERSION = '2.0';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
@@ -62,6 +62,17 @@ class Config
         // Security - Recursive scan
         $root = dirname(__DIR__);
         
+        // Check root directory itself
+        $rootPerms = fileperms($root) & 0777;
+        $rootOk = ($rootPerms <= 0755);
+        $results['security'][] = [
+            'path' => '(root)/',
+            'perms' => sprintf('%o', $rootPerms),
+            'ok' => $rootOk,
+            'type' => 'dir'
+        ];
+        if (!$rootOk) $results['all_ok'] = false;
+
         // Use a simple recursive function or RecursiveIterator
         try {
             $iterator = new RecursiveIteratorIterator(
@@ -97,18 +108,26 @@ class Config
             // Fallback if iterator fails
         }
 
-        // .htaccess check
-        $htaccessPath = $root . '/.htaccess';
-        $htaccessOk = false;
-        if (file_exists($htaccessPath)) {
-            $content = file_get_contents($htaccessPath);
-            if (str_contains($content, 'RedirectMatch 404') || str_contains($content, 'Deny from all') || str_contains($content, 'Require all denied')) {
-                $htaccessOk = true;
+        // .htaccess checks
+        $htaccessFiles = [
+            '/' => 'RedirectMatch 404',
+            '/data/' => 'Deny from all'
+        ];
+
+        foreach ($htaccessFiles as $dir => $requiredContent) {
+            $path = $root . $dir . '.htaccess';
+            $ok = false;
+            if (file_exists($path)) {
+                $content = file_get_contents($path);
+                if (str_contains($content, $requiredContent) || str_contains($content, 'Require all denied')) {
+                    $ok = true;
+                }
             }
-        }
-        if (!$htaccessOk) {
-            $results['security'][] = ['path' => '.htaccess', 'ok' => false, 'type' => 'htaccess'];
-            $results['all_ok'] = false;
+            
+            if (!$ok) {
+                $results['security'][] = ['path' => $dir . '.htaccess', 'ok' => false, 'type' => 'htaccess'];
+                $results['all_ok'] = false;
+            }
         }
 
         // Update last check info
@@ -213,6 +232,9 @@ class Config
         $root = dirname(__DIR__);
         $ok = true;
 
+        // Try fixing root itself
+        @chmod($root, 0755);
+
         try {
             $iterator = new RecursiveIteratorIterator(
                 new RecursiveDirectoryIterator($root, RecursiveDirectoryIterator::SKIP_DOTS),
@@ -238,10 +260,22 @@ class Config
             $ok = false;
         }
 
-        // Specific fix for .htaccess if it exists
-        $htaccessPath = $root . '/.htaccess';
-        if (file_exists($htaccessPath)) {
-            @chmod($htaccessPath, 0644);
+        // Specific fix for .htaccess files
+        $htaccessFiles = ['/.htaccess', '/data/.htaccess'];
+        foreach ($htaccessFiles as $f) {
+            $path = $root . $f;
+            if (file_exists($path)) {
+                @chmod($path, 0644);
+            } else {
+                // Create missing .htaccess with default rules
+                if ($f === '/.htaccess') {
+                    @file_put_contents($path, "RedirectMatch 404 /\\.(?!well-known).*$\n");
+                } elseif ($f === '/data/.htaccess') {
+                    if (!is_dir(dirname($path))) @mkdir(dirname($path), 0750, true);
+                    @file_put_contents($path, "Deny from all\n");
+                }
+                @chmod($path, 0644);
+            }
         }
 
         // Re-run check
