@@ -78,6 +78,13 @@
 
         <div class="wm-topbar-spacer"></div>
 
+        <!-- Mobile Search Toggle -->
+        <button class="btn-ghost btn-icon md-hide" id="mobile-search-toggle" title="Search" style="color:#fff">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+        </button>
+
         <!-- Search -->
         <div class="input-group" style="max-width:400px;flex:1">
             <form method="get" action="" style="display:contents">
@@ -371,7 +378,12 @@ document.addEventListener('click', function() {
     <div class="wm-modal-content" style="max-width:600px">
         <div class="wm-modal-header">
             <h3 style="margin:0;font-size:1.1rem">Address Book</h3>
-            <button type="button" class="btn-ghost btn-icon close-modal">&times;</button>
+            <div style="display:flex;gap:.25rem">
+                <button type="button" class="btn-ghost btn-icon minimize-modal" title="Minimize" style="font-size:1.2rem;line-height:1">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+                <button type="button" class="btn-ghost btn-icon close-modal" style="font-size:1.5rem;line-height:1;padding:0 .5rem">&times;</button>
+            </div>
         </div>
         <div class="wm-modal-body">
             <div style="display:flex;gap:.5rem;margin-bottom:1.5rem">
@@ -431,6 +443,33 @@ document.addEventListener('click', function() {
 .wm-modal-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--wm-border); display: flex; align-items: center; justify-content: space-between; }
 .wm-modal-body { padding: 1.25rem; overflow-y: auto; }
 .wm-modal-header .close-modal { font-size: 1.5rem; line-height: 1; padding: 0 .5rem; }
+
+/* Floating Widget */
+#contacts-widget {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 56px;
+    height: 56px;
+    background: var(--wm-primary);
+    color: #fff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    cursor: pointer;
+    z-index: 2100;
+    transition: transform .2s, background .2s;
+}
+#contacts-widget:hover {
+    transform: scale(1.05);
+    background: var(--wm-primary-hover);
+}
+#contacts-widget svg { width: 24px; height: 24px; }
+.wm-modal.minimized {
+    display: none !important;
+}
 .contact-item { display: flex; align-items: center; gap: .75rem; padding: .75rem; border-bottom: 1px solid var(--wm-border); border-radius: 8px; transition: background .15s; }
 .contact-item:hover { background: var(--wm-surface-2); }
 .contact-item:last-child { border-bottom: none; }
@@ -439,11 +478,20 @@ document.addEventListener('click', function() {
 .contact-email { font-size: .8rem; color: var(--wm-text-muted); display: block; }
 </style>
 
+<!-- Floating Contacts Widget -->
+<div id="contacts-widget" style="display:none" title="Restore Address Book">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
+    </svg>
+</div>
+
 <script>
 (function() {
     var contactsBtn = document.getElementById('contacts-btn');
     var modal = document.getElementById('contacts-modal');
     var closeBtn = modal.querySelector('.close-modal');
+    var minimizeBtn = modal.querySelector('.minimize-modal');
+    var widget = document.getElementById('contacts-widget');
     var listContainer = document.getElementById('contacts-list-container');
     var addToggle = document.getElementById('add-contact-toggle');
     var addForm = document.getElementById('add-contact-form');
@@ -506,23 +554,58 @@ document.addEventListener('click', function() {
         return div.innerHTML;
     }
 
+    function showModal() {
+        modal.style.display = 'flex';
+        modal.classList.remove('minimized');
+        widget.style.display = 'none';
+        sessionStorage.setItem('wm_contacts_minimized', '0');
+        sessionStorage.setItem('wm_contacts_open', '1');
+    }
+
+    function hideModal() {
+        modal.style.display = 'none';
+        modal.classList.remove('minimized');
+        widget.style.display = 'none';
+        addForm.style.display = 'none';
+        sessionStorage.setItem('wm_contacts_open', '0');
+        sessionStorage.setItem('wm_contacts_minimized', '0');
+    }
+
+    function minimizeModal() {
+        modal.classList.add('minimized');
+        widget.style.display = 'flex';
+        sessionStorage.setItem('wm_contacts_minimized', '1');
+    }
+
     contactsBtn.addEventListener('click', function() {
         currentTargetInput = null;
-        modal.style.display = 'flex';
+        showModal();
         loadContacts();
     });
 
     // Listen for custom event from compose page
     window.addEventListener('open-contacts-picker', function(e) {
         currentTargetInput = e.detail.target;
-        modal.style.display = 'flex';
+        showModal();
         loadContacts();
     });
 
-    closeBtn.addEventListener('click', function() {
-        modal.style.display = 'none';
-        addForm.style.display = 'none';
-    });
+    closeBtn.addEventListener('click', hideModal);
+
+    minimizeBtn.addEventListener('click', minimizeModal);
+
+    widget.addEventListener('click', showModal);
+
+    // Restore state on page load
+    if (sessionStorage.getItem('wm_contacts_open') === '1') {
+        if (sessionStorage.getItem('wm_contacts_minimized') === '1') {
+            minimizeModal();
+            loadContacts();
+        } else {
+            showModal();
+            loadContacts();
+        }
+    }
 
     modal.addEventListener('click', function(e) {
         if (e.target === modal) closeBtn.click();

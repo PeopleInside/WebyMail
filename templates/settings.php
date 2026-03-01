@@ -126,8 +126,23 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                     var cmd = btn.dataset.sigCmd;
                     var val = null;
                     if (cmd === 'createLink') {
-                        val = prompt('Enter URL');
-                        if (!val) return;
+                        var existingUrl = '';
+                        var sel = window.getSelection();
+                        if (sel && sel.rangeCount > 0) {
+                            var container = sel.getRangeAt(0).commonAncestorContainer;
+                            var anchor = container.nodeType === 3 ? container.parentNode : container;
+                            while (anchor && anchor !== editor) {
+                                if (anchor.tagName === 'A') { existingUrl = anchor.href || ''; break; }
+                                anchor = anchor.parentNode;
+                            }
+                        }
+                        val = prompt('Enter URL', existingUrl);
+                        if (val === null) return;
+                        if (val === '') {
+                            document.execCommand('unlink', false, null);
+                            editor.focus();
+                            return;
+                        }
                     }
                     document.execCommand(cmd, false, val);
                     editor.focus();
