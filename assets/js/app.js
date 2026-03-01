@@ -307,29 +307,27 @@ function initCopyButtons() {
 /* =============================================================
    SMTP port helpers – keep 465/587 in sync with SSL/STARTTLS
    ============================================================= */
-function initSmtpPortSync(container) {
-    const root = container || document;
-    const port    = root.querySelector('[data-smtp-port]');
-    const ssl     = root.querySelector('[data-smtp-ssl]');
-    const starttls = root.querySelector('[data-smtp-starttls]');
-    if (!port || !ssl || !starttls) return;
+function initSmtpPortSync() {
+    document.querySelectorAll('fieldset').forEach(fieldset => {
+        const port     = fieldset.querySelector('[data-smtp-port]');
+        const ssl      = fieldset.querySelector('[data-smtp-ssl]');
+        const starttls = fieldset.querySelector('[data-smtp-starttls]');
+        if (!port || !ssl || !starttls) return;
 
-    const sync = () => {
-        if (ssl.checked) {
-            starttls.checked = false;
-            port.value = SMTP_SSL_PORT;
-        } else if (starttls.checked) {
-            ssl.checked = false;
-            port.value = SMTP_STARTTLS_PORT;
-        } else if (!port.value) {
-            port.value = SMTP_STARTTLS_PORT;
-            starttls.checked = true;
-        }
-    };
+        const sync = () => {
+            if (ssl.checked) {
+                starttls.checked = false;
+                port.value = SMTP_SSL_PORT;
+            } else if (starttls.checked) {
+                ssl.checked = false;
+                port.value = SMTP_STARTTLS_PORT;
+            }
+        };
 
-    ssl.addEventListener('change', sync);
-    starttls.addEventListener('change', sync);
-    sync();
+        ssl.addEventListener('change', sync);
+        starttls.addEventListener('change', sync);
+        sync();
+    });
 }
 
 /* =============================================================
