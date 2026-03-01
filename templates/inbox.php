@@ -33,6 +33,16 @@ $folderDisplay = htmlspecialchars($folder ?? 'INBOX');
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
     </button>
 
+    <?php if (($isTrash ?? false) || ($isSpam ?? false)): ?>
+    <form method="post" action="?action=empty_folder" onsubmit="return confirm('Permanently empty this folder? This cannot be undone.')" style="margin:0">
+        <?= csrfInput() ?>
+        <input type="hidden" name="folder" value="<?= htmlspecialchars($folder) ?>">
+        <button class="btn btn-outline btn-sm" style="color:var(--wm-danger);border-color:var(--wm-danger)">
+            Empty <?= ($isTrash ?? false) ? 'Trash' : 'Spam' ?>
+        </button>
+    </form>
+    <?php endif; ?>
+
     <div style="width:1px;height:20px;background:var(--wm-border);margin:0 .25rem"></div>
 
     <form id="import-eml-form" method="post" action="?action=import_eml" enctype="multipart/form-data" style="display:none">
@@ -116,6 +126,12 @@ $folderDisplay = htmlspecialchars($folder ?? 'INBOX');
 function bulkAction(action) {
     var uids = getSelectedUids();
     if (!uids.length) return;
+    
+    if (action === 'delete') {
+        var msg = '<?= ($isTrash ?? false) ? "Permanently delete selected messages? This cannot be undone." : "Move selected messages to Trash?" ?>';
+        if (!confirm(msg)) return;
+    }
+    
     apiPost('?action=bulk', {
         action: action,
         uids:   uids,
