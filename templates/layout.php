@@ -111,7 +111,7 @@
                     <polyline points="6 9 12 15 18 9"/>
                 </svg>
             </button>
-            <div id="user-menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:8px;min-width:200px;box-shadow:var(--wm-shadow);z-index:300;overflow:hidden">
+            <div id="user-menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:8px;min-width:240px;max-width:calc(100vw - 32px);max-height:calc(100vh - 80px);overflow-y:auto;overflow-x:hidden;box-shadow:var(--wm-shadow);z-index:300">
                 <?php if (!empty($accounts) && count($accounts) > 1): ?>
                 <div style="padding:.6rem 1rem;font-size:.75rem;font-weight:600;color:var(--wm-text-muted);text-transform:uppercase;letter-spacing:.03em">
                     Accounts
@@ -119,16 +119,24 @@
                 <?php foreach ($accounts as $acc): ?>
                 <button type="button" data-switch-account="<?= (int)$acc['id'] ?>"
                         style="display:flex;width:100%;align-items:center;gap:.6rem;padding:.55rem 1rem;font-size:.85rem;background:none;border:none;color:var(--wm-text);text-align:left;cursor:pointer">
-                    <div class="wm-account-avatar" style="width:28px;height:28px;font-size:.75rem">
+                    <div class="wm-account-avatar" style="width:28px;height:28px;font-size:.75rem;flex-shrink:0">
                         <?= strtoupper(substr($acc['label'] ?: $acc['email'], 0, 1)) ?>
                     </div>
-                    <div style="flex:1;display:flex;flex-direction:column">
-                        <span style="font-weight:600;"><?= htmlspecialchars($acc['label'] ?: $acc['email']) ?></span>
-                        <span style="font-size:.75rem;color:var(--wm-text-muted)"><?= htmlspecialchars($acc['email']) ?></span>
+                    <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+                        <span style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><?= htmlspecialchars($acc['label'] ?: $acc['email']) ?></span>
+                        <span style="font-size:.75rem;color:var(--wm-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><?= htmlspecialchars($acc['email']) ?></span>
                     </div>
-                    <?php if ($acc['id'] == $session['account_id']): ?>
-                    <span style="font-size:.7rem;color:var(--wm-success);font-weight:700;">Active</span>
-                    <?php endif; ?>
+                    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.2rem;flex-shrink:0">
+                        <?php if ($acc['id'] == $session['account_id']): ?>
+                        <span style="font-size:.7rem;color:var(--wm-success);font-weight:700">Active</span>
+                        <?php endif; ?>
+                        <?php if (($acc['validation_status'] ?? '') === 'invalid'): ?>
+                        <span style="font-size:.7rem;color:var(--wm-danger);font-weight:700;display:flex;align-items:center;gap:.2rem">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                            Invalid
+                        </span>
+                        <?php endif; ?>
+                    </div>
                 </button>
                 <?php endforeach; ?>
                 <div style="height:1px;background:var(--wm-border)"></div>
@@ -159,7 +167,12 @@
         </button>
 
         <div class="wm-sidebar-section" style="display:flex;align-items:center;justify-content:space-between">
-            <span>Folders</span>
+            <span style="display:flex;align-items:center;gap:.4rem">
+                Folders
+                <?php if (($currentAccount['validation_status'] ?? '') === 'invalid'): ?>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--wm-danger)" stroke-width="3" title="Account invalid"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <?php endif; ?>
+            </span>
             <button type="button" id="new-folder-btn" title="New folder"
                     style="background:none;border:none;cursor:pointer;color:var(--wm-text-muted);padding:.1rem .3rem;font-size:1rem;line-height:1">+</button>
         </div>
