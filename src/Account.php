@@ -192,6 +192,11 @@ class Account
         }
     }
 
+    public function setValidationStatus(int $accountId, string $status): void
+    {
+        $this->db->query("UPDATE accounts SET validation_status = ? WHERE id = ?", [$status, $accountId]);
+    }
+
     public function delete(int $id, int $userId): bool
     {
         // Cannot delete primary account

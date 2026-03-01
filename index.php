@@ -359,6 +359,18 @@ $accountMgr = new Account();
 $accounts   = $accountMgr->getForUser($userId);
 $flash      = flashGet();
 
+// Check if current account is already invalid to show persistent banner
+$currentAccount = null;
+foreach ($accounts as $acc) {
+    if ((int)$acc['id'] === $accountId) {
+        $currentAccount = $acc;
+        break;
+    }
+}
+if ($currentAccount && $currentAccount['validation_status'] === 'invalid' && empty($flash)) {
+    $flash = ['type' => 'danger', 'message' => 'Authentication failed for this account. Please check your settings.'];
+}
+
 // Check if setup.php still exists to show a warning banner
 $setupBanner = null;
 if (file_exists(WEBYMAIL_ROOT . '/setup.php')) {
@@ -387,8 +399,15 @@ try {
         }
         return strcmp($a['display'], $b['display']);
     });
-} catch (RuntimeException) {
+} catch (RuntimeException $e) {
     // IMAP might be temporarily unavailable; non-fatal
+    $errorMsg = $e->getMessage();
+    if (str_contains(strtolower($errorMsg), 'auth') || str_contains(strtolower($errorMsg), 'login') || str_contains(strtolower($errorMsg), 'credential')) {
+        $accountMgr->setValidationStatus($accountId, 'invalid');
+        if (empty($flash)) {
+            $flash = ['type' => 'danger', 'message' => 'Authentication failed: ' . $errorMsg];
+        }
+    }
 }
 if (empty($folders)) {
     $folders = [
@@ -399,12 +418,13 @@ if (empty($folders)) {
 }
 
 $layoutCommon = [
-    'session'       => $session,
-    'accounts'      => $accounts,
-    'folders'       => $folders,
-    'currentFolder' => $currentFolder,
-    'flash'         => $flash,
-    'setupBanner'   => $setupBanner,
+    'session'        => $session,
+    'accounts'       => $accounts,
+    'currentAccount' => $currentAccount,
+    'folders'        => $folders,
+    'currentFolder'  => $currentFolder,
+    'flash'          => $flash,
+    'setupBanner'    => $setupBanner,
 ];
 
 // ── Account switch ────────────────────────────────────────────────────────────
@@ -566,7 +586,11 @@ if ($action === 'inbox' || $action === 'search') {
         $isSpam = in_array(strtoupper($currentFolder), ['SPAM', 'JUNK', 'JUNK E-MAIL'], true);
         $imap->disconnect();
     } catch (RuntimeException $e) {
-        $flash = ['type' => 'danger', 'message' => 'IMAP error: ' . $e->getMessage()];
+        $errorMsg = $e->getMessage();
+        if (str_contains(strtolower($errorMsg), 'auth') || str_contains(strtolower($errorMsg), 'login') || str_contains(strtolower($errorMsg), 'credential')) {
+            $accountMgr->setValidationStatus($accountId, 'invalid');
+        }
+        $flash = ['type' => 'danger', 'message' => 'IMAP error: ' . $errorMsg];
     }
 
     render('inbox', $layoutCommon + [
