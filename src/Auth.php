@@ -160,10 +160,10 @@ class Auth
      */
     public function enable2FA(int $userId, string $secret, array $recoveryCodes): void
     {
-        $hashed = $this->tf->hashRecoveryCodes($recoveryCodes);
+        $encrypted = $this->tf->encryptRecoveryCodes($recoveryCodes);
         $this->db->query(
             'UPDATE users SET totp_secret=?, totp_enabled=1, recovery_codes=? WHERE id=?',
-            [$secret, json_encode($hashed), $userId]
+            [$secret, json_encode($encrypted), $userId]
         );
         $this->session->destroyAll($userId);
     }
@@ -190,24 +190,11 @@ class Auth
 
     public function encryptPassword(string $plain): string
     {
-        $key   = hash('sha256', Config::get('app_secret', ''), true);
-        $iv    = random_bytes(12);
-        $tag   = '';
-        $enc   = openssl_encrypt($plain, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
-        return base64_encode($iv . $tag . $enc);
+        return Config::encrypt($plain);
     }
 
     public function decryptPassword(string $stored): string
     {
-        $raw = base64_decode($stored, true);
-        if ($raw === false || strlen($raw) < 29) {
-            return '';
-        }
-        $key = hash('sha256', Config::get('app_secret', ''), true);
-        $iv  = substr($raw, 0, 12);
-        $tag = substr($raw, 12, 16);
-        $enc = substr($raw, 28);
-        $dec = openssl_decrypt($enc, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
-        return $dec !== false ? $dec : '';
+        return Config::decrypt($stored);
     }
 }

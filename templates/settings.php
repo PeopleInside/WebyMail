@@ -251,9 +251,91 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                       onsubmit="return confirm('Are you sure? This will disable 2FA protection.')">
                     <?= csrfInput() ?>
                     <button class="btn btn-danger btn-sm">Disable 2FA</button>
+                    <button type="button" class="btn btn-outline btn-sm" id="view-recovery-codes-btn" style="margin-left:.5rem">View Recovery Codes</button>
                 </form>
             </div>
         </div>
+
+        <!-- View Recovery Codes Modal -->
+        <div id="recovery-codes-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
+            <div style="background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:10px;box-shadow:var(--wm-shadow);width:min(400px,96vw);display:flex;flex-direction:column">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;border-bottom:1px solid var(--wm-border)">
+                    <span style="font-weight:600;font-size:.95rem">Recovery Codes</span>
+                    <button id="recovery-codes-modal-close" class="btn btn-ghost btn-icon" title="Close">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <div style="padding:1rem">
+                    <div id="password-verify-step">
+                        <p style="font-size:.82rem;margin-bottom:1rem">Please enter your account password to view your recovery codes.</p>
+                        <div class="form-group">
+                            <input type="password" id="verify-password-input" class="form-control" placeholder="Password">
+                        </div>
+                        <button id="verify-password-btn" class="btn btn-primary btn-sm w-full">Verify Password</button>
+                    </div>
+                    <div id="codes-display-step" style="display:none">
+                        <p style="font-size:.82rem;margin-bottom:1rem">Store these in a safe place. Each can only be used once.</p>
+                        <div class="recovery-codes" id="settings-recovery-codes-list" style="margin-bottom:1rem"></div>
+                        <button class="btn btn-outline btn-sm w-full" data-copy="#settings-recovery-codes-list">Copy codes</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        (function() {
+            var btn = document.getElementById('view-recovery-codes-btn');
+            var modal = document.getElementById('recovery-codes-modal');
+            var close = document.getElementById('recovery-codes-modal-close');
+            var verifyStep = document.getElementById('password-verify-step');
+            var displayStep = document.getElementById('codes-display-step');
+            var passwordInput = document.getElementById('verify-password-input');
+            var verifyBtn = document.getElementById('verify-password-btn');
+            var codesList = document.getElementById('settings-recovery-codes-list');
+
+            if (btn && modal) {
+                btn.addEventListener('click', function() {
+                    modal.style.display = 'flex';
+                    verifyStep.style.display = 'block';
+                    displayStep.style.display = 'none';
+                    passwordInput.value = '';
+                });
+                close.addEventListener('click', function() { modal.style.display = 'none'; });
+                modal.addEventListener('click', function(e) { if (e.target === modal) modal.style.display = 'none'; });
+
+                verifyBtn.addEventListener('click', function() {
+                    var pass = passwordInput.value;
+                    if (!pass) return;
+                    verifyBtn.disabled = true;
+                    verifyBtn.textContent = 'Verifying…';
+
+                    apiPost('?action=view_recovery_codes', { password: pass })
+                    .then(function(res) {
+                        verifyBtn.disabled = false;
+                        verifyBtn.textContent = 'Verify Password';
+                        if (res.ok) {
+                            verifyStep.style.display = 'none';
+                            displayStep.style.display = 'block';
+                            codesList.innerHTML = '';
+                            res.codes.forEach(function(code) {
+                                var div = document.createElement('div');
+                                div.className = 'recovery-code';
+                                div.textContent = code;
+                                codesList.appendChild(div);
+                            });
+                        } else {
+                            alert(res.error || 'Verification failed.');
+                        }
+                    })
+                    .catch(function() {
+                        verifyBtn.disabled = false;
+                        verifyBtn.textContent = 'Verify Password';
+                        alert('An error occurred.');
+                    });
+                });
+            }
+        })();
+        </script>
 
         <?php else: ?>
         <!-- 2FA is OFF -->
@@ -276,15 +358,57 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
         <!-- Active Sessions -->
         <div class="wm-card">
             <div class="wm-card-header">Active Sessions</div>
-            <div class="wm-card-body">
-                <p style="font-size:.82rem;color:var(--wm-text-muted)">
-                    Sessions are kept alive for 6 months.
-                </p>
-                <form method="post" action="?action=settings_save&tab=revoke_sessions"
-                      onsubmit="return confirm('This will sign you out of all devices including this one.')">
-                    <?= csrfInput() ?>
-                    <button class="btn btn-danger btn-sm">Revoke all sessions</button>
-                </form>
+            <div class="wm-card-body" style="padding:0">
+                <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--wm-border)">
+                    <p style="font-size:.82rem;color:var(--wm-text-muted);margin:0">
+                        You can have up to 30 active sessions. The oldest session is automatically removed when you exceed this limit.
+                    </p>
+                </div>
+                <?php foreach ($sessions as $s): ?>
+                <?php 
+                    $isCurrent = ($_COOKIE['wm_session'] ?? '') === $s['token'];
+                    $ip = Config::decrypt($s['ip_address']);
+                    $ua = $s['user_agent'];
+                ?>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
+                    <div style="flex:1">
+                        <div style="font-size:.85rem;font-weight:600;display:flex;align-items:center;gap:.5rem">
+                            <?= htmlspecialchars($ip) ?>
+                            <?php if ($isCurrent): ?>
+                            <span class="badge badge-success" style="font-size:.65rem;padding:.1rem .4rem">Current Session</span>
+                            <?php endif; ?>
+                        </div>
+                        <div style="font-size:.72rem;color:var(--wm-text-muted);margin-top:.15rem">
+                            Logged in: <?= date('Y-m-d H:i:s', (int)$s['created_at']) ?> • 
+                            Last seen: <?= date('Y-m-d H:i:s', (int)$s['last_seen']) ?>
+                        </div>
+                        <div style="font-size:.7rem;color:var(--wm-text-muted);margin-top:.1rem;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= htmlspecialchars($ua) ?>">
+                            <?= htmlspecialchars($ua) ?>
+                        </div>
+                    </div>
+                    <div style="margin-left:1rem">
+                        <?php if (!$isCurrent): ?>
+                        <form method="post" action="?action=settings_save&tab=revoke_session" onsubmit="return confirm('Revoke this session?')">
+                            <?= csrfInput() ?>
+                            <input type="hidden" name="token" value="<?= htmlspecialchars($s['token']) ?>">
+                            <button class="btn btn-outline btn-xs text-danger" style="display:inline-flex;align-items:center;gap:.25rem" title="Revoke session">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                Revoke
+                            </button>
+                        </form>
+                        <?php else: ?>
+                        <span style="font-size:.7rem;color:var(--wm-text-muted);font-style:italic">Active</span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+                <div style="padding:1rem 1.25rem">
+                    <form method="post" action="?action=settings_save&tab=revoke_sessions"
+                          onsubmit="return confirm('This will sign you out of all devices including this one.')">
+                        <?= csrfInput() ?>
+                        <button class="btn btn-danger btn-sm">Revoke all sessions</button>
+                    </form>
+                </div>
             </div>
         </div>
 
@@ -518,6 +642,34 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 </div>
             </div>
         </div>
+
+        <?php if (Config::get('2fa_enabled', true)): ?>
+            <?php if ((int)($user['totp_enabled'] ?? 0) === 0): ?>
+            <div class="wm-card" style="margin-bottom:1.5rem;border-left:4px solid var(--wm-primary)">
+                <div class="wm-card-header" style="color:var(--wm-primary)">Security Suggestion</div>
+                <div class="wm-card-body">
+                    <p style="font-size:.85rem;margin-top:0">
+                        <strong>Improve your account security:</strong> Two-Factor Authentication (2FA) is not currently enabled for your account. 
+                        Enabling 2FA adds an extra layer of protection beyond just your password.
+                    </p>
+                    <a href="?action=settings&tab=security" class="btn btn-primary btn-xs">Enable 2FA now</a>
+                </div>
+            </div>
+            <?php else: ?>
+            <div class="wm-card" style="margin-bottom:1.5rem;border-left:4px solid var(--wm-success)">
+                <div class="wm-card-header" style="color:var(--wm-success)">Security Status</div>
+                <div class="wm-card-body">
+                    <div style="display:flex;align-items:center;gap:.5rem;color:var(--wm-success);font-weight:600;margin-bottom:.5rem">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                        Two-Factor Authentication is active
+                    </div>
+                    <p style="font-size:.85rem;margin:0">
+                        Your account is protected with an extra layer of security. This is excellent for your account protection.
+                    </p>
+                </div>
+            </div>
+            <?php endif; ?>
+        <?php endif; ?>
 
         <div class="wm-card" style="margin-bottom:1.5rem">
             <div class="wm-card-header">System Information</div>

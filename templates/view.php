@@ -57,7 +57,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
     <?php endif; ?>
 
     <form method="post" action="?action=delete&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" style="display:inline"
-          onsubmit="return confirm('Delete this message?')">
+          onsubmit="return confirm('<?= ($isTrash ?? false) ? 'Permanently delete this message? This cannot be undone.' : 'Delete this message?' ?>')">
         <?= csrfInput() ?>
         <button class="btn btn-ghost btn-sm text-danger" title="Delete">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>

@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '1.4';
+    public const VERSION = '1.6';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
@@ -178,6 +178,34 @@ class Config
         ];
 
         return $newerVersion;
+    }
+
+    /**
+     * Encrypt data using AES-256-GCM and the app_secret.
+     */
+    public static function encrypt(string $data): string
+    {
+        if ($data === '') return '';
+        $key = hash('sha256', self::get('app_secret', ''), true);
+        $iv  = random_bytes(12);
+        $tag = '';
+        $enc = openssl_encrypt($data, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
+        return base64_encode($iv . $tag . $enc);
+    }
+
+    /**
+     * Decrypt data using AES-256-GCM and the app_secret.
+     */
+    public static function decrypt(string $data): string
+    {
+        if ($data === '') return '';
+        $key = hash('sha256', self::get('app_secret', ''), true);
+        $raw = base64_decode($data, true);
+        if ($raw === false || strlen($raw) < 29) return '';
+        $iv  = substr($raw, 0, 12);
+        $tag = substr($raw, 12, 16);
+        $enc = substr($raw, 28);
+        return openssl_decrypt($enc, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag) ?: '';
     }
 
     public static function fixPermissions(): bool

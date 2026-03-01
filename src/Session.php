@@ -26,9 +26,19 @@ class Session
     {
         $this->cleanup();
 
+        // Enforce 30-session limit
+        $sessions = $this->db->fetchAll(
+            'SELECT token FROM sessions WHERE user_id = ? ORDER BY created_at ASC',
+            [$userId]
+        );
+        if (count($sessions) >= 30) {
+            $oldest = $sessions[0]['token'];
+            $this->db->query('DELETE FROM sessions WHERE token = ?', [$oldest]);
+        }
+
         $token     = bin2hex(random_bytes(32));
         $expiresAt = time() + $this->lifetime;
-        $ip        = $_SERVER['REMOTE_ADDR'] ?? '';
+        $ip        = Config::encrypt($_SERVER['REMOTE_ADDR'] ?? '');
         $ua        = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
 
         $this->db->query(
@@ -39,6 +49,31 @@ class Session
 
         $this->setCookie($token, $expiresAt);
         return $token;
+    }
+
+    /**
+     * Get all active sessions for a user.
+     */
+    public function getAllForUser(int $userId): array
+    {
+        return $this->db->fetchAll(
+            'SELECT token, ip_address, user_agent, created_at, last_seen, expires_at
+             FROM sessions
+             WHERE user_id = ? AND expires_at > ?
+             ORDER BY last_seen DESC',
+            [$userId, time()]
+        );
+    }
+
+    /**
+     * Revoke a specific session.
+     */
+    public function revoke(string $token, int $userId): void
+    {
+        $this->db->query(
+            'DELETE FROM sessions WHERE token = ? AND user_id = ?',
+            [$token, $userId]
+        );
     }
 
     /**
