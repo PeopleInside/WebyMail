@@ -40,14 +40,18 @@ class Account
 
     public function add(int $userId, array $data): int
     {
-        // Validate credentials before adding
-        $this->validateCredentials($data);
+        $status = 'valid';
+        try {
+            $this->validateCredentials($data);
+        } catch (Exception $e) {
+            $status = 'invalid';
+        }
 
         $this->db->query(
             'INSERT INTO accounts
                 (user_id, label, sender_name, signature, email, imap_host, imap_port, imap_ssl,
                  smtp_host, smtp_port, smtp_ssl, smtp_starttls, username, password, is_primary, validation_status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, "valid")',
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)',
             [
                 $userId,
                 $data['label'],
@@ -63,6 +67,7 @@ class Account
                 (int) $data['smtp_starttls'],
                 $data['username'],
                 $this->auth->encryptPassword($data['password']),
+                $status
             ]
         );
         return $this->db->lastInsertId();
@@ -84,6 +89,7 @@ class Account
                          (int)$data['smtp_starttls'] !== (int)$existing['smtp_starttls'] ||
                          !empty($data['password']));
         
+        $status = $existing['validation_status'];
         if ($credsChanged) {
             $testData = array_merge($existing, $data);
             if (!empty($data['password'])) {
@@ -91,7 +97,12 @@ class Account
             } else {
                 $testData['password'] = $existing['password_plain'];
             }
-            $this->validateCredentials($testData);
+            try {
+                $this->validateCredentials($testData);
+                $status = 'valid';
+            } catch (Exception $e) {
+                $status = 'invalid';
+            }
         }
 
         $data['sender_name'] = $data['sender_name'] ?? '';
@@ -106,10 +117,9 @@ class Account
             $values[]  = $this->auth->encryptPassword($data['password']);
         }
 
-        // Set status to valid if we just validated it, otherwise keep existing
-        if ($credsChanged) {
-            $set .= ', validation_status = "valid"';
-        }
+        // Update validation status
+        $set .= ', validation_status = ?';
+        $values[] = $status;
 
         $values[] = $id;
         $values[] = $userId;
