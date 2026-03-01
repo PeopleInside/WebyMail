@@ -1,6 +1,14 @@
 <?php
 declare(strict_types=1);
 
+ob_start();
+
+// Prevent caching for the whole app
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Cache-Control: post-check=0, pre-check=0', false);
+header('Pragma: no-cache');
+header('Expires: Sat, 26 Jul 1997 05:00:00 GMT');
+
 /**
  * WebyMail – main entry-point / router
  *
@@ -774,41 +782,6 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('?action=inbox&folder=' . urlencode($folder));
 }
 
-// ── Send read receipt ─────────────────────────────────────────────────────────
-if ($action === 'send_read_receipt' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $msgNo  = (int) ($_GET['msg']    ?? 0);
-    $folder = $_GET['folder'] ?? 'INBOX';
-
-    try {
-        $imap    = $accountMgr->imapConnect($accountId);
-        $message = $imap->getMessage($folder, $msgNo);
-        $imap->disconnect();
-
-        if (!empty($message['read_receipt_to'])) {
-            $smtp   = new SmtpClient();
-            $params = $accountMgr->smtpParams($accountId);
-            $account = $accountMgr->get($accountId);
-            
-            $receiptMsg = [
-                'to'      => $message['read_receipt_to'],
-                'subject' => 'Read Receipt: ' . $message['subject'],
-                'body_text' => "This is a read receipt for the email with subject \"{$message['subject']}\" sent on {$message['date']}.\r\n\r\nThis receipt only confirms that the message was displayed on the recipient's computer.",
-                'body_html' => "<p>This is a read receipt for the email with subject \"<b>" . htmlspecialchars($message['subject']) . "</b>\" sent on " . htmlspecialchars($message['date']) . ".</p><p>This receipt only confirms that the message was displayed on the recipient's computer.</p>",
-                'from_name' => $account['sender_name'] ?: $account['email'],
-            ];
-            
-            if ($smtp->send($params, $receiptMsg)) {
-                flashSet('success', 'Read receipt sent.');
-            } else {
-                flashSet('danger', 'Failed to send read receipt: ' . $smtp->getLog());
-            }
-        }
-    } catch (RuntimeException $e) {
-        flashSet('danger', 'Error: ' . $e->getMessage());
-    }
-    redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
-}
-
 // ── Mark as spam ──────────────────────────────────────────────────────────────
 if ($action === 'spam' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $msgNo  = (int) ($_GET['msg']    ?? 0);
@@ -906,42 +879,68 @@ if ($action === 'attachment' || $action === 'download_all') {
             $imap->disconnect();
 
             if (ob_get_level()) ob_clean();
+            
+            // Anti-cache for downloads
+            header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+            header('Pragma: no-cache');
+            header('Expires: Sat, 26 Jul 1997 05:00:00 GMT');
+            
             header('Content-Type: application/zip');
             header('Content-Disposition: attachment; filename="attachments_' . $msgNo . '.zip"');
             header('Content-Length: ' . filesize($zipFile));
-            header('Cache-Control: no-cache, must-revalidate');
-            header('Pragma: no-cache');
             readfile($zipFile);
             unlink($zipFile);
             exit;
-        } catch (RuntimeException $e) {
+        } catch (Throwable $e) {
+            if (ob_get_level()) ob_clean();
             http_response_code(500);
-            exit('Error: ' . htmlspecialchars($e->getMessage()));
+            header('Content-Type: text/plain; charset=utf-8');
+            exit('Error: ' . $e->getMessage());
         }
     }
 
     $section = $_GET['section'] ?? '';
     $name    = basename($_GET['name'] ?? 'attachment');
 
+    // Disable errors for binary output to prevent corruption
+    ini_set('display_errors', '0');
+    error_reporting(0);
+    set_time_limit(0);
+    ini_set('memory_limit', '256M');
+
     try {
         $imap = $accountMgr->imapConnect($accountId);
         $data = $imap->fetchAttachment($msgNo, $section);
         $imap->disconnect();
-    } catch (RuntimeException $e) {
+        
+        if ($data === '') {
+            throw new Exception("Attachment data is empty or could not be retrieved.");
+        }
+    } catch (Throwable $e) {
+        if (ob_get_level()) ob_clean();
         http_response_code(500);
-        exit('Error: ' . htmlspecialchars($e->getMessage()));
+        header('Content-Type: text/plain; charset=utf-8');
+        header('Content-Disposition: inline');
+        exit('Error downloading attachment: ' . $e->getMessage());
     }
 
     if (ob_get_level()) ob_clean();
+    
     $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+
     $ctype = 'application/octet-stream';
     if ($ext === 'eml') $ctype = 'message/rfc822';
 
-    header('Content-Disposition: attachment; filename="' . $name . '"');
-    header('Content-Type: ' . $ctype);
-    header('Content-Length: ' . strlen($data));
-    header('Cache-Control: no-cache, must-revalidate');
+    // Anti-cache for downloads
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('Pragma: no-cache');
+    header('Expires: Sat, 26 Jul 1997 05:00:00 GMT');
+
+    // Robust filename handling
+    $safeName = str_replace(['"', "\r", "\n"], '', $name);
+    header('Content-Disposition: attachment; filename="' . $safeName . '"; filename*=UTF-8\'\'' . rawurlencode($name));
+    header('Content-Type: ' . $ctype . '; name="' . $safeName . '"');
+    header('Content-Length: ' . strlen($data));
     echo $data;
     exit;
 }
@@ -1377,3 +1376,5 @@ if ($action === 'fix_permissions' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ── Fallback ──────────────────────────────────────────────────────────────────
 redirect('?action=inbox');
+
+ob_end_flush();

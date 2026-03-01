@@ -254,8 +254,9 @@ class ImapClient
         }
     }
 
-    private function decodeBodyPart(string $body, int $encoding): string
+    private function decodeBodyPart(string|bool $body, int $encoding): string
     {
+        if ($body === false) return '';
         return match ($encoding) {
             3 => base64_decode($body),
             4 => quoted_printable_decode($body),
@@ -321,7 +322,34 @@ class ImapClient
 
                 // Fallback for message/rfc822 which might not have a filename but is an .eml
                 if (!$filename && strtolower($part->subtype ?? '') === 'rfc822') {
-                    $filename = 'message.eml';
+                    // Try to get subject from encapsulated headers
+                    $encHeaders = imap_fetchbody($this->conn, $msgNo, $section . '.0');
+                    if ($encHeaders) {
+                        if (preg_match('/^Subject: (.*)$/mi', $encHeaders, $matches)) {
+                            $filename = $this->decodeHeader(trim($matches[1]));
+                            if ($filename) {
+                                // Basic cleaning for filesystem safety
+                                $filename = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '_', $filename);
+                                if (!str_ends_with(strtolower($filename), '.eml')) {
+                                    $filename .= '.eml';
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (!$filename && !empty($part->description)) {
+                        $filename = $this->decodeHeader($part->description);
+                        if ($filename) {
+                            $filename = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '_', $filename);
+                            if (!str_ends_with(strtolower($filename), '.eml')) {
+                                $filename .= '.eml';
+                            }
+                        }
+                    }
+                    
+                    if (!$filename) {
+                        $filename = 'message.eml';
+                    }
                 }
 
                 $attachments[] = [
@@ -356,8 +384,21 @@ class ImapClient
         $this->assertConnected();
         $struct = imap_fetchstructure($this->conn, $msgNo);
         $part   = $this->findPartBySection($struct, $section);
-        $encoding = $part ? ($part->encoding ?? 0) : 0;
+        
+        if ($part && $part->type === 2 && strtolower($part->subtype ?? '') === 'rfc822') {
+            // For message/rfc822 parts, imap_fetchbody(..., section) only returns the body.
+            // We need to fetch section.0 to get the encapsulated headers.
+            $headers = imap_fetchbody($this->conn, $msgNo, $section . '.0');
+            $body    = imap_fetchbody($this->conn, $msgNo, $section);
+            
+            if ($headers === false) $headers = '';
+            if ($body === false) $body = '';
+            
+            // Encapsulated messages are usually not encoded themselves (the parts inside are)
+            return $headers . "\r\n" . $this->decodeBodyPart($body, $part->encoding ?? 0);
+        }
 
+        $encoding = $part ? ($part->encoding ?? 0) : 0;
         $raw = imap_fetchbody($this->conn, $msgNo, $section);
         return $this->decodeBodyPart($raw, $encoding);
     }
@@ -431,18 +472,23 @@ class ImapClient
         // Check for filename in parameters or dparameters
         $params = array_merge($part->parameters ?? [], $part->dparameters ?? []);
         foreach ($params as $p) {
-            if (isset($p->attribute) && strtolower($p->attribute) === 'filename') {
-                return true;
-            }
-            if (isset($p->attribute) && strtolower($p->attribute) === 'name') {
+            if (isset($p->attribute) && (strtolower($p->attribute) === 'filename' || strtolower($p->attribute) === 'name')) {
                 return true;
             }
         }
 
         // SpamAssassin often wraps original email as message/rfc822
-        // If it's not the main body part, treat it as an attachment
         if (isset($part->subtype) && strtolower($part->subtype) === 'rfc822') {
             return true;
+        }
+
+        // Some parts might be marked as inline but have a filename, treat them as attachments too
+        if (isset($part->disposition) && strtolower($part->disposition) === 'inline') {
+            foreach ($params as $p) {
+                if (isset($p->attribute) && (strtolower($p->attribute) === 'filename' || strtolower($p->attribute) === 'name')) {
+                    return true;
+                }
+            }
         }
 
         return false;

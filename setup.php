@@ -1,6 +1,12 @@
 <?php
 declare(strict_types=1);
 
+// Prevent caching
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Cache-Control: post-check=0, pre-check=0', false);
+header('Pragma: no-cache');
+header('Expires: Sat, 26 Jul 1997 05:00:00 GMT');
+
 /**
  * WebyMail – First-run setup wizard
  * Access this file directly (setup.php) before the application is configured.
@@ -127,6 +133,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $step = 'done';
         // Auto-rename setup.php to prevent accidental re-runs
         @rename(__FILE__, __FILE__ . '.bak');
+    } elseif ($step === 'fix_permissions') {
+        Config::fixPermissions();
+        $step = 'security';
+        $sys = Config::checkSystem();
+        $securityChecks = $sys['security'];
     }
 }
 

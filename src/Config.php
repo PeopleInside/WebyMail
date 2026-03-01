@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '1.3';
+    public const VERSION = '1.4';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
@@ -59,41 +59,57 @@ class Config
             if (!$ok) $results['all_ok'] = false;
         }
 
-        // Security - Dirs
+        // Security - Recursive scan
         $root = dirname(__DIR__);
-        $dirs = ['config' => $root . '/config', 'data' => $root . '/data'];
-        foreach ($dirs as $name => $path) {
-            if (is_dir($path)) {
+        
+        // Use a simple recursive function or RecursiveIterator
+        try {
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($root, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::SELF_FIRST
+            );
+
+            foreach ($iterator as $item) {
+                $path = $item->getPathname();
+                $relativePath = str_replace($root . DIRECTORY_SEPARATOR, '', $path);
+                
+                // Skip some directories that might be large or irrelevant
+                if (str_starts_with($relativePath, 'assets/') || str_starts_with($relativePath, 'node_modules/')) {
+                    continue;
+                }
+
                 $perms = fileperms($path) & 0777;
-                $ok = ($perms <= 0755);
-                $results['security']['dir_' . $name] = ['path' => $name . '/', 'perms' => sprintf('%o', $perms), 'ok' => $ok];
-                if (!$ok) $results['all_ok'] = false;
+                $isDir = $item->isDir();
+                $ok = $isDir ? ($perms <= 0755) : ($perms <= 0644);
+                
+                $results['security'][] = [
+                    'path' => $relativePath . ($isDir ? '/' : ''),
+                    'perms' => sprintf('%o', $perms),
+                    'ok' => $ok,
+                    'type' => $isDir ? 'dir' : 'file'
+                ];
+                
+                if (!$ok) {
+                    $results['all_ok'] = false;
+                }
             }
+        } catch (Exception $e) {
+            // Fallback if iterator fails
         }
 
-        // Security - Files
-        $files = ['config/config.php' => $root . '/config/config.php', 'data/webymail.db' => $root . '/data/webymail.db'];
-        foreach ($files as $name => $path) {
-            if (file_exists($path)) {
-                $perms = fileperms($path) & 0777;
-                $ok = ($perms <= 0644);
-                $results['security']['file_' . $name] = ['path' => $name, 'perms' => sprintf('%o', $perms), 'ok' => $ok];
-                if (!$ok) $results['all_ok'] = false;
-            }
-        }
-
-        // .htaccess
+        // .htaccess check
         $htaccessPath = $root . '/.htaccess';
         $htaccessOk = false;
         if (file_exists($htaccessPath)) {
             $content = file_get_contents($htaccessPath);
-            // Check for common protection patterns
             if (str_contains($content, 'RedirectMatch 404') || str_contains($content, 'Deny from all') || str_contains($content, 'Require all denied')) {
                 $htaccessOk = true;
             }
         }
-        $results['security']['htaccess'] = ['path' => '.htaccess', 'ok' => $htaccessOk];
-        if (!$htaccessOk) $results['all_ok'] = false;
+        if (!$htaccessOk) {
+            $results['security'][] = ['path' => '.htaccess', 'ok' => false, 'type' => 'htaccess'];
+            $results['all_ok'] = false;
+        }
 
         // Update last check info
         self::set('last_system_check_at', time());
@@ -167,22 +183,37 @@ class Config
     public static function fixPermissions(): bool
     {
         $root = dirname(__DIR__);
-        $dirs = ['config', 'data'];
-        $files = ['config/config.php', 'data/webymail.db', '.htaccess'];
         $ok = true;
 
-        foreach ($dirs as $dir) {
-            $path = $root . '/' . $dir;
-            if (is_dir($path)) {
-                if (!@chmod($path, 0750)) $ok = false;
+        try {
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($root, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::SELF_FIRST
+            );
+
+            foreach ($iterator as $item) {
+                $path = $item->getPathname();
+                $relativePath = str_replace($root . DIRECTORY_SEPARATOR, '', $path);
+                
+                // Skip assets and node_modules
+                if (str_starts_with($relativePath, 'assets/') || str_starts_with($relativePath, 'node_modules/')) {
+                    continue;
+                }
+
+                if ($item->isDir()) {
+                    if (!@chmod($path, 0755)) $ok = false;
+                } else {
+                    if (!@chmod($path, 0644)) $ok = false;
+                }
             }
+        } catch (Exception $e) {
+            $ok = false;
         }
 
-        foreach ($files as $file) {
-            $path = $root . '/' . $file;
-            if (file_exists($path)) {
-                if (!@chmod($path, 0640)) $ok = false;
-            }
+        // Specific fix for .htaccess if it exists
+        $htaccessPath = $root . '/.htaccess';
+        if (file_exists($htaccessPath)) {
+            @chmod($htaccessPath, 0644);
         }
 
         // Re-run check

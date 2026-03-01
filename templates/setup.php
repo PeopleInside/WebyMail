@@ -295,29 +295,41 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
         <?php elseif (($step ?? '') === 'security'): ?>
         <!-- Step 2.5: Security Check -->
         <div class="wm-card">
-            <div class="wm-card-header">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                Security & Permissions Check
+            <div class="wm-card-header" style="justify-content:space-between">
+                <div style="display:flex;align-items:center;gap:.5rem">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    Security & Permissions Check
+                </div>
+                <form method="post" action="?action=setup">
+                    <input type="hidden" name="step" value="fix_permissions">
+                    <button type="submit" class="btn btn-outline btn-xs" <?= $allSecurityOk ? 'disabled style="cursor:not-allowed;opacity:0.6"' : '' ?>>Fix Permissions</button>
+                </form>
             </div>
             <div class="wm-card-body">
                 <p style="font-size:.9rem;margin-top:0">
                     Verifying file permissions and server security...
                 </p>
                 
-                <div style="display:flex;flex-direction:column;gap:.75rem;margin-bottom:1.5rem">
+                <div style="display:flex;flex-direction:column;gap:.75rem;margin-bottom:1.5rem;max-height:300px;overflow-y:auto;padding-right:5px">
                     <?php 
                     $allSecurityOk = true;
-                    foreach ($securityChecks as $key => $check): 
+                    $insecure = array_filter($securityChecks, fn($c) => !$c['ok']);
+                    if (empty($insecure)): ?>
+                    <div style="padding:1.25rem;text-align:center;color:var(--wm-success);font-size:.85rem">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom:.5rem"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        <br>All files and folders have correct permissions.
+                        <div style="margin-top:1rem">
+                            <button type="button" class="btn btn-ghost btn-xs" onclick="document.getElementById('all-perms-setup').style.display='block';this.style.display='none'">View All Checked Permissions</button>
+                        </div>
+                    </div>
+                    <?php else:
+                    foreach ($insecure as $check): 
                         if (!$check['ok']) $allSecurityOk = false;
                     ?>
                     <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem;background:var(--wm-bg-subtle);border:1px solid var(--wm-border);border-radius:8px">
                         <div style="display:flex;align-items:center;gap:.75rem">
-                            <div style="color:<?= $check['ok'] ? 'var(--wm-success)' : 'var(--wm-warning)' ?>">
-                                <?php if ($check['ok']): ?>
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-                                <?php else: ?>
+                            <div style="color:var(--wm-warning)">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                                <?php endif; ?>
                             </div>
                             <div>
                                 <div style="font-family:var(--wm-font-mono);font-size:.85rem"><?= htmlspecialchars($check['path']) ?></div>
@@ -326,13 +338,27 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                                 <?php endif; ?>
                             </div>
                         </div>
-                        <?php if (!$check['ok']): ?>
                         <span style="font-size:.72rem;color:var(--wm-warning);font-weight:600">INSECURE</span>
-                        <?php else: ?>
-                        <span style="font-size:.72rem;color:var(--wm-success);font-weight:600">SECURE</span>
-                        <?php endif; ?>
                     </div>
                     <?php endforeach; ?>
+                    <div style="padding:.75rem;text-align:center">
+                        <button type="button" class="btn btn-ghost btn-xs" onclick="document.getElementById('all-perms-setup').style.display='block';this.style.display='none'">View All Checked Permissions</button>
+                    </div>
+                    <?php endif; ?>
+
+                    <div id="all-perms-setup" style="display:none;border-top:1px solid var(--wm-border);padding-top:.75rem">
+                        <?php foreach ($securityChecks as $check): ?>
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:.5rem;border-bottom:1px solid var(--wm-border);font-size:.75rem">
+                            <div style="font-family:var(--wm-font-mono)"><?= htmlspecialchars($check['path']) ?></div>
+                            <div style="display:flex;align-items:center;gap:.75rem">
+                                <span style="color:var(--wm-text-muted);font-size:.65rem"><?= $check['perms'] ?></span>
+                                <span style="font-size:.6rem;font-weight:700;color:<?= $check['ok'] ? 'var(--wm-success)' : 'var(--wm-warning)' ?>">
+                                    <?= $check['ok'] ? 'OK' : 'FAIL' ?>
+                                </span>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
 
                 <?php if (!$allSecurityOk): ?>
