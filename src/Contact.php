@@ -22,11 +22,11 @@ class Contact
         foreach ($rows as $row) {
             $contacts[] = [
                 'id'      => $row['id'],
-                'name'    => $this->decrypt($row['name_enc']),
-                'email'   => $this->decrypt($row['email_enc']),
-                'phone'   => $row['phone_enc'] ? $this->decrypt($row['phone_enc']) : '',
-                'address' => $row['address_enc'] ? $this->decrypt($row['address_enc']) : '',
-                'notes'   => $row['notes_enc'] ? $this->decrypt($row['notes_enc']) : '',
+                'name'    => Config::decrypt($row['name_enc']),
+                'email'   => Config::decrypt($row['email_enc']),
+                'phone'   => $row['phone_enc'] ? Config::decrypt($row['phone_enc']) : '',
+                'address' => $row['address_enc'] ? Config::decrypt($row['address_enc']) : '',
+                'notes'   => $row['notes_enc'] ? Config::decrypt($row['notes_enc']) : '',
                 'created_at' => $row['created_at']
             ];
         }
@@ -39,11 +39,11 @@ class Contact
             "INSERT INTO contacts (user_id, name_enc, email_enc, phone_enc, address_enc, notes_enc) VALUES (?, ?, ?, ?, ?, ?)",
             [
                 $this->userId,
-                $this->encrypt($name),
-                $this->encrypt($email),
-                $phone ? $this->encrypt($phone) : null,
-                $address ? $this->encrypt($address) : null,
-                $notes ? $this->encrypt($notes) : null
+                Config::encrypt($name),
+                Config::encrypt($email),
+                $phone ? Config::encrypt($phone) : null,
+                $address ? Config::encrypt($address) : null,
+                $notes ? Config::encrypt($notes) : null
             ]
         );
         return $this->db->lastInsertId();
@@ -54,11 +54,11 @@ class Contact
         $this->db->query(
             "UPDATE contacts SET name_enc = ?, email_enc = ?, phone_enc = ?, address_enc = ?, notes_enc = ? WHERE id = ? AND user_id = ?",
             [
-                $this->encrypt($name),
-                $this->encrypt($email),
-                $phone ? $this->encrypt($phone) : null,
-                $address ? $this->encrypt($address) : null,
-                $notes ? $this->encrypt($notes) : null,
+                Config::encrypt($name),
+                Config::encrypt($email),
+                $phone ? Config::encrypt($phone) : null,
+                $address ? Config::encrypt($address) : null,
+                $notes ? Config::encrypt($notes) : null,
                 $id,
                 $this->userId
             ]
@@ -70,32 +70,5 @@ class Contact
     {
         $this->db->query("DELETE FROM contacts WHERE id = ? AND user_id = ?", [$id, $this->userId]);
         return true;
-    }
-
-    private function encrypt(string $data): string
-    {
-        $key = $this->getEncryptionKey();
-        $ivLength = openssl_cipher_iv_length('aes-256-gcm');
-        $iv = openssl_random_pseudo_bytes($ivLength);
-        $tag = '';
-        $encrypted = openssl_encrypt($data, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
-        return base64_encode($iv . $tag . $encrypted);
-    }
-
-    private function decrypt(string $data): string
-    {
-        $key = $this->getEncryptionKey();
-        $decoded = base64_decode($data);
-        $ivLength = openssl_cipher_iv_length('aes-256-gcm');
-        $iv = substr($decoded, 0, $ivLength);
-        $tag = substr($decoded, $ivLength, 16);
-        $ciphertext = substr($decoded, $ivLength + 16);
-        return openssl_decrypt($ciphertext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag) ?: '';
-    }
-
-    private function getEncryptionKey(): string
-    {
-        $secret = Config::get('app_secret', 'fallback-secret');
-        return hash('sha256', $secret, true);
     }
 }

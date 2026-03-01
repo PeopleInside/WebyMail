@@ -186,6 +186,18 @@ class ImapClient
         return true;
     }
 
+    public function emptyFolder(string $folder): bool
+    {
+        $this->reopenFolder($folder);
+        $total = imap_num_msg($this->conn);
+        if ($total === 0) {
+            return true;
+        }
+        // Mark all messages for deletion
+        imap_delete($this->conn, '1:*');
+        return imap_expunge($this->conn);
+    }
+
     public function getUnreadCount(string $folder): int
     {
         $this->reopenFolder($folder);

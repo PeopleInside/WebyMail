@@ -100,24 +100,35 @@ class TwoFactor
     }
 
     /**
-     * Hash recovery codes for storage (one hash per code, constant-time compare on use).
+     * Encrypt recovery codes for storage (AES-256-GCM using the app_secret).
      */
-    public function hashRecoveryCodes(array $codes): array
+    public function encryptRecoveryCodes(array $codes): array
     {
-        return array_map(fn($c) => password_hash($c, PASSWORD_BCRYPT), $codes);
+        return array_map([Config::class, 'encrypt'], $codes);
     }
 
     /**
-     * Attempt to use a recovery code. Returns updated hashes array (with used
+     * Decrypt recovery codes.
+     */
+    public function decryptRecoveryCodes(array $encrypted): array
+    {
+        return array_map([Config::class, 'decrypt'], $encrypted);
+    }
+
+    /**
+     * Attempt to use a recovery code. Returns updated encrypted array (with used
      * code removed) on success, or null on failure.
      */
-    public function useRecoveryCode(string $code, array $hashedCodes): ?array
+    public function useRecoveryCode(string $code, array $encryptedCodes): ?array
     {
         $code = strtoupper(trim($code));
-        foreach ($hashedCodes as $i => $hash) {
-            if (password_verify($code, $hash)) {
-                array_splice($hashedCodes, $i, 1);
-                return $hashedCodes;
+        
+        foreach ($encryptedCodes as $i => $stored) {
+            $dec = Config::decrypt($stored);
+            
+            if ($dec !== '' && hash_equals($dec, $code)) {
+                array_splice($encryptedCodes, $i, 1);
+                return $encryptedCodes;
             }
         }
         return null;
