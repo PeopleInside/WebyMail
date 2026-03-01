@@ -40,5 +40,9 @@ https://github.com/PeopleInside/WebyMail/releases
 
 **Light mode** 
 ![Light](https://github.com/user-attachments/assets/b93bbbd8-2350-494b-8125-9b5066266d83)
+<img width="1919" height="953" alt="Screenshot 2026-03-01 173625" src="https://github.com/user-attachments/assets/cfcd40ed-5c0b-489a-baea-419f32c0e623" />
+
 **Dark mode**
 ![Dark](https://github.com/user-attachments/assets/2b7010aa-0f26-444d-b681-95d2a447bb88)
+<img width="1919" height="952" alt="Screenshot 2026-03-01 173614" src="https://github.com/user-attachments/assets/da00ceb7-175f-4dbd-ae09-28b91d01e63a" />
+
