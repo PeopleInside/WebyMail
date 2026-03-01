@@ -425,7 +425,8 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
         <div class="wm-card" style="margin-bottom:1.5rem">
             <div class="wm-card-header">Add Email Account</div>
             <div class="wm-card-body">
-                <form method="post" action="?action=settings_save&tab=add_account">
+                <div id="add-account-error" class="alert alert-danger" style="display:none;margin-bottom:1rem"></div>
+                <form id="add-account-form" method="post" action="?action=settings_save&tab=add_account">
                     <?= csrfInput() ?>
                     <div class="form-group">
                         <label>Label</label>
@@ -467,7 +468,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                         </div>
                     </fieldset>
                     <div style="display:flex;gap:.5rem;margin-top:1rem">
-                        <button class="btn btn-primary btn-sm">Add account</button>
+                        <button type="submit" class="btn btn-primary btn-sm">Add account</button>
                         <a href="?action=settings&tab=accounts" class="btn btn-outline btn-sm">Cancel</a>
                     </div>
                 </form>
@@ -526,7 +527,8 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             </div>
             <div class="wm-card-body" style="padding:.75rem 1.25rem">
                 <?php if ($isEditing): ?>
-                <form method="post" action="?action=settings_save&tab=edit_account">
+                <div id="edit-account-error-<?= (int)$acc['id'] ?>" class="alert alert-danger" style="display:none;margin-bottom:1rem"></div>
+                <form id="edit-account-form-<?= (int)$acc['id'] ?>" method="post" action="?action=settings_save&tab=edit_account">
                     <?= csrfInput() ?>
                     <input type="hidden" name="account_id" value="<?= (int)$acc['id'] ?>">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
@@ -571,7 +573,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                         </div>
                     </fieldset>
                     <div style="display:flex;gap:.5rem;margin-top:1rem">
-                        <button class="btn btn-primary btn-sm">Save changes</button>
+                        <button type="submit" class="btn btn-primary btn-sm">Save changes</button>
                         <a href="?action=settings&tab=accounts" class="btn btn-outline btn-sm">Cancel</a>
                     </div>
                 </form>
@@ -839,10 +841,71 @@ function applyAndSubmitTheme(theme) {
 
 // Sync current theme with server preference on load
 (function() {
-    var allowed = <?= json_encode(Config::THEMES) ?>;
-    var serverTheme = <?= json_encode($user['theme'] ?? 'system') ?>;
-    if (allowed.indexOf(serverTheme) !== -1) {
-        ThemeManager.apply(serverTheme);
+    function sync() {
+        if (window.ThemeManager) {
+            var allowed = <?= json_encode(Config::THEMES) ?>;
+            var serverTheme = <?= json_encode($user['theme'] ?? 'system') ?>;
+            if (allowed.indexOf(serverTheme) !== -1) {
+                ThemeManager.apply(serverTheme);
+            }
+            if (typeof updateThemeCards === 'function') updateThemeCards();
+        }
     }
+    if (document.readyState === 'complete') sync();
+    else window.addEventListener('load', sync);
+})();
+
+// AJAX for account forms
+(function() {
+    function handleAccountForm(formId, errorId) {
+        var form = document.getElementById(formId);
+        var error = document.getElementById(errorId);
+        if (!form || !error) return;
+
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            error.style.display = 'none';
+            var btn = form.querySelector('button[type="submit"]') || form.querySelector('button');
+            var origText = btn ? btn.textContent : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Saving...';
+            }
+
+            var fd = new FormData(form);
+            fetch(form.action, {
+                method: 'POST',
+                body: fd,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    window.location.href = '?action=settings&tab=accounts';
+                } else {
+                    error.textContent = data.error || 'An error occurred.';
+                    error.style.display = 'flex';
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = origText;
+                    }
+                    error.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            })
+            .catch(function(err) {
+                error.textContent = 'Connection error. Please try again.';
+                error.style.display = 'flex';
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = origText;
+                }
+            });
+        });
+    }
+
+    handleAccountForm('add-account-form', 'add-account-error');
+    <?php foreach ($accounts as $acc): ?>
+    handleAccountForm('edit-account-form-<?= (int)$acc['id'] ?>', 'edit-account-error-<?= (int)$acc['id'] ?>');
+    <?php endforeach; ?>
 })();
 </script>
