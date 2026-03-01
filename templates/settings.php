@@ -387,18 +387,14 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                         </div>
                     </div>
                     <div style="margin-left:1rem">
-                        <?php if (!$isCurrent): ?>
-                        <form method="post" action="?action=settings_save&tab=revoke_session" onsubmit="return confirm('Revoke this session?')">
+                        <form method="post" action="?action=settings_save&tab=revoke_session" onsubmit="return confirm('<?= $isCurrent ? 'Revoke your current session and sign out?' : 'Revoke this session?' ?>')">
                             <?= csrfInput() ?>
                             <input type="hidden" name="token" value="<?= htmlspecialchars($s['token']) ?>">
-                            <button class="btn btn-outline btn-xs text-danger" style="display:inline-flex;align-items:center;gap:.25rem" title="Revoke session">
+                            <button class="btn btn-outline btn-xs text-danger" style="display:inline-flex;align-items:center;gap:.25rem" title="<?= $isCurrent ? 'Logout and delete session' : 'Revoke and delete session' ?>">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                                Revoke
+                                <?= $isCurrent ? 'Logout' : 'Revoke' ?>
                             </button>
                         </form>
-                        <?php else: ?>
-                        <span style="font-size:.7rem;color:var(--wm-text-muted);font-style:italic">Active</span>
-                        <?php endif; ?>
                     </div>
                 </div>
                 <?php endforeach; ?>
@@ -416,10 +412,12 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
         <?php elseif ($tab === 'accounts'): ?>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
             <h2 style="margin:0;font-size:1.1rem">Connected Accounts</h2>
-            <a href="?action=settings&tab=accounts&add=1" class="btn btn-primary btn-sm">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Add account
-            </a>
+            <div style="display:flex;gap:.5rem">
+                <a href="?action=settings&tab=accounts&add=1" class="btn btn-primary btn-sm">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add account
+                </a>
+            </div>
         </div>
 
         <?php if (!empty($_GET['add'])): ?>
@@ -464,12 +462,14 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                             <div><label>Port</label><input type="number" name="smtp_port" class="form-control" data-smtp-port value="587"></div>
                         </div>
                         <div style="display:flex;gap:1.5rem;margin-top:.5rem">
-                            <label><input type="checkbox" name="smtp_ssl" value="1" data-smtp-ssl> SSL</label>
-                            <label><input type="checkbox" name="smtp_starttls" value="1" data-smtp-starttls checked> STARTTLS</label>
+                            <label><input type="checkbox" name="smtp_ssl" value="1" data-smtp-ssl checked> SSL</label>
+                            <label><input type="checkbox" name="smtp_starttls" value="1" data-smtp-starttls> STARTTLS</label>
                         </div>
                     </fieldset>
-                    <button class="btn btn-primary btn-sm">Add account</button>
-                    <a href="?action=settings&tab=accounts" class="btn btn-outline btn-sm">Cancel</a>
+                    <div style="display:flex;gap:.5rem;margin-top:1rem">
+                        <button class="btn btn-primary btn-sm">Add account</button>
+                        <a href="?action=settings&tab=accounts" class="btn btn-outline btn-sm">Cancel</a>
+                    </div>
                 </form>
             </div>
         </div>
@@ -490,6 +490,18 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                         <?= htmlspecialchars($acc['email']) ?>
                     </span>
                     <?php endif; ?>
+                    <?php
+                    $vStatus = $acc['validation_status'] ?? 'pending';
+                    $vColor = 'var(--wm-text-muted)';
+                    $vLabel = 'Pending';
+                    if ($vStatus === 'valid') { $vColor = 'var(--wm-success)'; $vLabel = 'Valid'; }
+                    elseif ($vStatus === 'invalid') { $vColor = 'var(--wm-danger)'; $vLabel = 'Invalid'; }
+                    elseif ($vStatus === 'checking') { $vColor = 'var(--wm-primary)'; $vLabel = 'Checking...'; }
+                    ?>
+                    <span class="account-validation-status" data-account-id="<?= (int)$acc['id'] ?>" 
+                          style="font-size:.65rem;font-weight:700;color:<?= $vColor ?>;margin-left:.5rem;padding:.1rem .35rem;border-radius:4px;background:<?= $vColor ?>20;text-transform:uppercase">
+                        <?= $vLabel ?>
+                    </span>
                 </span>
                 <span style="display:flex;gap:.25rem">
                     <a href="?action=settings&tab=accounts<?= $isEditing ? '' : '&edit_account=' . (int)$acc['id'] ?>"
@@ -558,8 +570,10 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                             <label><input type="checkbox" name="smtp_starttls" value="1" data-smtp-starttls <?= $acc['smtp_starttls'] ? 'checked' : '' ?>> STARTTLS</label>
                         </div>
                     </fieldset>
-                    <button class="btn btn-primary btn-sm">Save changes</button>
-                    <a href="?action=settings&tab=accounts" class="btn btn-outline btn-sm">Cancel</a>
+                    <div style="display:flex;gap:.5rem;margin-top:1rem">
+                        <button class="btn btn-primary btn-sm">Save changes</button>
+                        <a href="?action=settings&tab=accounts" class="btn btn-outline btn-sm">Cancel</a>
+                    </div>
                 </form>
                 <?php else: ?>
                 <div style="font-size:.82rem;color:var(--wm-text-muted);display:flex;flex-wrap:wrap;gap:.25rem 1.5rem">
