@@ -31,6 +31,26 @@ $signature = $signature ?? '';
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             Send
         </button>
+        <div style="position:relative;margin-left:.5rem">
+            <button type="button" id="msg-options-btn" class="btn btn-ghost btn-sm" title="Message options">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                Options
+            </button>
+            <div id="msg-options-menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:8px;min-width:220px;box-shadow:var(--wm-shadow);z-index:300;padding:.75rem">
+                <div style="margin-bottom:.75rem">
+                    <label style="display:block;font-size:.75rem;font-weight:600;margin-bottom:.35rem;color:var(--wm-text-muted)">Priority</label>
+                    <select name="priority" form="compose-form" class="form-control" style="font-size:.82rem;height:32px">
+                        <option value="normal">Normal</option>
+                        <option value="high">High</option>
+                        <option value="low">Low</option>
+                    </select>
+                </div>
+                <div style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+                    <input type="checkbox" name="request_read_receipt" form="compose-form" id="req-receipt" value="1" style="width:14px;height:14px">
+                    <label for="req-receipt" style="font-size:.82rem;cursor:pointer">Request read receipt</label>
+                </div>
+            </div>
+        </div>
     </div>
 
     <form id="compose-form" method="post" action="?action=send" enctype="multipart/form-data" style="display:contents">
@@ -515,6 +535,8 @@ $signature = $signature ?? '';
 
     // Require "to" field only when actually sending (not saving draft)
     var toField = document.getElementById('to');
+    var subjectField = document.getElementById('subject');
+    
     form.addEventListener('submit', function(e) {
         // Sync source editor back to visual editor if in source mode
         var sourceEditor = document.getElementById('source-editor');
@@ -523,10 +545,42 @@ $signature = $signature ?? '';
         }
         hidden.value = editorEl.innerHTML;
         var isSaveDraft = (e.submitter && e.submitter.name === 'save_draft');
+        
+        if (!isSaveDraft) {
+            if (toField && !toField.value.trim()) {
+                toField.required = true;
+                return;
+            }
+            if (subjectField && !subjectField.value.trim()) {
+                if (!confirm('Send this message without a subject?')) {
+                    e.preventDefault();
+                    subjectField.focus();
+                    return;
+                }
+            }
+        }
+        
         if (toField) {
             toField.required = !isSaveDraft;
         }
     });
+
+    // Message options toggle
+    (function() {
+        var optBtn = document.getElementById('msg-options-btn');
+        var optMenu = document.getElementById('msg-options-menu');
+        if (!optBtn || !optMenu) return;
+        optBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            optMenu.style.display = optMenu.style.display === 'none' ? 'block' : 'none';
+        });
+        document.addEventListener('click', function() {
+            optMenu.style.display = 'none';
+        });
+        optMenu.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+    })();
 
     // HTML source editor toggle
     (function() {

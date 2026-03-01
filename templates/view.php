@@ -84,10 +84,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
     <div style="flex:1">
         The sender has requested a read receipt.
     </div>
-    <form method="post" action="?action=send_read_receipt&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" style="display:inline">
-        <?= csrfInput() ?>
-        <button type="submit" class="btn btn-primary btn-sm">Send Receipt</button>
-    </form>
+    <a href="?action=compose&reply=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-primary btn-sm">Send a reply</a>
 </div>
 <?php endif; ?>
 
@@ -139,11 +136,9 @@ $isInbox   = strtoupper($folder) === 'INBOX';
         <div class="wm-attachments-header">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
             <span>Attachments (<?= count($message['attachments']) ?>)</span>
-            <?php if (count($message['attachments']) > 1): ?>
             <a href="?action=download_all&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" class="btn btn-ghost btn-xs" title="Download all as ZIP">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </a>
-            <?php endif; ?>
         </div>
         <div class="wm-attachments-list">
             <?php foreach ($message['attachments'] as $att): ?>
