@@ -478,6 +478,19 @@ if ($action === 'delete_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('?action=inbox');
 }
 
+if ($action === 'empty_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $folder = $_POST['folder'] ?? $currentFolder;
+    try {
+        $imap = $accountMgr->imapConnect($accountId);
+        $imap->emptyFolder($folder);
+        $imap->disconnect();
+        flashSet('success', 'Folder "' . htmlspecialchars($folder) . '" emptied.');
+    } catch (RuntimeException $e) {
+        flashSet('danger', 'Could not empty folder: ' . $e->getMessage());
+    }
+    redirect('?action=inbox&folder=' . urlencode($folder));
+}
+
 // ── Contacts ──────────────────────────────────────────────────────────────────
 if ($action === 'contacts_list' && isAjax()) {
     $contactMgr = new Contact($userId);
@@ -542,9 +555,15 @@ if ($action === 'inbox' || $action === 'search') {
     $page    = max(1, (int) ($_GET['page'] ?? 1));
     $mailData = [];
 
+    $imap = null;
+    $isTrash = false;
+    $isSpam = false;
     try {
         $imap = $accountMgr->imapConnect($accountId);
         $mailData = $imap->getMessages($currentFolder, $page);
+        $trash = resolveTrashFolder($imap);
+        $isTrash = isTrashFolderEquivalent($currentFolder, $trash);
+        $isSpam = in_array(strtoupper($currentFolder), ['SPAM', 'JUNK', 'JUNK E-MAIL'], true);
         $imap->disconnect();
     } catch (RuntimeException $e) {
         $flash = ['type' => 'danger', 'message' => 'IMAP error: ' . $e->getMessage()];
@@ -553,7 +572,9 @@ if ($action === 'inbox' || $action === 'search') {
     render('inbox', $layoutCommon + [
         'mailData'     => $mailData,
         'folder'       => $currentFolder,
-        'pageTitle'    => pageTitle($imap->getFriendlyName($currentFolder)),
+        'isTrash'      => $isTrash,
+        'isSpam'       => $isSpam,
+        'pageTitle'    => pageTitle($imap ? $imap->getFriendlyName($currentFolder) : $currentFolder),
     ]);
     exit;
 }
@@ -562,10 +583,13 @@ if ($action === 'inbox' || $action === 'search') {
 if ($action === 'view') {
     $msgNo  = (int) ($_GET['msg'] ?? 0);
     $message = null;
+    $isTrash = false;
 
     try {
         $imap    = $accountMgr->imapConnect($accountId);
         $message = $imap->getMessage($currentFolder, $msgNo);
+        $trash   = resolveTrashFolder($imap);
+        $isTrash = isTrashFolderEquivalent($currentFolder, $trash);
         $imap->disconnect();
     } catch (RuntimeException $e) {
         flashSet('danger', 'Could not load message: ' . $e->getMessage());
@@ -585,6 +609,7 @@ if ($action === 'view') {
     render('view', $layoutCommon + [
         'message'     => $message,
         'folder'      => $currentFolder,
+        'isTrash'     => $isTrash,
         'hasExternal' => $hasExternal,
         'pageTitle'   => pageTitle($message['subject'] ?? 'View message'),
     ]);
@@ -632,6 +657,26 @@ if ($action === 'email_body') {
             $doc->loadHTML('<?xml encoding="UTF-8"><html><body>' . $html . '</body></html>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
         }
         libxml_clear_errors();
+
+        // Remove dangerous tags
+        $dangerousTags = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'style', 'applet', 'frameset', 'frame', 'video', 'audio', 'canvas'];
+        foreach ($dangerousTags as $tag) {
+            $nodes = $doc->getElementsByTagName($tag);
+            while ($nodes->length > 0) {
+                $node = $nodes->item(0);
+                $node->parentNode->removeChild($node);
+            }
+        }
+
+        // Remove event handlers and other dangerous attributes
+        $xpath = new DOMXPath($doc);
+        $nodes = $xpath->query('//@*');
+        foreach ($nodes as $attr) {
+            $name = strtolower($attr->nodeName);
+            if (str_starts_with($name, 'on') || in_array($name, ['formaction', 'form'], true)) {
+                $attr->parentNode->removeAttribute($attr->nodeName);
+            }
+        }
 
         // Sanitize links
         foreach ($doc->getElementsByTagName('a') as $a) {
@@ -1204,6 +1249,7 @@ if ($action === 'settings') {
         'totpSecret'    => $totpSecret,
         'recoveryCodes' => $recoveryCodes,
         'qrUrl'         => $qrUrl,
+        'sessions'      => (new Session())->getAllForUser($userId),
         'pageTitle'     => pageTitle('Settings'),
     ]);
     exit;
@@ -1282,6 +1328,14 @@ if ($action === 'settings_save') {
         case 'revoke_sessions':
             (new Session())->destroyAll($userId);
             redirect('?action=login');
+
+        case 'revoke_session':
+            $token = $_POST['token'] ?? '';
+            if ($token !== '') {
+                (new Session())->revoke($token, $userId);
+                flashSet('success', 'Session revoked.');
+            }
+            redirect('?action=settings&tab=security');
 
         case 'add_account':
             $mgr = new Account();
@@ -1372,6 +1426,29 @@ if ($action === 'fix_permissions' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         flashSet('warning', 'Some permissions could not be updated. Please check your server configuration.');
     }
     redirect('?action=settings&tab=system');
+}
+
+// ── View Recovery Codes ───────────────────────────────────────────────────────
+if ($action === 'view_recovery_codes' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $password = $_POST['password'] ?? '';
+    if ($password === '' && isAjax()) {
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $password = $body['password'] ?? '';
+    }
+
+    $accountMgr = new Account();
+    $primary = Database::getInstance()->fetch('SELECT id FROM accounts WHERE user_id = ? AND is_primary = 1', [$userId]);
+    if ($primary) {
+        $acc = $accountMgr->get((int)$primary['id']);
+        if ($acc && $acc['password_plain'] === $password) {
+            $user = Database::getInstance()->fetch('SELECT recovery_codes FROM users WHERE id = ?', [$userId]);
+            $encrypted = json_decode($user['recovery_codes'] ?? '[]', true);
+            $tf = new TwoFactor();
+            $codes = $tf->decryptRecoveryCodes($encrypted);
+            jsonResponse(['ok' => true, 'codes' => $codes]);
+        }
+    }
+    jsonResponse(['ok' => false, 'error' => 'Invalid password.']);
 }
 
 // ── Fallback ──────────────────────────────────────────────────────────────────
