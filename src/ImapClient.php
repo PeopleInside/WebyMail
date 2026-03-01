@@ -33,6 +33,14 @@ class ImapClient
         $this->host = $mailbox;
         $this->user = $username;
 
+        // Set shorter timeouts for validation
+        if (function_exists('imap_timeout')) {
+            imap_timeout(IMAP_OPENTIMEOUT, 15);
+            imap_timeout(IMAP_READTIMEOUT, 15);
+            imap_timeout(IMAP_WRITETIMEOUT, 15);
+            imap_timeout(IMAP_CLOSETIMEOUT, 15);
+        }
+
         // Suppress warnings; check result manually
         $conn = @imap_open($mailbox, $username, $password, 0, 1);
         if ($conn === false) {

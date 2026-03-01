@@ -95,7 +95,8 @@ class Database
                 username     TEXT    NOT NULL,
                 password     TEXT    NOT NULL,
                 is_primary   INTEGER NOT NULL DEFAULT 0,
-                created_at   INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+                created_at   INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                validation_status TEXT NOT NULL DEFAULT 'pending'
             );
 
             CREATE TABLE IF NOT EXISTS sessions (
@@ -129,6 +130,7 @@ class Database
         $this->ensureUsersColumnExists('theme', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'");
         $this->ensureAccountsColumnExists('sender_name', "ALTER TABLE accounts ADD COLUMN sender_name TEXT NOT NULL DEFAULT ''");
         $this->ensureAccountsColumnExists('signature', "ALTER TABLE accounts ADD COLUMN signature TEXT NOT NULL DEFAULT ''");
+        $this->ensureAccountsColumnExists('validation_status', "ALTER TABLE accounts ADD COLUMN validation_status TEXT NOT NULL DEFAULT 'pending'");
         $this->ensureContactsColumnExists('phone_enc', "ALTER TABLE contacts ADD COLUMN phone_enc TEXT");
         $this->ensureContactsColumnExists('address_enc', "ALTER TABLE contacts ADD COLUMN address_enc TEXT");
     }

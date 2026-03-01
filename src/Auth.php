@@ -67,8 +67,8 @@ class Auth
             $this->db->query(
                 'INSERT INTO accounts
                     (user_id, label, sender_name, signature, email, imap_host, imap_port, imap_ssl,
-                     smtp_host, smtp_port, smtp_ssl, smtp_starttls, username, password, is_primary)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
+                     smtp_host, smtp_port, smtp_ssl, smtp_starttls, username, password, is_primary, validation_status)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, "valid")',
                 [
                     $userId, 'Primary', $username, '',
                     $username,
@@ -84,7 +84,7 @@ class Auth
             $this->db->query(
                 'UPDATE accounts SET imap_host=?, imap_port=?, imap_ssl=?,
                     smtp_host=?, smtp_port=?, smtp_ssl=?, smtp_starttls=?,
-                    password=?, username=?
+                    password=?, username=?, validation_status="valid"
                  WHERE id=?',
                 [
                     $host, $port, (int) $ssl,
