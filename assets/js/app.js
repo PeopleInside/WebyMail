@@ -333,6 +333,34 @@ function initSmtpPortSync(container) {
 }
 
 /* =============================================================
+   Auto-refresh / New mail check
+   ============================================================= */
+function initAutoRefresh() {
+    const REFRESH_INTERVAL = 120000; // 2 minutes
+    let lastCheck = Date.now();
+
+    setInterval(() => {
+        // Only refresh if we are on the inbox/folder list and not currently interacting
+        const isInbox = window.location.search.includes('action=inbox') || window.location.search === '';
+        const isCompose = window.location.search.includes('action=compose');
+        
+        if (isInbox && !isCompose && !document.hidden) {
+            // Check if we have any open modals or active inputs
+            const hasModal = document.querySelector('.wm-modal[style*="display: flex"]') || 
+                           document.querySelector('.wm-modal[style*="display: block"]');
+            const activeEl = document.activeElement;
+            const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.contentEditable === 'true');
+
+            if (!hasModal && !isInput) {
+                // Subtle refresh: just reload the page to get new mail
+                // In a more advanced version, we could fetch just the list via AJAX
+                window.location.reload();
+            }
+        }
+    }, REFRESH_INTERVAL);
+}
+
+/* =============================================================
    Bootstrap
    ============================================================= */
 document.addEventListener('DOMContentLoaded', () => {
@@ -347,6 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initAlerts();
     initCopyButtons();
     initSmtpPortSync();
+    initAutoRefresh();
 });
 
 // Expose for inline use
