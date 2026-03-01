@@ -1376,7 +1376,7 @@ if ($action === 'settings_save') {
                 $smtpStarttls = false;
             }
             try {
-                $mgr->add($userId, [
+                $newId = $mgr->add($userId, [
                     'label'         => trim($_POST['label']      ?? ''),
                     'sender_name'   => trim($_POST['sender_name'] ?? ''),
                     'email'         => trim($_POST['email']      ?? ''),
@@ -1390,8 +1390,25 @@ if ($action === 'settings_save') {
                     'username'      => trim($_POST['username']   ?? ''),
                     'password'      => $_POST['password']        ?? '',
                 ]);
-                flashSet('success', 'Account added.');
+                $newAcc = $mgr->get($newId);
+                $isValid = ($newAcc['validation_status'] === 'valid');
+
+                if (isAjax()) {
+                    jsonResponse([
+                        'ok' => true, 
+                        'message' => $isValid ? 'Account added.' : 'Account added, but connection failed.',
+                        'isValid' => $isValid
+                    ]);
+                }
+                if ($isValid) {
+                    flashSet('success', 'Account added.');
+                } else {
+                    flashSet('warning', 'Account added, but IMAP/SMTP connection failed. Please check your settings.');
+                }
             } catch (Exception $e) {
+                if (isAjax()) {
+                    jsonResponse(['ok' => false, 'error' => $e->getMessage()]);
+                }
                 flashSet('danger', 'Failed to add account: ' . $e->getMessage());
             }
             redirect('?action=settings&tab=accounts');
@@ -1430,8 +1447,25 @@ if ($action === 'settings_save') {
             }
             try {
                 $mgr->update($editId, $userId, $updateData);
-                flashSet('success', 'Account updated.');
+                $updatedAcc = $mgr->get($editId);
+                $isValid = ($updatedAcc['validation_status'] === 'valid');
+
+                if (isAjax()) {
+                    jsonResponse([
+                        'ok' => true, 
+                        'message' => $isValid ? 'Account updated.' : 'Account updated, but connection failed.',
+                        'isValid' => $isValid
+                    ]);
+                }
+                if ($isValid) {
+                    flashSet('success', 'Account updated.');
+                } else {
+                    flashSet('warning', 'Account updated, but IMAP/SMTP connection failed. Please check your settings.');
+                }
             } catch (Exception $e) {
+                if (isAjax()) {
+                    jsonResponse(['ok' => false, 'error' => $e->getMessage()]);
+                }
                 flashSet('danger', 'Failed to update account: ' . $e->getMessage());
             }
             redirect('?action=settings&tab=accounts');
