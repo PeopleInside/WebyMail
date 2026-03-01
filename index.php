@@ -1332,8 +1332,15 @@ if ($action === 'settings_save') {
         case 'revoke_session':
             $token = $_POST['token'] ?? '';
             if ($token !== '') {
-                (new Session())->revoke($token, $userId);
-                flashSet('success', 'Session revoked.');
+                $sessionObj = new Session();
+                $current = $sessionObj->current();
+                if ($current && $current['token'] === $token) {
+                    $sessionObj->destroy();
+                    redirect('?action=login');
+                } else {
+                    $sessionObj->revoke($token, $userId);
+                    flashSet('success', 'Session revoked.');
+                }
             }
             redirect('?action=settings&tab=security');
 
@@ -1344,21 +1351,25 @@ if ($action === 'settings_save') {
             if ($smtpSsl) {
                 $smtpStarttls = false;
             }
-            $mgr->add($userId, [
-                'label'         => trim($_POST['label']      ?? ''),
-                'sender_name'   => trim($_POST['sender_name'] ?? ''),
-                'email'         => trim($_POST['email']      ?? ''),
-                'imap_host'     => trim($_POST['imap_host']  ?? ''),
-                'imap_port'     => (int) ($_POST['imap_port'] ?? 993),
-                'imap_ssl'      => !empty($_POST['imap_ssl']),
-                'smtp_host'     => trim($_POST['smtp_host']  ?? ''),
-                'smtp_port'     => (int) ($_POST['smtp_port'] ?? 587),
-                'smtp_ssl'      => $smtpSsl,
-                'smtp_starttls' => $smtpStarttls,
-                'username'      => trim($_POST['username']   ?? ''),
-                'password'      => $_POST['password']        ?? '',
-            ]);
-            flashSet('success', 'Account added.');
+            try {
+                $mgr->add($userId, [
+                    'label'         => trim($_POST['label']      ?? ''),
+                    'sender_name'   => trim($_POST['sender_name'] ?? ''),
+                    'email'         => trim($_POST['email']      ?? ''),
+                    'imap_host'     => trim($_POST['imap_host']  ?? ''),
+                    'imap_port'     => (int) ($_POST['imap_port'] ?? 993),
+                    'imap_ssl'      => !empty($_POST['imap_ssl']),
+                    'smtp_host'     => trim($_POST['smtp_host']  ?? ''),
+                    'smtp_port'     => (int) ($_POST['smtp_port'] ?? 587),
+                    'smtp_ssl'      => $smtpSsl,
+                    'smtp_starttls' => $smtpStarttls,
+                    'username'      => trim($_POST['username']   ?? ''),
+                    'password'      => $_POST['password']        ?? '',
+                ]);
+                flashSet('success', 'Account added.');
+            } catch (Exception $e) {
+                flashSet('danger', 'Failed to add account: ' . $e->getMessage());
+            }
             redirect('?action=settings&tab=accounts');
 
         case 'edit_account':
@@ -1393,8 +1404,12 @@ if ($action === 'settings_save') {
             if ($newPassword !== '') {
                 $updateData['password'] = $newPassword;
             }
-            $mgr->update($editId, $userId, $updateData);
-            flashSet('success', 'Account updated.');
+            try {
+                $mgr->update($editId, $userId, $updateData);
+                flashSet('success', 'Account updated.');
+            } catch (Exception $e) {
+                flashSet('danger', 'Failed to update account: ' . $e->getMessage());
+            }
             redirect('?action=settings&tab=accounts');
 
         case 'delete_account':
@@ -1449,6 +1464,46 @@ if ($action === 'view_recovery_codes' && $_SERVER['REQUEST_METHOD'] === 'POST') 
         }
     }
     jsonResponse(['ok' => false, 'error' => 'Invalid password.']);
+}
+
+// ── Check account credentials ─────────────────────────────────────────────────
+if ($action === 'check_account_credentials' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $accountId = (int) ($_POST['accountId'] ?? 0);
+    if ($accountId === 0 && isAjax()) {
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $accountId = (int) ($body['accountId'] ?? 0);
+    }
+
+    if ($accountId === 0) {
+        jsonResponse(['ok' => false, 'error' => 'Invalid account ID.']);
+    }
+
+    $accountMgr = new Account();
+    $status = $accountMgr->checkCredentials($accountId, $userId);
+    jsonResponse(['ok' => true, 'status' => $status]);
+}
+
+// ── Test account credentials (without saving) ──────────────────────────────────
+if ($action === 'test_credentials' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $body = json_decode(file_get_contents('php://input'), true) ?? $_POST;
+    
+    $accountMgr = new Account();
+    try {
+        $accountMgr->validateCredentials([
+            'imap_host'     => trim($body['imap_host']     ?? ''),
+            'imap_port'     => (int)($body['imap_port']    ?? 993),
+            'imap_ssl'      => !empty($body['imap_ssl']),
+            'smtp_host'     => trim($body['smtp_host']     ?? ''),
+            'smtp_port'     => (int)($body['smtp_port']    ?? 587),
+            'smtp_ssl'      => !empty($body['smtp_ssl']),
+            'smtp_starttls' => !empty($body['smtp_starttls']),
+            'username'      => trim($body['username']      ?? ''),
+            'password'      => $body['password']           ?? '',
+        ]);
+        jsonResponse(['ok' => true, 'message' => 'Connection successful!']);
+    } catch (Exception $e) {
+        jsonResponse(['ok' => false, 'error' => $e->getMessage()]);
+    }
 }
 
 // ── Fallback ──────────────────────────────────────────────────────────────────
