@@ -86,17 +86,16 @@
         </button>
 
         <!-- Search -->
-        <div class="input-group" style="max-width:400px;flex:1">
+        <div class="wm-topbar-search">
             <form method="get" action="" style="display:contents">
                 <input type="hidden" name="action" value="search">
-                <input type="text" name="q" class="form-control" placeholder="Search mail…"
-                       value="<?= htmlspecialchars($_GET['q'] ?? '') ?>"
-                       style="border-radius:6px 0 0 6px;height:32px;font-size:.82rem">
-                <button type="submit" class="btn btn-primary" style="border-radius:0 6px 6px 0;height:32px;padding:.2rem .75rem">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <div class="search-input-wrapper">
+                    <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                     </svg>
-                </button>
+                    <input type="text" name="q" class="form-control" placeholder="Search mail…"
+                           value="<?= htmlspecialchars($_GET['q'] ?? '') ?>">
+                </div>
             </form>
         </div>
 
