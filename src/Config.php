@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '2.0';
+    public const VERSION = '2.1';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
