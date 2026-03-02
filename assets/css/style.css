@@ -1036,6 +1036,52 @@ input:autofill {
 .wm-pagination span.current   { background: var(--wm-primary); color: var(--wm-primary-text); border-color: var(--wm-primary); }
 .wm-pagination span.disabled  { opacity: .4; pointer-events: none; }
 
+.md-hide { display: none !important; }
+
+.wm-topbar-search {
+    max-width: 400px;
+    flex: 1;
+    display: flex;
+    align-items: center;
+}
+.wm-topbar-search .search-input-wrapper {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+}
+.wm-topbar-search .search-icon {
+    position: absolute;
+    left: 10px;
+    color: rgba(255,255,255,.4);
+    pointer-events: none;
+    z-index: 2;
+}
+.wm-topbar-search .form-control {
+    height: 32px;
+    font-size: .85rem;
+    border-radius: 8px;
+    background: rgba(255,255,255,.1);
+    border: 1px solid rgba(255,255,255,.15);
+    color: #fff;
+    padding-left: 32px;
+    width: 100%;
+}
+.wm-topbar-search .form-control:focus {
+    background: rgba(255,255,255,.15);
+    border-color: var(--wm-primary);
+}
+.wm-topbar-search .form-control::placeholder {
+    color: rgba(255,255,255,.4);
+}
+
+@media (max-width: 1024px) {
+    .wm-topbar-search { max-width: 280px; }
+}
+@media (max-width: 900px) {
+    .wm-topbar-search { max-width: 200px; }
+}
+
 /* ----------------------------------------------------------
    18. Responsive
    ---------------------------------------------------------- */
@@ -1072,19 +1118,34 @@ input:autofill {
     }
 
     .wm-topbar .brand { font-size: 1rem; }
-    .wm-topbar .input-group { 
+    
+    .wm-topbar-search {
         position: absolute;
         top: 52px;
         left: 0;
         right: 0;
         background: var(--wm-sidebar-bg);
-        padding: .5rem 1rem;
+        padding: .6rem 1rem;
         display: none;
         z-index: 50;
         max-width: none !important;
         border-bottom: 1px solid rgba(255,255,255,.1);
+        flex: 1;
     }
-    .wm-topbar .input-group.show-mobile { display: flex; }
+    .wm-topbar-search.show-mobile { display: flex !important; }
+    .wm-topbar-search .form-control {
+        height: 36px;
+        font-size: .9rem;
+        background: rgba(255,255,255,.1);
+        border-color: rgba(255,255,255,.2);
+        color: #fff;
+        padding-left: 36px;
+    }
+    .wm-topbar-search .search-icon {
+        left: 12px;
+        width: 16px;
+        height: 16px;
+    }
     
     .wm-settings-grid { 
         grid-template-columns: 1fr; 

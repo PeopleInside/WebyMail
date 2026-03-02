@@ -125,7 +125,7 @@ function initSidebar() {
    ============================================================= */
 function initMobileSearch() {
     const searchBtn = document.getElementById('mobile-search-toggle');
-    const searchGroup = document.querySelector('.wm-topbar .input-group');
+    const searchGroup = document.querySelector('.wm-topbar .wm-topbar-search');
     if (!searchBtn || !searchGroup) return;
 
     searchBtn.addEventListener('click', (e) => {
