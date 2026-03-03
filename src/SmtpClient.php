@@ -253,7 +253,6 @@ class SmtpClient
 
     private function sanitizeHeader(string $value): string
     {
-        $value = preg_replace('/(%0d|%0a)/i', '', $value);
         return preg_replace('/[\r\n\p{C}]/u', '', $value);
     }
 
