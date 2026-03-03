@@ -214,7 +214,30 @@
             </div>
         </form>
         <div style="padding:1.5rem .75rem 1rem;font-size:.78rem;color:var(--wm-text-muted);border-top:1px solid rgba(255,255,255,.1)">
-            WebyMail v<?= Config::VERSION ?>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+                <span>WebyMail v<?= Config::VERSION ?></span>
+                <?php 
+                $suggestions = Config::getSecuritySuggestions();
+                if (!empty($suggestions)): 
+                ?>
+                <div style="position:relative;display:inline-block">
+                    <button type="button" id="security-suggestions-btn" class="btn btn-icon btn-xs" 
+                            style="background:var(--wm-warning);color:#000;border-radius:6px;width:22px;height:22px;padding:0;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 4px rgba(0,0,0,0.1)"
+                            title="Security Suggestions Available">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    </button>
+                    <div id="security-suggestions-popover" style="display:none;position:absolute;bottom:100%;right:0;background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:8px;box-shadow:var(--wm-shadow);width:220px;z-index:1000;padding:.75rem;margin-bottom:.75rem">
+                        <div style="font-weight:600;font-size:.7rem;margin-bottom:.6rem;text-transform:uppercase;color:var(--wm-text-muted);letter-spacing:.03em">Security Suggestions</div>
+                        <?php foreach ($suggestions as $s): ?>
+                        <a href="<?= $s['url'] ?>" style="display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;font-size:.78rem;color:var(--wm-warning);text-decoration:none;border-radius:6px;background:rgba(var(--wm-warning-rgb),.08);margin-bottom:.4rem;border:1px solid rgba(var(--wm-warning-rgb),.15);transition:background .2s">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                            <?= htmlspecialchars($s['label']) ?>
+                        </a>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
+            </div>
             <?php if ($newVer = Config::getNewerVersion()): ?>
             <div style="margin-top:.5rem">
                 <a href="<?= Config::UPDATE_URL ?>" target="_blank" class="alert alert-info" style="display:block;padding:.4rem .6rem;font-size:.75rem;text-decoration:none;border-radius:4px;color:var(--wm-primary);border-color:var(--wm-primary);background:rgba(var(--wm-primary-rgb),.1)">
@@ -339,6 +362,22 @@ document.addEventListener('click', function() {
     });
     if (ctxMenu) {
         ctxMenu.addEventListener('click', function(e) { e.stopPropagation(); });
+    }
+
+    // Security suggestions popover
+    var suggestionsBtn = document.getElementById('security-suggestions-btn');
+    var suggestionsPopover = document.getElementById('security-suggestions-popover');
+    if (suggestionsBtn && suggestionsPopover) {
+        suggestionsBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            suggestionsPopover.style.display = suggestionsPopover.style.display === 'none' ? 'block' : 'none';
+        });
+        document.addEventListener('click', function() {
+            suggestionsPopover.style.display = 'none';
+        });
+        suggestionsPopover.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
     }
 
     // Rename action

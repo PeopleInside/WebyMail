@@ -697,9 +697,33 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                     <p style="font-size:.85rem;margin:0">
                         Your account is protected with an extra layer of security. This is excellent for your account protection.
                     </p>
+                    <?php if (Config::get('captcha_enabled', true)): ?>
+                    <div style="display:flex;align-items:center;gap:.5rem;color:var(--wm-success);font-weight:600;margin-top:.75rem;margin-bottom:.5rem">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        Login Protected: CAPTCHA Proof-of-Work is active
+                    </div>
+                    <p style="font-size:.85rem;margin:0">
+                        CAPTCHA Proof-of-Work is active and protecting your account from automated attacks.
+                    </p>
+                    <?php endif; ?>
                 </div>
             </div>
             <?php endif; ?>
+        <?php endif; ?>
+
+        <?php if (!Config::get('captcha_enabled', true)): ?>
+        <div class="wm-card" style="margin-bottom:1.5rem;border-left:4px solid var(--wm-danger)">
+            <div class="wm-card-header" style="color:var(--wm-danger)">Security Warning</div>
+            <div class="wm-card-body">
+                <p style="font-size:.85rem;margin-top:0">
+                    <strong>Captcha is disabled:</strong> The Proof-of-Work captcha is currently disabled in the configuration. 
+                    This makes the login page more vulnerable to automated brute-force attacks.
+                </p>
+                <p style="font-size:.82rem;color:var(--wm-text-muted);margin-bottom:0">
+                    It is highly recommended to enable <code>captcha_enabled</code> in your <code>config/config.php</code> file.
+                </p>
+            </div>
+        </div>
         <?php endif; ?>
 
         <div class="wm-card" style="margin-bottom:1.5rem">

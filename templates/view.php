@@ -218,95 +218,51 @@ $isInbox   = strtoupper($folder) === 'INBOX';
     // Shadow DOM Email Body logic
     var shadowHost = document.getElementById('email-body-shadow');
     if (shadowHost && <?php echo $hasHtml ? 'true' : 'false'; ?>) {
-        var shadowRoot = shadowHost.attachShadow({mode: 'open'});
-        
         function loadEmailBody(showImages) {
             var url = '?action=email_body&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&images=' + (showImages ? '1' : '0');
             
-            fetch(url)
-            .then(function(r) { return r.text(); })
-            .then(function(html) {
-                // Create a temporary document to parse the HTML
-                var parser = new DOMParser();
-                var doc = parser.parseFromString(html, 'text/html');
-                
-                // Clear shadow root
-                shadowRoot.innerHTML = '';
-                
-                // Inject styles for shadow root
-                var style = document.createElement('style');
-                style.textContent = `
-                    :host { display: block; background: #fff; color: #000; min-height: 200px; overflow-x: auto; }
-                    .email-content-wrapper { padding: 20px; word-break: break-word; }
-                    img { max-width: 100%; height: auto; }
-                    * { max-width: 100%; box-sizing: border-box; }
-                    
-                    /* Dark mode support for shadow DOM */
-                    :host-context([data-theme="dark"]) {
-                        background: #161b22;
-                        color: #e6edf3;
+            // Create iframe
+            var iframe = document.createElement('iframe');
+            iframe.id = 'email-frame';
+            iframe.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox allow-scripts');
+            iframe.setAttribute('frameborder', '0');
+            iframe.style.width = '100%';
+            iframe.style.height = '500px'; // Initial height
+            iframe.style.display = 'block';
+            iframe.style.background = 'transparent';
+            iframe.src = url;
+            
+            // Clear shadow host and append iframe
+            shadowHost.innerHTML = '';
+            shadowHost.appendChild(iframe);
+            
+            // Auto-resize iframe
+            iframe.onload = function() {
+                function resize() {
+                    if (iframe.contentWindow && iframe.contentWindow.document.body) {
+                        iframe.style.height = iframe.contentWindow.document.body.scrollHeight + 50 + 'px';
                     }
-                    :host-context([data-theme="dark"]) a { color: #58a6ff; }
-                    
-                    /* System dark mode support */
-                    @media (prefers-color-scheme: dark) {
-                        :host-context(html:not([data-theme="light"])) {
-                            background: #161b22;
-                            color: #e6edf3;
-                        }
-                        :host-context(html:not([data-theme="light"])) a { color: #58a6ff; }
-                    }
-                    
-                    /* Reset some common email styles that might break layout */
-                    body { margin: 0; padding: 0; }
-                `;
-                shadowRoot.appendChild(style);
-                
-                // Create content wrapper
-                var wrapper = document.createElement('div');
-                wrapper.className = 'email-content-wrapper';
-                
-                // If it's a full document, we take the body content
-                if (doc.body) {
-                    // Copy body attributes (like background color) if they exist
-                    if (doc.body.getAttribute('bgcolor')) wrapper.style.backgroundColor = doc.body.getAttribute('bgcolor');
-                    if (doc.body.getAttribute('text')) wrapper.style.color = doc.body.getAttribute('text');
-                    
-                    // Move all children from doc.body to our wrapper
-                    while (doc.body.firstChild) {
-                        wrapper.appendChild(doc.body.firstChild);
-                    }
-                } else {
-                    wrapper.innerHTML = html;
                 }
-                
-                shadowRoot.appendChild(wrapper);
-                
-                // Handle theme changes
-                function syncTheme() {
-                    var theme = document.documentElement.getAttribute('data-theme') || 'light';
-                    if (theme === 'system') {
-                        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-                    }
-                    // We use :host-context in CSS, but we can also manually adjust if needed
+                resize();
+                syncTheme(); // Initial theme sync after load
+                // Some emails load images or have dynamic content that changes height
+                setTimeout(resize, 500);
+                setTimeout(resize, 2000);
+            };
+
+            // Listen for theme changes and forward to iframe
+            function syncTheme() {
+                var theme = document.documentElement.getAttribute('data-theme') || 'system';
+                if (theme === 'system') {
+                    theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
                 }
-                
-                // Initial sync
-                syncTheme();
-                
-                // Listen for theme changes from parent
-                window.addEventListener('storage', function(e) {
-                    if (e.key === 'wm_theme') syncTheme();
-                });
-                
-                // Also listen for the custom event if your ThemeManager uses one
-                // (ThemeManager in app.js doesn't dispatch an event, but we can observe the html attribute)
-                var observer = new MutationObserver(syncTheme);
-                observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-            })
-            .catch(function(err) {
-                shadowRoot.innerHTML = '<div style="padding:20px;color:red">Failed to load email content.</div>';
-            });
+                if (iframe.contentWindow) {
+                    iframe.contentWindow.postMessage({ type: 'wm-theme-change', theme: theme }, '*');
+                }
+            }
+            
+            var observer = new MutationObserver(syncTheme);
+            observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
         }
 
         // Initial load
