@@ -137,7 +137,8 @@ class SmtpClient
      */
     public function buildRaw(string $from, array $msg): string
     {
-        $fromAddr = $this->sanitizeHeader($this->extractAddress($from));
+        $fromAddrRaw = $this->extractAddress($from);
+        $fromAddr = $this->sanitizeHeader($fromAddrRaw);
         $fromClean = $this->sanitizeHeader($from);
         $date     = date('r');
         $msgId    = '<' . bin2hex(random_bytes(16)) . '@webymail>';

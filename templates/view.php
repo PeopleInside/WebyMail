@@ -219,13 +219,13 @@ $isInbox   = strtoupper($folder) === 'INBOX';
     var shadowHost = document.getElementById('email-body-shadow');
     if (shadowHost && <?php echo $hasHtml ? 'true' : 'false'; ?>) {
         var iframe = document.createElement('iframe');
-        // Keep sandbox strict (scripts remain blocked; same-origin only for accessibility/reading)
-        iframe.setAttribute('sandbox', 'allow-same-origin');
+        // Keep sandbox strict (scripts remain blocked; do not loosen allow-same-origin to keep isolation)
+        iframe.setAttribute('sandbox', '');
         iframe.setAttribute('referrerpolicy', 'no-referrer');
         iframe.setAttribute('title', 'Email content');
         iframe.style.width = '100%';
-        // Minimum height avoids layout jump while content loads
-        iframe.style.minHeight = '200px';
+        var minIframeHeight = '200px'; // avoids layout jump while content loads
+        iframe.style.minHeight = minIframeHeight;
         iframe.style.border = '0';
         shadowHost.innerHTML = '';
         shadowHost.appendChild(iframe);
