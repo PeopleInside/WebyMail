@@ -253,7 +253,8 @@ class SmtpClient
 
     private function sanitizeHeader(string $value): string
     {
-        return preg_replace('/(%0d|%0a)|[\r\n\p{C}]/iu', '', $value);
+        $value = preg_replace('/(%0d|%0a)/i', '', $value);
+        return preg_replace('/[\r\n\p{C}]/u', '', $value);
     }
 
     private function extractAddress(string $str): string
