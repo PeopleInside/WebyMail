@@ -237,6 +237,8 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                 var style = document.createElement('style');
                 style.textContent = `
                     :host { display: block; background: #fff; color: #000; min-height: 200px; overflow-x: auto; }
+                    :host([data-theme="dark"]) { background: #161b22; color: #e6edf3; }
+                    :host([data-theme="dark"]) a { color: #58a6ff; }
                     .email-content-wrapper { padding: 20px; word-break: break-word; }
                     img { max-width: 100%; height: auto; }
                     * { max-width: 100%; box-sizing: border-box; }
@@ -284,11 +286,11 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                 
                 // Handle theme changes
                 function syncTheme() {
-                    var theme = document.documentElement.getAttribute('data-theme') || 'light';
+                    var theme = document.documentElement.getAttribute('data-theme') || 'system';
                     if (theme === 'system') {
                         theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
                     }
-                    // We use :host-context in CSS, but we can also manually adjust if needed
+                    shadowHost.setAttribute('data-theme', theme);
                 }
                 
                 // Initial sync
@@ -298,11 +300,22 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                 window.addEventListener('storage', function(e) {
                     if (e.key === 'wm_theme') syncTheme();
                 });
+                document.addEventListener('wm-theme-change', syncTheme);
                 
                 // Also listen for the custom event if your ThemeManager uses one
                 // (ThemeManager in app.js doesn't dispatch an event, but we can observe the html attribute)
                 var observer = new MutationObserver(syncTheme);
                 observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+                // Ensure links open in a new tab even inside shadow DOM
+                shadowRoot.addEventListener('click', function(e) {
+                    var anchor = e.target.closest ? e.target.closest('a[href]') : null;
+                    if (!anchor) return;
+                    var href = anchor.getAttribute('href');
+                    if (!href || href === '#') return;
+                    e.preventDefault();
+                    window.open(anchor.href, '_blank', 'noopener');
+                });
             })
             .catch(function(err) {
                 shadowRoot.innerHTML = '<div style="padding:20px;color:red">Failed to load email content.</div>';

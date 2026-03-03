@@ -44,6 +44,9 @@ const ThemeManager = (() => {
         if (frame && frame.contentWindow) {
             frame.contentWindow.postMessage({ type: 'wm-theme-change', theme: themeToApply }, '*');
         }
+
+        // Notify inline/shadow viewers
+        document.dispatchEvent(new CustomEvent('wm-theme-change', { detail: { theme: themeToApply } }));
     }
 
     function cycle() {
