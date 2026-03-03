@@ -296,24 +296,17 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                 // Initial sync
                 syncTheme();
                 
-                // Listen for theme changes from parent
-                window.addEventListener('storage', function(e) {
+                var handleStorage = function(e) {
                     if (e.key === 'wm_theme') syncTheme();
-                });
+                };
+                // Listen for theme changes from parent
+                window.addEventListener('storage', handleStorage);
                 document.addEventListener('wm-theme-change', syncTheme);
                 
                 var observer = new MutationObserver(syncTheme);
                 observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-                var disconnectObserver = function() {
-                    observer.disconnect();
-                    window.removeEventListener('beforeunload', disconnectObserver);
-                    window.removeEventListener('pagehide', disconnectObserver);
-                };
-                window.addEventListener('beforeunload', disconnectObserver);
-                window.addEventListener('pagehide', disconnectObserver);
-
-                // Ensure links open in a new tab even inside shadow DOM
-                shadowRoot.addEventListener('click', function(e) {
+                
+                var shadowClickHandler = function(e) {
                     var anchor = e.target.closest('a[href]');
                     if (!anchor) return;
                     var anchorHref = anchor.href;
@@ -322,7 +315,19 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                     if (!isHttp) return;
                     e.preventDefault();
                     window.open(anchorHref, '_blank', 'noopener,noreferrer');
-                });
+                };
+                shadowRoot.addEventListener('click', shadowClickHandler);
+
+                var cleanup = function() {
+                    window.removeEventListener('storage', handleStorage);
+                    document.removeEventListener('wm-theme-change', syncTheme);
+                    shadowRoot.removeEventListener('click', shadowClickHandler);
+                    observer.disconnect();
+                    window.removeEventListener('beforeunload', cleanup);
+                    window.removeEventListener('pagehide', cleanup);
+                };
+                window.addEventListener('beforeunload', cleanup);
+                window.addEventListener('pagehide', cleanup);
             })
             .catch(function(err) {
                 shadowRoot.innerHTML = '<div style="padding:20px;color:red">Failed to load email content.</div>';
