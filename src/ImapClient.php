@@ -25,9 +25,9 @@ class ImapClient
 
         $flags = '/imap';
         if ($ssl) {
-            $flags .= '/ssl';
+            $flags .= '/ssl/validate-cert';
         }
-        $flags .= '/norsh/novalidate-cert';
+        $flags .= '/norsh';
 
         $mailbox = '{' . $host . ':' . $port . $flags . '}';
         $this->host = $mailbox;

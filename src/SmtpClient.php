@@ -55,8 +55,9 @@ class SmtpClient
         $proto  = $ssl ? 'ssl' : 'tcp';
         $ctx    = stream_context_create([
             'ssl' => [
-                'verify_peer'      => false,
-                'verify_peer_name' => false,
+                'verify_peer'      => true,
+                'verify_peer_name' => true,
+                'allow_self_signed' => false,
             ],
         ]);
         $this->socket = @stream_socket_client(
@@ -136,26 +137,31 @@ class SmtpClient
      */
     public function buildRaw(string $from, array $msg): string
     {
+        $from     = $this->sanitizeHeader($from);
         $date     = date('r');
         $msgId    = '<' . bin2hex(random_bytes(16)) . '@webymail>';
         $fromFmt  = $msg['from_name']
             ? '=?UTF-8?B?' . base64_encode($msg['from_name']) . '?= <' . $this->extractAddress($from) . '>'
             : $from;
+        $to       = $this->sanitizeHeader($msg['to'] ?? '');
+        $cc       = $this->sanitizeHeader($msg['cc'] ?? '');
+        $replyTo  = $this->sanitizeHeader($msg['reply_to'] ?? '');
+        $inReplyTo = $this->sanitizeHeader($msg['in_reply_to'] ?? '');
 
         $headers  = "Date: {$date}\r\n";
         $headers .= "Message-ID: {$msgId}\r\n";
         $headers .= "From: {$fromFmt}\r\n";
-        $headers .= "To: {$msg['to']}\r\n";
-        if (!empty($msg['cc'])) {
-            $headers .= "Cc: {$msg['cc']}\r\n";
+        $headers .= "To: {$to}\r\n";
+        if ($cc !== '') {
+            $headers .= "Cc: {$cc}\r\n";
         }
         $headers .= "Subject: =?UTF-8?B?" . base64_encode($msg['subject']) . "?=\r\n";
-        if (!empty($msg['reply_to'])) {
-            $headers .= "Reply-To: {$msg['reply_to']}\r\n";
+        if ($replyTo !== '') {
+            $headers .= "Reply-To: {$replyTo}\r\n";
         }
-        if (!empty($msg['in_reply_to'])) {
-            $headers .= "In-Reply-To: {$msg['in_reply_to']}\r\n";
-            $headers .= "References: {$msg['in_reply_to']}\r\n";
+        if ($inReplyTo !== '') {
+            $headers .= "In-Reply-To: {$inReplyTo}\r\n";
+            $headers .= "References: {$inReplyTo}\r\n";
         }
         $headers .= "MIME-Version: 1.0\r\n";
 
@@ -230,7 +236,7 @@ class SmtpClient
 
     private function parseRecipients(array $msg): array
     {
-        $all   = ($msg['to'] ?? '') . ',' . ($msg['cc'] ?? '') . ',' . ($msg['bcc'] ?? '');
+        $all   = $this->sanitizeHeader(($msg['to'] ?? '') . ',' . ($msg['cc'] ?? '') . ',' . ($msg['bcc'] ?? ''));
         $addrs = [];
         foreach (explode(',', $all) as $raw) {
             $a = $this->extractAddress(trim($raw));
@@ -239,6 +245,11 @@ class SmtpClient
             }
         }
         return array_unique($addrs);
+    }
+
+    private function sanitizeHeader(string $value): string
+    {
+        return str_replace(["\r", "\n"], '', $value);
     }
 
     private function extractAddress(string $str): string
