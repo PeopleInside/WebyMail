@@ -251,6 +251,9 @@ class SmtpClient
         return array_unique($addrs);
     }
 
+    /**
+     * Strip CRLF and control characters to prevent header injection.
+     */
     private function sanitizeHeader(string $value): string
     {
         return preg_replace('/[\r\n\p{C}]/u', '', $value);

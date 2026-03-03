@@ -220,7 +220,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
     if (shadowHost && <?php echo $hasHtml ? 'true' : 'false'; ?>) {
         var iframe = document.createElement('iframe');
         // Keep sandbox strict (no scripts, forms, popups, or same-origin access) to isolate untrusted HTML from the app
-        iframe.setAttribute('sandbox', '');
+        iframe.setAttribute('sandbox', ''); // empty value = most restrictive sandbox
         iframe.setAttribute('referrerpolicy', 'no-referrer');
         iframe.setAttribute('title', 'Email content');
         iframe.style.width = '100%';
@@ -239,7 +239,12 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                 iframe.srcdoc = html;
             })
             .catch(function() {
-                shadowHost.innerHTML = '<div style="padding:20px;color:red">Failed to load email content.</div>';
+                shadowHost.innerHTML = '';
+                var errBox = document.createElement('div');
+                errBox.style.padding = '20px';
+                errBox.style.color = 'red';
+                errBox.textContent = 'Failed to load email content.';
+                shadowHost.appendChild(errBox);
             });
         }
 
