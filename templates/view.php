@@ -305,17 +305,18 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                 var observer = new MutationObserver(syncTheme);
                 observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
                 window.addEventListener('beforeunload', function() { observer.disconnect(); });
+                window.addEventListener('pagehide', function() { observer.disconnect(); });
 
                 // Ensure links open in a new tab even inside shadow DOM
                 shadowRoot.addEventListener('click', function(e) {
                     var anchor = e.target.closest('a[href]');
                     if (!anchor) return;
-                    var href = anchor.getAttribute('href');
-                    if (!href || href === '#') return;
-                    var isHttp = /^https?:/i.test(anchor.href);
+                    var anchorHref = anchor.href;
+                    if (!anchorHref || anchorHref === '#') return;
+                    var isHttp = /^https?:/i.test(anchorHref);
                     if (!isHttp) return;
                     e.preventDefault();
-                    window.open(anchor.href, '_blank', 'noopener,noreferrer');
+                    window.open(anchorHref, '_blank', 'noopener,noreferrer');
                 });
             })
             .catch(function(err) {
