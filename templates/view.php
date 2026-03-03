@@ -315,7 +315,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                         e.stopPropagation();
                         return;
                     }
-                    var isHttpProtocol = /^https?:/i.test(anchorHref);
+                    var isHttpProtocol = /^https:/i.test(anchorHref);
                     if (!isHttpProtocol) {
                         e.preventDefault();
                         e.stopPropagation();
@@ -334,6 +334,8 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                     document.removeEventListener('wm-theme-change', syncTheme);
                     shadowRoot.removeEventListener('click', shadowClickHandler);
                     observer.disconnect();
+                    window.removeEventListener('beforeunload', cleanup);
+                    window.removeEventListener('pagehide', cleanup);
                 };
                 window.addEventListener('beforeunload', cleanup, { once: true });
                 window.addEventListener('pagehide', cleanup, { once: true });
