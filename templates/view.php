@@ -224,8 +224,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
         iframe.setAttribute('referrerpolicy', 'no-referrer');
         iframe.setAttribute('title', 'Email content');
         iframe.style.width = '100%';
-        var minIframeHeight = '200px'; // avoids layout jump while content loads
-        iframe.style.minHeight = minIframeHeight;
+        iframe.style.minHeight = '200px'; // avoids layout jump while content loads
         iframe.style.border = '0';
         shadowHost.innerHTML = '';
         shadowHost.appendChild(iframe);

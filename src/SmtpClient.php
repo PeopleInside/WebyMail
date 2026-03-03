@@ -257,7 +257,7 @@ class SmtpClient
      */
     private function sanitizeHeader(string $value): string
     {
-        return preg_replace('/[\r\n\x00-\x08\x0B\x0C\x0E-\x1F\x7F\x{2028}\x{2029}]/u', '', $value);
+        return trim(preg_replace('/[\r\n\x00-\x08\x0B\x0C\x0E-\x1F\x7F\x{2028}\x{2029}]/u', '', $value));
     }
 
     private function extractAddress(string $str): string
