@@ -218,52 +218,59 @@ $isInbox   = strtoupper($folder) === 'INBOX';
     // Shadow DOM Email Body logic
     var shadowHost = document.getElementById('email-body-shadow');
     if (shadowHost && <?php echo $hasHtml ? 'true' : 'false'; ?>) {
+        // Use Shadow DOM for isolation without iframe scrollbars
+        var shadowRoot = shadowHost.shadowRoot || shadowHost.attachShadow({ mode: 'open' });
+        
         function loadEmailBody(showImages) {
             var url = '?action=email_body&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&images=' + (showImages ? '1' : '0');
             
-            // Create iframe
-            var iframe = document.createElement('iframe');
-            iframe.id = 'email-frame';
-            iframe.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox allow-scripts');
-            iframe.setAttribute('frameborder', '0');
-            iframe.style.width = '100%';
-            iframe.style.height = '500px'; // Initial height
-            iframe.style.display = 'block';
-            iframe.style.background = 'transparent';
-            iframe.src = url;
+            // Show loading state in the main DOM (not shadow)
+            shadowHost.innerHTML = '<div class="wm-email-loading"><div class="spinner"></div><span>Loading message content...</span></div>';
             
-            // Clear shadow host and append iframe
-            shadowHost.innerHTML = '';
-            shadowHost.appendChild(iframe);
-            
-            // Auto-resize iframe
-            iframe.onload = function() {
-                function resize() {
-                    if (iframe.contentWindow && iframe.contentWindow.document.body) {
-                        iframe.style.height = iframe.contentWindow.document.body.scrollHeight + 50 + 'px';
-                    }
-                }
-                resize();
-                syncTheme(); // Initial theme sync after load
-                // Some emails load images or have dynamic content that changes height
-                setTimeout(resize, 500);
-                setTimeout(resize, 2000);
-            };
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function(r) { return r.text(); })
+                .then(function(html) {
+                    // Clear the loading state from main DOM
+                    shadowHost.innerHTML = '';
+                    
+                    // Inject into shadow root
+                    // We wrap it in a div to easily apply the theme
+                    shadowRoot.innerHTML = '<div id="wm-shadow-wrapper">' + html + '</div>';
+                    
+                    // Sync theme immediately
+                    syncTheme();
+                    
+                    // Ensure all links open in new tab
+                    shadowRoot.querySelectorAll('a').forEach(function(a) {
+                        a.setAttribute('target', '_blank');
+                        a.setAttribute('rel', 'noopener noreferrer');
+                    });
+                })
+                .catch(function(err) {
+                    shadowHost.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--wm-danger)">Failed to load message content.</div>';
+                });
+        }
 
-            // Listen for theme changes and forward to iframe
-            function syncTheme() {
-                var theme = document.documentElement.getAttribute('data-theme') || 'system';
-                if (theme === 'system') {
-                    theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-                }
-                if (iframe.contentWindow) {
-                    iframe.contentWindow.postMessage({ type: 'wm-theme-change', theme: theme }, '*');
-                }
+        function syncTheme() {
+            var theme = document.documentElement.getAttribute('data-theme') || 'system';
+            if (theme === 'system') {
+                theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
             }
             
-            var observer = new MutationObserver(syncTheme);
-            observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+            var wrapper = shadowRoot.getElementById('wm-shadow-wrapper');
+            if (wrapper) {
+                wrapper.setAttribute('data-theme', theme);
+            }
+            
+            // Also update any internal elements if they were injected
+            var innerHtml = shadowRoot.querySelector('html');
+            if (innerHtml) innerHtml.setAttribute('data-theme', theme);
+            var innerBody = shadowRoot.querySelector('body');
+            if (innerBody) innerBody.setAttribute('data-theme', theme);
         }
+        
+        var observer = new MutationObserver(syncTheme);
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
         // Initial load
         loadEmailBody(false);
