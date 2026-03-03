@@ -302,14 +302,12 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                 });
                 document.addEventListener('wm-theme-change', syncTheme);
                 
-                // Also listen for the custom event if your ThemeManager uses one
-                // (ThemeManager in app.js doesn't dispatch an event, but we can observe the html attribute)
                 var observer = new MutationObserver(syncTheme);
                 observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
                 // Ensure links open in a new tab even inside shadow DOM
                 shadowRoot.addEventListener('click', function(e) {
-                    var anchor = e.target.closest ? e.target.closest('a[href]') : null;
+                    var anchor = e.target.closest('a[href]');
                     if (!anchor) return;
                     var href = anchor.getAttribute('href');
                     if (!href || href === '#') return;
