@@ -237,7 +237,10 @@ class SmtpClient
 
     private function parseRecipients(array $msg): array
     {
-        $all   = $this->sanitizeHeader(($msg['to'] ?? '') . ',' . ($msg['cc'] ?? '') . ',' . ($msg['bcc'] ?? ''));
+        $to    = $this->sanitizeHeader($msg['to'] ?? '');
+        $cc    = $this->sanitizeHeader($msg['cc'] ?? '');
+        $bcc   = $this->sanitizeHeader($msg['bcc'] ?? '');
+        $all   = $to . ',' . $cc . ',' . $bcc;
         $addrs = [];
         foreach (explode(',', $all) as $raw) {
             $a = $this->extractAddress(trim($raw));
@@ -251,7 +254,7 @@ class SmtpClient
     private function sanitizeHeader(string $value): string
     {
         $value = preg_replace('/(%0d|%0a)/i', '', $value);
-        $value = preg_replace('/[\r\n\x0b\x0c\x85\x{2028}\x{2029}]/u', '', (string) $value);
+        $value = preg_replace('/[\x00-\x1F\x7F\x85\x{2028}\x{2029}]/u', '', (string) $value);
         return $value;
     }
 
