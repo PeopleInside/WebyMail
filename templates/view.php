@@ -315,8 +315,8 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                         e.stopPropagation();
                         return;
                     }
-                    var isHttpProtocol = /^https?:/i.test(anchorHref);
-                    if (!isHttpProtocol) {
+                    var isHttpOrHttps = /^https?:/i.test(anchorHref);
+                    if (!isHttpOrHttps) {
                         e.preventDefault();
                         e.stopPropagation();
                         return;
