@@ -137,12 +137,13 @@ class SmtpClient
      */
     public function buildRaw(string $from, array $msg): string
     {
-        $from     = $this->sanitizeHeader($from);
+        $fromClean = $this->sanitizeHeader($from);
+        $fromAddr = $this->sanitizeHeader($this->extractAddress($fromClean));
         $date     = date('r');
         $msgId    = '<' . bin2hex(random_bytes(16)) . '@webymail>';
         $fromFmt  = $msg['from_name']
-            ? '=?UTF-8?B?' . base64_encode($msg['from_name']) . '?= <' . $this->extractAddress($from) . '>'
-            : $from;
+            ? '=?UTF-8?B?' . base64_encode($msg['from_name']) . '?= <' . $fromAddr . '>'
+            : $fromClean;
         $to       = $this->sanitizeHeader($msg['to'] ?? '');
         $cc       = $this->sanitizeHeader($msg['cc'] ?? '');
         $replyTo  = $this->sanitizeHeader($msg['reply_to'] ?? '');
@@ -249,7 +250,9 @@ class SmtpClient
 
     private function sanitizeHeader(string $value): string
     {
-        return str_replace(["\r", "\n"], '', $value);
+        $value = preg_replace('/(%0d|%0a)/i', '', $value);
+        $value = preg_replace('/[\r\n\x0b\x0c\x85\x{2028}\x{2029}]/u', '', (string) $value);
+        return $value ?? '';
     }
 
     private function extractAddress(string $str): string
