@@ -326,7 +326,10 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                 };
                 shadowRoot.addEventListener('click', shadowClickHandler);
 
+                var cleaned = false;
                 var cleanup = function() {
+                    if (cleaned) return;
+                    cleaned = true;
                     window.removeEventListener('storage', handleStorage);
                     document.removeEventListener('wm-theme-change', syncTheme);
                     shadowRoot.removeEventListener('click', shadowClickHandler);
