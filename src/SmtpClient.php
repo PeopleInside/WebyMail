@@ -252,7 +252,7 @@ class SmtpClient
     {
         $value = preg_replace('/(%0d|%0a)/i', '', $value);
         $value = preg_replace('/[\r\n\x0b\x0c\x85\x{2028}\x{2029}]/u', '', (string) $value);
-        return $value ?? '';
+        return $value;
     }
 
     private function extractAddress(string $str): string
