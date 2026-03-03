@@ -326,17 +326,14 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                 };
                 shadowRoot.addEventListener('click', shadowClickHandler);
 
-                var cleaned = false;
                 var cleanup = function() {
-                    if (cleaned) return;
-                    cleaned = true;
                     window.removeEventListener('storage', handleStorage);
                     document.removeEventListener('wm-theme-change', syncTheme);
                     shadowRoot.removeEventListener('click', shadowClickHandler);
                     observer.disconnect();
                 };
-                window.addEventListener('beforeunload', cleanup);
-                window.addEventListener('pagehide', cleanup);
+                window.addEventListener('beforeunload', cleanup, { once: true });
+                window.addEventListener('pagehide', cleanup, { once: true });
             })
             .catch(function(err) {
                 shadowRoot.innerHTML = '<div style="padding:20px;color:red">Failed to load email content.</div>';
