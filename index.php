@@ -707,7 +707,11 @@ function sanitizeHtml(string $html, bool $showImages, string $theme): string
         }
 
         // Remove dangerous tags
-        $dangerousTags = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'style', 'applet', 'frameset', 'frame', 'video', 'audio', 'canvas', 'svg', 'math'];
+        $dangerousTags = [
+            'script', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'style', 
+            'applet', 'frameset', 'frame', 'video', 'audio', 'canvas', 'svg', 'math',
+            'form', 'button', 'input', 'select', 'textarea', 'keygen', 'details', 'summary'
+        ];
         foreach ($dangerousTags as $tag) {
             $nodes = $doc->getElementsByTagName($tag);
             while ($nodes && $nodes->length > 0) {
@@ -726,29 +730,27 @@ function sanitizeHtml(string $html, bool $showImages, string $theme): string
         if ($nodes) {
             foreach ($nodes as $attr) {
                 $name = strtolower($attr->nodeName);
-                if (str_starts_with($name, 'on') || in_array($name, ['formaction', 'form', 'style', 'srcdoc'], true)) {
-                    // We allow 'style' attribute but we should be careful. 
-                    // For now, let's keep it but remove it if it contains 'expression' or 'url(' for non-images
-                    if ($name === 'style') {
-                        $val = strtolower($attr->nodeValue);
-                        // Block dangerous CSS properties and external URLs if images are hidden
-                        $isDangerous = str_contains($val, 'expression') || 
-                                       str_contains($val, 'javascript:') || 
-                                       str_contains($val, 'vbscript:') ||
-                                       str_contains($val, '-moz-binding');
-                        
-                        if (!$showImages && str_contains($val, 'url(')) {
-                            // Replace url(...) with a placeholder to prevent tracking
-                            $attr->nodeValue = preg_replace('/url\s*\([^)]+\)/i', 'url(data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)', $attr->nodeValue);
-                        }
-                        
-                        if ($isDangerous) {
-                            $attr->parentNode->removeAttribute($attr->nodeName);
-                        }
-                    } else {
-                        if ($attr->parentNode) {
-                            $attr->parentNode->removeAttribute($attr->nodeName);
-                        }
+                if (str_starts_with($name, 'on') || in_array($name, ['formaction', 'form', 'srcdoc', 'action', 'method'], true)) {
+                    if ($attr->parentNode) {
+                        $attr->parentNode->removeAttribute($attr->nodeName);
+                    }
+                } elseif ($name === 'style') {
+                    $val = strtolower($attr->nodeValue);
+                    // Block dangerous CSS properties
+                    $isDangerous = str_contains($val, 'expression') || 
+                                   str_contains($val, 'javascript:') || 
+                                   str_contains($val, 'vbscript:') ||
+                                   str_contains($val, '-moz-binding') ||
+                                   str_contains($val, 'position:fixed') ||
+                                   str_contains($val, 'position:absolute'); // Prevent overlay attacks
+                    
+                    if (!$showImages && str_contains($val, 'url(')) {
+                        // Replace url(...) with a placeholder to prevent tracking
+                        $attr->nodeValue = preg_replace('/url\s*\([^)]+\)/i', 'url(data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)', $attr->nodeValue);
+                    }
+                    
+                    if ($isDangerous) {
+                        $attr->parentNode->removeAttribute($attr->nodeName);
                     }
                 }
             }
@@ -799,42 +801,94 @@ function sanitizeHtml(string $html, bool $showImages, string $theme): string
 
         $styleStr = '
             :root { --bg: ' . $lightBg . '; --color: ' . $lightColor . '; }
-            [data-theme="dark"] { --bg: ' . $darkBg . '; --color: ' . $darkColor . '; }
+            [data-theme="dark"] { --bg: ' . $darkBg . '; --color: ' . $darkColor . '; color-scheme: dark; }
             @media (prefers-color-scheme: dark) {
-                :root:not([data-theme="light"]) { --bg: ' . $darkBg . '; --color: ' . $darkColor . '; }
+                :root:not([data-theme="light"]) { --bg: ' . $darkBg . '; --color: ' . $darkColor . '; color-scheme: dark; }
+            }
+            html, body {
+                margin: 0;
+                padding: 0;
+                height: auto !important;
+                min-height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }
+            #wm-shadow-wrapper {
+                min-height: 100%;
+                display: block;
+                padding: 2.5rem; /* Padding on the wrapper instead of body for Shadow DOM reliability */
+                box-sizing: border-box;
             }
             body {
-                margin: 0;
-                padding: 1.5rem;
+                padding: 0; /* Reset body padding since we use wrapper */
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
                 font-size: .95rem;
                 line-height: 1.6;
                 background: var(--bg);
                 color: var(--color);
                 word-break: break-word;
-                height: auto;
-                min-height: auto;
+                overflow-wrap: anywhere;
                 transition: background-color .2s, color .2s;
+                max-width: 100%;
+                margin: 0 auto;
+                overflow-x: hidden !important; /* Prevent horizontal scroll on body */
             }
-            img { max-width: 100%; height: auto; }
-            a { color: #2563eb; }
+            /* Force wrapping for all elements, especially pre and those with hardcoded nowrap */
+            * {
+                overflow-wrap: anywhere !important;
+                word-break: break-word !important;
+            }
+            pre {
+                white-space: pre-wrap !important;
+                margin: 0;
+            }
+            @media (max-width: 600px) {
+                #wm-shadow-wrapper { padding: 1.25rem; }
+                /* Aggressively force wrapping on mobile */
+                * {
+                    white-space: normal !important;
+                }
+                pre, code, kbd, samp {
+                    white-space: pre-wrap !important;
+                }
+            }
+            img, table { max-width: 100% !important; height: auto !important; }
+            table { border-collapse: collapse; }
+            a { color: #388bfd; }
+            
+            /* Dark mode overrides for hardcoded colors to ensure readability */
+            [data-theme="dark"], 
+            [data-theme="dark"] body,
+            [data-theme="dark"] #wm-shadow-wrapper { 
+                background-color: var(--bg) !important; 
+                color: var(--color) !important; 
+            }
+            [data-theme="dark"] *:not(a):not(button) {
+                /* Force inheritance of the light color in dark mode for elements with hardcoded dark colors */
+                color: inherit !important;
+            }
+            /* Specifically target common hardcoded dark colors */
+            [data-theme="dark"] [style*="color: #000"],
+            [data-theme="dark"] [style*="color: #000000"],
+            [data-theme="dark"] [style*="color: black"],
+            [data-theme="dark"] [style*="color:rgb(0,0,0)"],
+            [data-theme="dark"] font[color] {
+                color: var(--color) !important;
+            }
+            [data-theme="dark"] [style*="background-color: #fff"],
+            [data-theme="dark"] [style*="background-color: #ffffff"],
+            [data-theme="dark"] [style*="background-color: white"],
+            [data-theme="dark"] [style*="background-color:rgb(255,255,255)"] {
+                background-color: transparent !important;
+            }
+            /* Ensure links remain visible */
+            [data-theme="dark"] a { color: #58a6ff !important; }
         ';
         $style = $doc->createElement('style');
         $style->appendChild($doc->createTextNode($styleStr));
         $head->appendChild($style);
 
         $doc->documentElement->setAttribute('data-theme', $theme);
-
-        $scriptStr = "
-            window.addEventListener('message', function(e) {
-                if (e.data && e.data.type === 'wm-theme-change') {
-                    document.documentElement.setAttribute('data-theme', e.data.theme);
-                }
-            });
-        ";
-        $script = $doc->createElement('script');
-        $script->appendChild($doc->createTextNode($scriptStr));
-        $head->appendChild($script);
 
         return $doc->saveHTML() ?: $html;
     } catch (Throwable $e) {
