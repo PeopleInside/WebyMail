@@ -304,8 +304,13 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                 
                 var observer = new MutationObserver(syncTheme);
                 observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-                window.addEventListener('beforeunload', function() { observer.disconnect(); });
-                window.addEventListener('pagehide', function() { observer.disconnect(); });
+                var disconnectObserver = function() {
+                    observer.disconnect();
+                    window.removeEventListener('beforeunload', disconnectObserver);
+                    window.removeEventListener('pagehide', disconnectObserver);
+                };
+                window.addEventListener('beforeunload', disconnectObserver);
+                window.addEventListener('pagehide', disconnectObserver);
 
                 // Ensure links open in a new tab even inside shadow DOM
                 shadowRoot.addEventListener('click', function(e) {
