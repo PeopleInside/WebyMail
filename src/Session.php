@@ -16,7 +16,7 @@ class Session
     public function __construct()
     {
         $this->db       = Database::getInstance();
-        $this->lifetime = (int) Config::get('session_lifetime', 15552000);
+        $this->lifetime = (int) Config::get('session_lifetime', 15552000); // 6 months default
     }
 
     /**
@@ -107,6 +107,13 @@ class Session
         );
 
         if ($row === null) {
+            return null;
+        }
+
+        // Fingerprint validation: User-Agent check
+        $currentUa = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
+        if ($row['user_agent'] !== $currentUa) {
+            $this->destroy();
             return null;
         }
 

@@ -9,9 +9,15 @@ declare(strict_types=1);
 class SmtpClient
 {
     /** @var resource|false */
-    private mixed $socket = false;
+    private $socket = false;
     private string $log   = '';
     private ?string $lastRaw = null;
+    private bool $sslVerify = true;
+
+    public function setSslVerify(bool $verify): void
+    {
+        $this->sslVerify = $verify;
+    }
 
     public function send(array $account, array $message): bool
     {
@@ -55,8 +61,8 @@ class SmtpClient
         $proto  = $ssl ? 'ssl' : 'tcp';
         $ctx    = stream_context_create([
             'ssl' => [
-                'verify_peer'      => false,
-                'verify_peer_name' => false,
+                'verify_peer'      => $this->sslVerify,
+                'verify_peer_name' => $this->sslVerify,
             ],
         ]);
         $this->socket = @stream_socket_client(
@@ -145,17 +151,17 @@ class SmtpClient
         $headers  = "Date: {$date}\r\n";
         $headers .= "Message-ID: {$msgId}\r\n";
         $headers .= "From: {$fromFmt}\r\n";
-        $headers .= "To: {$msg['to']}\r\n";
+        $headers .= "To: " . $this->sanitizeHeader($msg['to']) . "\r\n";
         if (!empty($msg['cc'])) {
-            $headers .= "Cc: {$msg['cc']}\r\n";
+            $headers .= "Cc: " . $this->sanitizeHeader($msg['cc']) . "\r\n";
         }
         $headers .= "Subject: =?UTF-8?B?" . base64_encode($msg['subject']) . "?=\r\n";
         if (!empty($msg['reply_to'])) {
-            $headers .= "Reply-To: {$msg['reply_to']}\r\n";
+            $headers .= "Reply-To: " . $this->sanitizeHeader($msg['reply_to']) . "\r\n";
         }
         if (!empty($msg['in_reply_to'])) {
-            $headers .= "In-Reply-To: {$msg['in_reply_to']}\r\n";
-            $headers .= "References: {$msg['in_reply_to']}\r\n";
+            $headers .= "In-Reply-To: " . $this->sanitizeHeader($msg['in_reply_to']) . "\r\n";
+            $headers .= "References: " . $this->sanitizeHeader($msg['in_reply_to']) . "\r\n";
         }
         $headers .= "MIME-Version: 1.0\r\n";
 
@@ -247,6 +253,11 @@ class SmtpClient
             return $m[1];
         }
         return trim($str);
+    }
+
+    private function sanitizeHeader(string $value): string
+    {
+        return str_replace(["\r", "\n"], '', $value);
     }
 
     // -------------------------------------------------------------------------
