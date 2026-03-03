@@ -286,7 +286,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                 
                 // Handle theme changes
                 function syncTheme() {
-                    var theme = document.documentElement.getAttribute('data-theme') || 'system';
+                    var theme = document.documentElement.getAttribute('data-theme') || 'light';
                     if (theme === 'system') {
                         theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
                     }
@@ -312,7 +312,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                     var href = anchor.getAttribute('href');
                     if (!href || href === '#') return;
                     e.preventDefault();
-                    window.open(anchor.href, '_blank', 'noopener');
+                    window.open(anchor.href, '_blank', 'noopener,noreferrer');
                 });
             })
             .catch(function(err) {
