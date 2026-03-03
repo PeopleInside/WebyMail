@@ -219,7 +219,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
     var shadowHost = document.getElementById('email-body-shadow');
     if (shadowHost && <?php echo $hasHtml ? 'true' : 'false'; ?>) {
         var iframe = document.createElement('iframe');
-        iframe.setAttribute('sandbox', 'allow-top-navigation-by-user-activation');
+        iframe.setAttribute('sandbox', '');
         iframe.setAttribute('referrerpolicy', 'no-referrer');
         iframe.setAttribute('title', 'Email content');
         iframe.style.width = '100%';

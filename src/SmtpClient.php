@@ -137,8 +137,8 @@ class SmtpClient
      */
     public function buildRaw(string $from, array $msg): string
     {
+        $fromAddr = $this->sanitizeHeader($this->extractAddress($from));
         $fromClean = $this->sanitizeHeader($from);
-        $fromAddr = $this->sanitizeHeader($this->extractAddress($fromClean));
         $date     = date('r');
         $msgId    = '<' . bin2hex(random_bytes(16)) . '@webymail>';
         $fromFmt  = $msg['from_name']
@@ -253,8 +253,9 @@ class SmtpClient
 
     private function sanitizeHeader(string $value): string
     {
+        $value = (string) $value;
         $value = preg_replace('/(%0d|%0a)/i', '', $value);
-        $value = preg_replace('/[\x00-\x1F\x7F\x85\x{2028}\x{2029}]/u', '', (string) $value);
+        $value = preg_replace('/[\p{C}]/u', '', $value);
         return $value;
     }
 
