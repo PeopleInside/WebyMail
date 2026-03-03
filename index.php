@@ -30,6 +30,12 @@ session_set_cookie_params([
 ]);
 session_start();
 
+// ── Security Headers ──────────────────────────────────────────────────────────
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; frame-src 'self';");
+header("X-Content-Type-Options: nosniff");
+header("X-Frame-Options: SAMEORIGIN");
+header("X-XSS-Protection: 1; mode=block");
+
 spl_autoload_register(function (string $class): void {
     $file = __DIR__ . '/src/' . $class . '.php';
     if (file_exists($file)) {
@@ -155,12 +161,12 @@ function parseIniSize(string $value): int
     $value = trim($value);
     $unit  = strtolower(substr($value, -1));
     $num   = (float) $value;
-    return match ($unit) {
-        'g' => (int) ($num * 1024 * 1024 * 1024),
-        'm' => (int) ($num * 1024 * 1024),
-        'k' => (int) ($num * 1024),
-        default => (int) $num,
-    };
+    switch ($unit) {
+        case 'g': return (int) ($num * 1024 * 1024 * 1024);
+        case 'm': return (int) ($num * 1024 * 1024);
+        case 'k': return (int) ($num * 1024);
+        default:  return (int) $num;
+    }
 }
 
 function isAjax(): bool
@@ -650,55 +656,101 @@ if ($action === 'email_body') {
         $imap    = $accountMgr->imapConnect($accountId);
         $message = $imap->getMessage($folder, $msgNo);
         $imap->disconnect();
-    } catch (RuntimeException) {
+    } catch (Throwable $e) {
+        http_response_code(500);
+        exit('Error loading email: ' . htmlspecialchars($e->getMessage()));
+    }
+
+    if (!$message || !is_array($message)) {
         http_response_code(404);
-        exit;
+        exit('Message not found.');
     }
 
     $html = $message['body_html'] ?? '';
-    $isAjax = !empty($_GET['ajax']) && $_GET['ajax'] === '1';
+    if (empty($html) && !empty($message['body_text'])) {
+        $html = '<pre style="white-space:pre-wrap;word-break:break-word">' . htmlspecialchars($message['body_text']) . '</pre>';
+    }
 
-    // Determine initial theme from cookie
-    $theme = $_COOKIE['wm_theme'] ?? 'system';
-    
-    // We use CSS variables so we can toggle them via JS without reload
-    $lightBg = '#ffffff';
-    $lightColor = '#1a2332';
-    $darkBg = '#161b22';
-    $darkColor = '#e6edf3';
+    $theme = $session['theme'] ?? ($_COOKIE['wm_theme'] ?? 'system');
+    $sanitized = sanitizeHtml($html, $showImages, $theme);
 
-    // Sanitize and process HTML
-    if (class_exists('DOMDocument') && trim($html) !== '') {
+    header('Content-Type: text/html; charset=UTF-8');
+    // Strict CSP for the iframe content
+    header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:; script-src 'none'; frame-ancestors 'self';");
+    echo $sanitized;
+    exit;
+}
+
+/**
+ * Robust HTML sanitization for email bodies.
+ */
+function sanitizeHtml(string $html, bool $showImages, string $theme): string
+{
+    if (!class_exists('DOMDocument') || trim($html) === '') {
+        return $html;
+    }
+
+    try {
         $doc = new DOMDocument('1.0', 'UTF-8');
         libxml_use_internal_errors(true);
         
-        // Check if it's a full document or a fragment
         $isFullDoc = str_contains(strtolower($html), '<html');
-        
         if ($isFullDoc) {
-            $doc->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NODEFDTD);
+            $success = $doc->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NODEFDTD);
         } else {
-            $doc->loadHTML('<?xml encoding="UTF-8"><html><body>' . $html . '</body></html>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+            $success = $doc->loadHTML('<?xml encoding="UTF-8"><html><body>' . $html . '</body></html>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
         }
         libxml_clear_errors();
 
+        if (!$success || !$doc->documentElement) {
+            return $html;
+        }
+
         // Remove dangerous tags
-        $dangerousTags = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'style', 'applet', 'frameset', 'frame', 'video', 'audio', 'canvas'];
+        $dangerousTags = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'style', 'applet', 'frameset', 'frame', 'video', 'audio', 'canvas', 'svg', 'math'];
         foreach ($dangerousTags as $tag) {
             $nodes = $doc->getElementsByTagName($tag);
-            while ($nodes->length > 0) {
+            while ($nodes && $nodes->length > 0) {
                 $node = $nodes->item(0);
-                $node->parentNode->removeChild($node);
+                if ($node && $node->parentNode) {
+                    $node->parentNode->removeChild($node);
+                } else {
+                    break;
+                }
             }
         }
 
         // Remove event handlers and other dangerous attributes
         $xpath = new DOMXPath($doc);
         $nodes = $xpath->query('//@*');
-        foreach ($nodes as $attr) {
-            $name = strtolower($attr->nodeName);
-            if (str_starts_with($name, 'on') || in_array($name, ['formaction', 'form'], true)) {
-                $attr->parentNode->removeAttribute($attr->nodeName);
+        if ($nodes) {
+            foreach ($nodes as $attr) {
+                $name = strtolower($attr->nodeName);
+                if (str_starts_with($name, 'on') || in_array($name, ['formaction', 'form', 'style', 'srcdoc'], true)) {
+                    // We allow 'style' attribute but we should be careful. 
+                    // For now, let's keep it but remove it if it contains 'expression' or 'url(' for non-images
+                    if ($name === 'style') {
+                        $val = strtolower($attr->nodeValue);
+                        // Block dangerous CSS properties and external URLs if images are hidden
+                        $isDangerous = str_contains($val, 'expression') || 
+                                       str_contains($val, 'javascript:') || 
+                                       str_contains($val, 'vbscript:') ||
+                                       str_contains($val, '-moz-binding');
+                        
+                        if (!$showImages && str_contains($val, 'url(')) {
+                            // Replace url(...) with a placeholder to prevent tracking
+                            $attr->nodeValue = preg_replace('/url\s*\([^)]+\)/i', 'url(data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)', $attr->nodeValue);
+                        }
+                        
+                        if ($isDangerous) {
+                            $attr->parentNode->removeAttribute($attr->nodeName);
+                        }
+                    } else {
+                        if ($attr->parentNode) {
+                            $attr->parentNode->removeAttribute($attr->nodeName);
+                        }
+                    }
+                }
             }
         }
 
@@ -714,34 +766,37 @@ if ($action === 'email_body') {
         }
 
         // Handle images (blocking)
-        if (!$showImages) {
-            foreach ($doc->getElementsByTagName('img') as $img) {
-                $src = $img->getAttribute('src');
-                if (str_starts_with(strtolower($src), 'http')) {
-                    $img->setAttribute('data-blocked-src', $src);
-                    $img->setAttribute('src', '');
-                    $img->setAttribute('alt', '[image blocked]');
-                }
+        foreach ($doc->getElementsByTagName('img') as $img) {
+            $src = $img->getAttribute('src');
+            if (!$showImages && str_starts_with(strtolower($src), 'http')) {
+                $img->setAttribute('data-blocked-src', $src);
+                $img->setAttribute('src', '');
+                $img->setAttribute('alt', '[image blocked]');
             }
+            $img->setAttribute('referrerpolicy', 'no-referrer');
         }
-
-        // Set initial theme
-        $doc->documentElement->setAttribute('data-theme', $theme);
 
         // Inject base styles and meta
         $head = $doc->getElementsByTagName('head')->item(0);
         if (!$head) {
             $head = $doc->createElement('head');
-            $doc->documentElement->insertBefore($head, $doc->documentElement->firstChild);
+            if ($doc->documentElement->firstChild) {
+                $doc->documentElement->insertBefore($head, $doc->documentElement->firstChild);
+            } else {
+                $doc->documentElement->appendChild($head);
+            }
         }
         
-        // Add base target
         $base = $doc->createElement('base');
         $base->setAttribute('target', '_blank');
         $base->setAttribute('rel', 'noopener noreferrer');
         $head->appendChild($base);
 
-        // Add our styles with CSS variables for dynamic theming
+        $lightBg = '#ffffff';
+        $lightColor = '#1a2332';
+        $darkBg = '#161b22';
+        $darkColor = '#e6edf3';
+
         $styleStr = '
             :root { --bg: ' . $lightBg . '; --color: ' . $lightColor . '; }
             [data-theme="dark"] { --bg: ' . $darkBg . '; --color: ' . $darkColor . '; }
@@ -764,10 +819,12 @@ if ($action === 'email_body') {
             img { max-width: 100%; height: auto; }
             a { color: #2563eb; }
         ';
-        $style = $doc->createElement('style', $styleStr);
+        $style = $doc->createElement('style');
+        $style->appendChild($doc->createTextNode($styleStr));
         $head->appendChild($style);
 
-        // Add script for live theme updates
+        $doc->documentElement->setAttribute('data-theme', $theme);
+
         $scriptStr = "
             window.addEventListener('message', function(e) {
                 if (e.data && e.data.type === 'wm-theme-change') {
@@ -775,36 +832,15 @@ if ($action === 'email_body') {
                 }
             });
         ";
-        $script = $doc->createElement('script', $scriptStr);
+        $script = $doc->createElement('script');
+        $script->appendChild($doc->createTextNode($scriptStr));
         $head->appendChild($script);
 
-        $html = $doc->saveHTML();
-    } else {
-        // Fallback simple wrap if DOMDocument fails or is missing
-        $styleStr = '
-            :root { --bg: ' . $lightBg . '; --color: ' . $lightColor . '; }
-            [data-theme="dark"] { --bg: ' . $darkBg . '; --color: ' . $darkColor . '; }
-            body {
-                margin: 0;
-                padding: 1.5rem;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-                font-size: .95rem;
-                line-height: 1.6;
-                background: var(--bg);
-                color: var(--color);
-                word-break: break-word;
-            }
-            img { max-width: 100%; height: auto; }
-            a { color: #2563eb; }
-        ';
-        $scriptStr = "<script>window.addEventListener('message', function(e) { if (e.data && e.data.type === 'wm-theme-change') { document.documentElement.setAttribute('data-theme', e.data.theme); } });</script>";
-        $html = '<!DOCTYPE html><html data-theme="' . htmlspecialchars($theme) . '"><head><meta charset="UTF-8"><style>' . $styleStr . '</style>' . $scriptStr . '</head><body>' . $html . '</body></html>';
+        return $doc->saveHTML() ?: $html;
+    } catch (Throwable $e) {
+        error_log('HTML Sanitization failed: ' . $e->getMessage());
+        return $html;
     }
-
-    header('Content-Type: text/html; charset=UTF-8');
-    header('Content-Security-Policy: default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; img-src ' . ($showImages ? 'https: data:' : 'data:') . '; font-src \'none\'');
-    echo $html;
-    exit;
 }
 
 // ── Import EML ──────────────────────────────────────────────────────────────
@@ -1129,6 +1165,8 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $smtp   = new SmtpClient();
+    $allowInsecure = (bool) Config::get('allow_insecure_imap_cert', false);
+    $smtp->setSslVerify(!$allowInsecure);
     $params = $accountMgr->smtpParams($fromAccountId);
     $user   = Database::getInstance()->fetch('SELECT display_name FROM users WHERE id = ?', [$userId]);
     $accountFrom = $accountMgr->get($fromAccountId);

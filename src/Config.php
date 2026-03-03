@@ -6,13 +6,13 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '2.1';
+    public const VERSION = '2.2';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
     private static string $configFile = __DIR__ . '/../config/config.php';
 
-    public static function get(string $key, mixed $default = null): mixed
+    public static function get(string $key, $default = null)
     {
         self::load();
         return self::$data[$key] ?? $default;
@@ -130,12 +130,53 @@ class Config
             }
         }
 
+        // 2FA and Captcha checks
+        $results['security_suggestions'] = [];
+        if (!self::get('captcha_enabled', true)) {
+            $results['security_suggestions'][] = [
+                'type' => 'captcha',
+                'message' => 'CAPTCHA is disabled. Enabling it adds protection against automated brute-force attacks.',
+                'action_url' => '?action=settings&tab=security'
+            ];
+        }
+        
+        // Note: 2FA check is per-user, but we can check if it's globally enabled
+        if (!self::get('2fa_enabled', true)) {
+            $results['security_suggestions'][] = [
+                'type' => '2fa',
+                'message' => 'Two-Factor Authentication is globally disabled. Enabling it significantly improves account security.',
+                'action_url' => '?action=settings&tab=security'
+            ];
+        }
+
         // Update last check info
         self::set('last_system_check_at', time());
         self::set('last_system_check_ok', $results['all_ok']);
         self::save();
 
         return $results;
+    }
+
+    public static function getSecuritySuggestions(): array
+    {
+        $suggestions = [];
+        if (!self::get('captcha_enabled', true)) {
+            $suggestions[] = [
+                'type' => 'captcha',
+                'label' => 'Enable CAPTCHA',
+                'title' => 'Security Suggestion: Enable CAPTCHA protection',
+                'url' => '?action=settings&tab=system'
+            ];
+        }
+        if (!self::get('2fa_enabled', true)) {
+            $suggestions[] = [
+                'type' => '2fa',
+                'label' => 'Enable 2FA',
+                'title' => 'Security Suggestion: Enable Two-Factor Authentication',
+                'url' => '?action=settings&tab=system'
+            ];
+        }
+        return $suggestions;
     }
 
     public static function shouldShowSecurityBanner(): bool
@@ -317,6 +358,7 @@ class Config
             'hide_server_on_login' => true,
             'last_system_check_at' => 0,
             'last_system_check_ok' => true,
+            'allow_insecure_imap_cert' => false,
         ];
     }
 }

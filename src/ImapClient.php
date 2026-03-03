@@ -8,7 +8,7 @@ declare(strict_types=1);
 class ImapClient
 {
     /** @var resource|false */
-    private mixed $conn = false;
+    private $conn = false;
     private string $host  = '';
     private string $user  = '';
 
@@ -17,7 +17,8 @@ class ImapClient
         int    $port,
         bool   $ssl,
         string $username,
-        string $password
+        string $password,
+        bool   $allowInsecure = false
     ): void {
         if (!extension_loaded('imap')) {
             throw new RuntimeException('PHP IMAP extension is not installed.');
@@ -27,7 +28,10 @@ class ImapClient
         if ($ssl) {
             $flags .= '/ssl';
         }
-        $flags .= '/norsh/novalidate-cert';
+        $flags .= '/norsh';
+        if ($allowInsecure) {
+            $flags .= '/novalidate-cert';
+        }
 
         $mailbox = '{' . $host . ':' . $port . $flags . '}';
         $this->host = $mailbox;

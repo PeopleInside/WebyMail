@@ -37,14 +37,25 @@ class Auth
         bool   $smtpSsl,
         bool   $smtpStarttls
     ): array {
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+        if ($this->isIpBanned($ip)) {
+            return ['ok' => false, 'error' => 'Too many failed login attempts. Please try again in 15 minutes.'];
+        }
+
         // Test IMAP credentials
         try {
             $imap = new ImapClient();
-            $imap->connect($host, $port, $ssl, $username, $password);
+            // We pass allow_insecure_imap_cert from config if available
+            $allowInsecure = (bool) Config::get('allow_insecure_imap_cert', false);
+            $imap->connect($host, $port, $ssl, $username, $password, $allowInsecure);
             $imap->disconnect();
         } catch (RuntimeException $e) {
+            $this->recordFailedAttempt($ip);
             return ['ok' => false, 'error' => 'IMAP login failed: ' . $e->getMessage()];
         }
+
+        // Success: clear attempts for this IP
+        $this->clearAttempts($ip);
 
         // Provision or retrieve the user record
         $user = $this->db->fetch('SELECT * FROM users WHERE email = ?', [$username]);
@@ -182,6 +193,53 @@ class Auth
     public function logout(): void
     {
         $this->session->destroy();
+    }
+
+    // -------------------------------------------------------------------------
+    // Rate Limiting
+    // -------------------------------------------------------------------------
+
+    private function isIpBanned(string $ip): bool
+    {
+        $row = $this->db->fetch('SELECT * FROM login_attempts WHERE ip_address = ?', [$ip]);
+        if (!$row) return false;
+
+        $attempts = (int) $row['attempts'];
+        $last     = (int) $row['last_attempt'];
+        $window   = 15 * 60; // 15 minutes
+
+        if ($attempts >= 5 && (time() - $last) < $window) {
+            return true;
+        }
+
+        // If window passed, reset
+        if ((time() - $last) >= $window) {
+            $this->clearAttempts($ip);
+            return false;
+        }
+
+        return false;
+    }
+
+    private function recordFailedAttempt(string $ip): void
+    {
+        $row = $this->db->fetch('SELECT * FROM login_attempts WHERE ip_address = ?', [$ip]);
+        if ($row) {
+            $this->db->query(
+                'UPDATE login_attempts SET attempts = attempts + 1, last_attempt = ? WHERE ip_address = ?',
+                [time(), $ip]
+            );
+        } else {
+            $this->db->query(
+                'INSERT INTO login_attempts (ip_address, attempts, last_attempt) VALUES (?, 1, ?)',
+                [$ip, time()]
+            );
+        }
+    }
+
+    private function clearAttempts(string $ip): void
+    {
+        $this->db->query('DELETE FROM login_attempts WHERE ip_address = ?', [$ip]);
     }
 
     // -------------------------------------------------------------------------
