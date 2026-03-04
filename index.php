@@ -836,6 +836,8 @@ function sanitizeHtml(string $html, bool $showImages, string $theme): string
                 display: block;
                 padding: 2.5rem;
                 box-sizing: border-box;
+                width: 100%;
+                max-width: 100%;
                 /* Base colors for inversion: assume light by default */
                 background: #ffffff;
                 color: #1a2332;
@@ -851,7 +853,7 @@ function sanitizeHtml(string $html, bool $showImages, string $theme): string
                 overflow-wrap: anywhere;
                 max-width: 100%;
                 margin: 0 auto;
-                overflow-x: hidden !important;
+                overflow-x: auto !important;
             }
 
             /* Force wrapping for all elements */

@@ -565,6 +565,7 @@ input:autofill {
     box-shadow: var(--wm-shadow);
     overflow-x: auto;
     overflow-y: visible;
+    max-width: 100%;
     flex: 1;
     display: flex;
     flex-direction: column;
