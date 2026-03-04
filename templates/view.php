@@ -233,7 +233,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                     
                     // Inject into shadow root
                     // We wrap it in a div to easily apply the theme and enforce responsive styling
-                    var shadowCss = `
+                    const shadowCss = `
                         :host{display:block;}
                         #wm-shadow-wrapper{color:inherit;background:transparent;max-width:100%;overflow-wrap:anywhere;word-break:break-word;}
                         #wm-shadow-wrapper *{box-sizing:border-box;}
