@@ -1214,7 +1214,7 @@ input:autofill {
     .wm-mail-subject { grid-column: 2; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 520px) {
     .wm-topbar { padding: 0 .5rem; gap: .5rem; }
     #user-menu-btn span { display: none; }
 }
