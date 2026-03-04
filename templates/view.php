@@ -194,7 +194,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
     var loaded = false;
     const emailShadowCss = [
         ':host{display:block;}',
-        '#wm-shadow-wrapper{color:inherit;background:transparent;max-width:100%;overflow-wrap:anywhere;word-break:break-word;}',
+        '#wm-shadow-wrapper{color:inherit;background:transparent;max-width:100%;overflow-x:auto;overflow-wrap:anywhere;word-break:break-word;}',
         '#wm-shadow-wrapper *{box-sizing:border-box;}',
         '#wm-shadow-wrapper body{margin:0;padding:0;}',
         '#wm-shadow-wrapper img,#wm-shadow-wrapper video,#wm-shadow-wrapper iframe,#wm-shadow-wrapper canvas,#wm-shadow-wrapper svg{max-width:100%;height:auto;}',
