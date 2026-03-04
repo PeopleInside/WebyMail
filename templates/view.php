@@ -192,7 +192,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
     var close = document.getElementById('headers-modal-close');
     var pre   = document.getElementById('headers-content');
     var loaded = false;
-    const EMAIL_SHADOW_CSS = `
+    const emailShadowCss = `
         :host{display:block;}
         #wm-shadow-wrapper{color:inherit;background:transparent;max-width:100%;overflow-wrap:anywhere;word-break:break-word;}
         #wm-shadow-wrapper *{box-sizing:border-box;}
@@ -245,7 +245,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                     
                     // Inject into shadow root
                     // We wrap it in a div to easily apply the theme and enforce responsive styling
-                    shadowRoot.innerHTML = '<style>' + EMAIL_SHADOW_CSS + '</style><div id="wm-shadow-wrapper">' + html + '</div>';
+                    shadowRoot.innerHTML = '<style>' + emailShadowCss + '</style><div id="wm-shadow-wrapper">' + html + '</div>';
                     
                     // Sync theme immediately
                     syncTheme();
