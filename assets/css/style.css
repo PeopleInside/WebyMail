@@ -1220,7 +1220,7 @@ input:autofill {
 
     .wm-card-body { padding: 1rem; }
     .wm-toolbar { padding: .5rem; flex-wrap: wrap; }
-    .wm-toolbar-actions { width: 100%; margin-left: 0; justify-content: flex-start; }
+    .wm-toolbar-actions { flex-basis: 100%; width: auto; margin-left: 0; justify-content: flex-start; }
     .btn { padding: .35rem .75rem; font-size: .8rem; }
 
     .wm-view-header { padding: 1.25rem 1rem; }
