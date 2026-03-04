@@ -160,7 +160,7 @@ a:hover { text-decoration: underline; }
    ---------------------------------------------------------- */
 .wm-shell {
     display: grid;
-    grid-template-columns: 240px 1fr;
+    grid-template-columns: 240px minmax(0, 1fr);
     grid-template-rows: 52px 1fr;
     height: 100dvh;
     overflow: hidden;
@@ -168,7 +168,7 @@ a:hover { text-decoration: underline; }
 }
 
 .wm-shell.sidebar-collapsed {
-    grid-template-columns: 0 1fr;
+    grid-template-columns: 0 minmax(0, 1fr);
 }
 
 /* Top bar */
@@ -284,6 +284,7 @@ a:hover { text-decoration: underline; }
     overflow-x: hidden;
     display: flex;
     flex-direction: column;
+    min-width: 0;
 }
 
 /* ----------------------------------------------------------
@@ -567,6 +568,8 @@ input:autofill {
     font-weight: 700;
     margin-bottom: .75rem;
     color: var(--wm-text);
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .wm-view-meta {
@@ -575,6 +578,15 @@ input:autofill {
     display: flex;
     flex-wrap: wrap;
     gap: .5rem 1.5rem;
+    min-width: 0;
+}
+
+.wm-view-meta span {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    min-width: 0;
+    display: inline-block;
 }
 
 .wm-view-content-layout {
@@ -681,6 +693,7 @@ input:autofill {
     height: fit-content;
     position: sticky;
     top: 1rem;
+    min-width: 0;
 }
 
 .wm-attachments-header {
@@ -699,6 +712,8 @@ input:autofill {
     display: flex;
     flex-direction: column;
     gap: .5rem;
+    width: 100%;
+    min-width: 0;
 }
 
 .wm-attachment-item {
@@ -710,6 +725,8 @@ input:autofill {
     border: 1px solid var(--wm-border);
     border-radius: 8px;
     transition: transform .1s, border-color .1s;
+    min-width: 0;
+    width: 100%;
 }
 
 .wm-attachment-item:hover {
@@ -720,11 +737,14 @@ input:autofill {
 .wm-attachment-icon {
     color: var(--wm-text-muted);
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
 }
 
 .wm-attachment-info {
     flex: 1;
     min-width: 0;
+    overflow: hidden;
 }
 
 .wm-attachment-name {
@@ -734,6 +754,7 @@ input:autofill {
     overflow: hidden;
     text-overflow: ellipsis;
     color: var(--wm-text);
+    width: 100%;
 }
 
 .wm-attachment-size {
@@ -745,6 +766,9 @@ input:autofill {
     color: var(--wm-text-muted);
     padding: .25rem;
     border-radius: 4px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
 }
 .wm-attachment-download:hover {
     background: var(--wm-bg);
@@ -1177,7 +1201,7 @@ input:autofill {
 @media (max-width: 768px) {
     .md-hide { display: flex !important; }
     .wm-shell {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
         grid-template-rows: 52px 1fr;
     }
 
@@ -1218,6 +1242,7 @@ input:autofill {
         display: none;
         z-index: 50;
         max-width: none !important;
+        min-width: 0 !important;
         border-bottom: 1px solid rgba(255,255,255,.1);
         flex: 1;
     }
@@ -1268,9 +1293,10 @@ input:autofill {
     .btn { padding: .35rem .75rem; font-size: .8rem; }
 
     .wm-view-header { padding: 1.25rem 1rem; }
-    .wm-view-content-layout { padding: 0 0 3rem; gap: 0; }
+    .wm-view-content-layout { padding: 0 0 3rem; gap: 0; overflow-x: visible; width: 100%; max-width: 100vw; }
     .wm-view-subject { font-size: 1.25rem; word-break: break-word; }
-    .wm-view-meta { flex-direction: column; gap: .25rem; }
+    .wm-view-meta { flex-direction: column; gap: .35rem; }
+    .wm-view-meta span { width: 100%; }
     
     .wm-email-container {
         box-shadow: none;
@@ -1284,7 +1310,7 @@ input:autofill {
     
     .wm-email-container.plain-text { padding: 1.5rem 1.25rem; }
     
-    .wm-email-frame { min-width: 320px; }
+    .wm-email-frame { min-width: 0; width: 100%; }
     
     .wm-mail-row {
         grid-template-columns: 24px 1fr;
