@@ -105,19 +105,19 @@
         <button class="theme-toggle" title="Toggle theme"><!-- filled by JS --></button>
 
         <!-- User menu -->
-        <div style="position:relative">
+        <div style="position:relative;margin-left:auto;flex-shrink:0">
             <button class="btn-ghost btn" style="color:rgba(255,255,255,.85);gap:.5rem" id="user-menu-btn">
                 <div class="wm-account-avatar" style="width:28px;height:28px;font-size:.75rem">
                     <?= strtoupper(substr($activeLabel ?: $activeEmail ?: 'U', 0, 1)) ?>
                 </div>
-                <span style="font-size:.82rem;max-width:140px;overflow:hidden;text-overflow:ellipsis">
+                <span class="wm-user-email" style="font-size:.82rem">
                     <?= htmlspecialchars($activeEmail ?: $activeLabel) ?>
                 </span>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <polyline points="6 9 12 15 18 9"/>
                 </svg>
             </button>
-            <div id="user-menu" style="display:none;position:absolute;right:8px;top:calc(100% + 4px);background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:8px;min-width:240px;max-width:calc(100vw - 32px);max-height:calc(100dvh - 64px);overflow-y:auto;overflow-x:hidden;box-shadow:var(--wm-shadow);z-index:300;padding-bottom:1rem">
+            <div id="user-menu" class="wm-user-menu" style="display:none;">
                 <?php if (!empty($accounts) && count($accounts) > 1): ?>
                 <div style="padding:.6rem 1rem;font-size:.75rem;font-weight:600;color:var(--wm-text-muted);text-transform:uppercase;letter-spacing:.03em">
                     Accounts

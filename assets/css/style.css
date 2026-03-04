@@ -53,6 +53,9 @@
     /* Scrollbar */
     --wm-scrollbar-track:  #e8edf2;
     --wm-scrollbar-thumb:  #b0bec8;
+
+    /* Overlays */
+    --wm-menu-edge-gap:    12px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -174,6 +177,8 @@ a:hover { text-decoration: underline; }
     background: var(--wm-sidebar-bg);
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
+    row-gap: .35rem;
     padding: 0 1rem;
     gap: .75rem;
     border-bottom: 1px solid rgba(255,255,255,.1);
@@ -191,6 +196,32 @@ a:hover { text-decoration: underline; }
 .wm-topbar .brand span { color: var(--wm-primary); }
 
 .wm-topbar-spacer { flex: 1; }
+
+.wm-user-email {
+    display: inline-block;
+    max-width: clamp(96px, 22vw, 140px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.wm-user-menu {
+    position: absolute;
+    right: 0;
+    left: auto;
+    top: calc(100% + 4px);
+    background: var(--wm-surface);
+    border: 1px solid var(--wm-border);
+    border-radius: 8px;
+    max-width: calc(100vw - 2 * var(--wm-menu-edge-gap, 12px));
+    width: 360px;
+    max-height: calc(100dvh - 64px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-shadow: var(--wm-shadow);
+    z-index: 300;
+    padding-bottom: 1rem;
+}
 
 /* Sidebar */
 .wm-sidebar {
@@ -250,6 +281,7 @@ a:hover { text-decoration: underline; }
 /* Main content */
 .wm-main {
     overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
 }
@@ -291,9 +323,20 @@ a:hover { text-decoration: underline; }
     display: flex;
     align-items: center;
     gap: .4rem;
+    row-gap: .5rem;
+    flex-wrap: wrap;
     width: 100%;
     max-width: 960px;
     margin: 0 auto;
+}
+
+.wm-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    margin-left: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 /* ----------------------------------------------------------
@@ -545,9 +588,20 @@ input:autofill {
     flex: 1;
 }
 
+@media (max-width: 1024px) {
+    .wm-view-content-layout {
+        padding: 1.25rem 1.25rem 4rem;
+        gap: 1.5rem;
+    }
+}
+
 @media (max-width: 900px) {
     .wm-view-content-layout {
         grid-template-columns: 1fr;
+    }
+    .wm-view-attachments {
+        position: static;
+        width: 100%;
     }
 }
 
@@ -563,11 +617,14 @@ input:autofill {
     border: 1px solid var(--wm-border);
     border-radius: 12px;
     box-shadow: var(--wm-shadow);
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: visible;
+    max-width: 100%;
     flex: 1;
     display: flex;
     flex-direction: column;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .wm-email-container.plain-text {
@@ -584,11 +641,16 @@ input:autofill {
     line-height: 1.6;
 }
 
+/* Prevent message body from forcing page scrollbars while keeping vertical flow */
 .wm-email-body-shadow {
     min-height: 200px;
     flex: 1;
     display: flex;
     flex-direction: column;
+    padding: 1.5rem;
+    gap: 1rem;
+    overflow-x: auto;
+    overflow-y: visible;
 }
 
 .wm-email-loading {
@@ -834,6 +896,21 @@ input:autofill {
 [data-theme="dark"] .ql-fill   { fill:   var(--wm-text-muted) !important; }
 [data-theme="dark"] .ql-picker-label { color: var(--wm-text-muted) !important; }
 
+.wm-options-menu {
+    position: fixed;
+    right: var(--wm-menu-edge-gap, 12px);
+    left: auto;
+    top: auto;
+    background: var(--wm-surface);
+    border: 1px solid var(--wm-border);
+    border-radius: 8px;
+    width: min(280px, calc(100vw - 2 * var(--wm-menu-edge-gap, 12px)));
+    min-width: min(220px, calc(100vw - 2 * var(--wm-menu-edge-gap, 12px)));
+    box-shadow: var(--wm-shadow);
+    z-index: 300;
+    padding: .75rem;
+}
+
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme]) .ql-toolbar,
     :root:not([data-theme]) .ql-container { background: var(--wm-surface) !important; color: var(--wm-text) !important; }
@@ -1051,7 +1128,8 @@ input:autofill {
 
 .wm-topbar-search {
     max-width: 400px;
-    flex: 1;
+    flex: 1 1 240px;
+    min-width: 240px;
     display: flex;
     align-items: center;
 }
@@ -1186,6 +1264,7 @@ input:autofill {
 
     .wm-card-body { padding: 1rem; }
     .wm-toolbar { padding: .5rem; flex-wrap: wrap; }
+    .wm-toolbar-actions { flex-basis: 100%; width: auto; margin-left: 0; justify-content: flex-start; }
     .btn { padding: .35rem .75rem; font-size: .8rem; }
 
     .wm-view-header { padding: 1.25rem 1rem; }
@@ -1201,6 +1280,7 @@ input:autofill {
         border-right: none;
         border-top: 1px solid var(--wm-border);
     }
+    .wm-email-body-shadow { padding: 1rem; }
     
     .wm-email-container.plain-text { padding: 1.5rem 1.25rem; }
     
@@ -1212,9 +1292,18 @@ input:autofill {
     }
     .wm-mail-date { grid-column: 2; font-size: .7rem; margin-top: .2rem; }
     .wm-mail-subject { grid-column: 2; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    
+    #user-menu-btn { margin-left: auto; }
+    #user-menu {
+        left: auto;
+        right: 0;
+        width: calc(100vw - 2 * var(--wm-menu-edge-gap, 12px));
+        max-width: 380px;
+        min-width: 0;
+    }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 520px) {
     .wm-topbar { padding: 0 .5rem; gap: .5rem; }
     #user-menu-btn span { display: none; }
 }

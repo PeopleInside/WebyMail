@@ -20,8 +20,6 @@ $isInbox   = strtoupper($folder) === 'INBOX';
         Back
     </a>
 
-    <div style="width:1px;height:20px;background:var(--wm-border);margin:0 .25rem"></div>
-
     <a href="?action=compose&reply=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-outline btn-sm" title="Reply">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
         Reply
@@ -40,7 +38,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
         Export
     </a>
 
-    <div style="margin-left:auto;display:flex;gap:.25rem">
+    <div class="wm-toolbar-actions">
         <button class="btn btn-ghost btn-sm" id="show-headers-btn" title="View original headers">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
             Headers
@@ -194,6 +192,18 @@ $isInbox   = strtoupper($folder) === 'INBOX';
     var close = document.getElementById('headers-modal-close');
     var pre   = document.getElementById('headers-content');
     var loaded = false;
+    const emailShadowCss = [
+        ':host{display:block;}',
+        '#wm-shadow-wrapper{color:inherit;background:transparent;max-width:100%;overflow-wrap:anywhere;word-break:break-word;}',
+        '#wm-shadow-wrapper *{box-sizing:border-box;}',
+        '#wm-shadow-wrapper body{margin:0;padding:0;}',
+        '#wm-shadow-wrapper img,#wm-shadow-wrapper video,#wm-shadow-wrapper iframe,#wm-shadow-wrapper canvas,#wm-shadow-wrapper svg{max-width:100%;height:auto;}',
+        '#wm-shadow-wrapper table{width:auto;max-width:100%;border-collapse:collapse;}',
+        '#wm-shadow-wrapper td,#wm-shadow-wrapper th{word-break:break-word;}',
+        '#wm-shadow-wrapper pre,#wm-shadow-wrapper code{white-space:pre-wrap;word-break:break-word;}',
+        '#wm-shadow-wrapper blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--wm-border, #d8e0e8);}',
+        '#wm-shadow-wrapper a{word-break:break-word;}'
+    ].join('\n');
 
     if (btn && modal) {
         btn.addEventListener('click', function() {
@@ -234,8 +244,8 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                     shadowHost.innerHTML = '';
                     
                     // Inject into shadow root
-                    // We wrap it in a div to easily apply the theme
-                    shadowRoot.innerHTML = '<div id="wm-shadow-wrapper">' + html + '</div>';
+                    // We wrap it in a div to easily apply the theme and enforce responsive styling
+                    shadowRoot.innerHTML = '<style>' + emailShadowCss + '</style><div id="wm-shadow-wrapper">' + html + '</div>';
                     
                     // Sync theme immediately
                     syncTheme();
