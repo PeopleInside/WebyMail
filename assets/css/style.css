@@ -53,6 +53,9 @@
     /* Scrollbar */
     --wm-scrollbar-track:  #e8edf2;
     --wm-scrollbar-thumb:  #b0bec8;
+
+    /* Overlays */
+    --wm-menu-edge-gap:    12px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -194,6 +197,24 @@ a:hover { text-decoration: underline; }
 
 .wm-topbar-spacer { flex: 1; }
 
+.wm-user-menu {
+    position: absolute;
+    right: 0;
+    left: auto;
+    top: calc(100% + 4px);
+    background: var(--wm-surface);
+    border: 1px solid var(--wm-border);
+    border-radius: 8px;
+    max-width: calc(100vw - 2 * var(--wm-menu-edge-gap, 12px));
+    width: 360px;
+    max-height: calc(100dvh - 64px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-shadow: var(--wm-shadow);
+    z-index: 300;
+    padding-bottom: 1rem;
+}
+
 /* Sidebar */
 .wm-sidebar {
     background: var(--wm-sidebar-bg);
@@ -299,6 +320,15 @@ a:hover { text-decoration: underline; }
     width: 100%;
     max-width: 960px;
     margin: 0 auto;
+}
+
+.wm-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    margin-left: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 /* ----------------------------------------------------------
@@ -550,9 +580,20 @@ input:autofill {
     flex: 1;
 }
 
+@media (max-width: 1024px) {
+    .wm-view-content-layout {
+        padding: 1.25rem 1.25rem 4rem;
+        gap: 1.5rem;
+    }
+}
+
 @media (max-width: 900px) {
     .wm-view-content-layout {
         grid-template-columns: 1fr;
+    }
+    .wm-view-attachments {
+        position: static;
+        width: 100%;
     }
 }
 
@@ -574,6 +615,8 @@ input:autofill {
     flex: 1;
     display: flex;
     flex-direction: column;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .wm-email-container.plain-text {
@@ -590,13 +633,16 @@ input:autofill {
     line-height: 1.6;
 }
 
+/* Prevent message body from forcing page scrollbars while keeping vertical flow */
 .wm-email-body-shadow {
     min-height: 200px;
     flex: 1;
     display: flex;
     flex-direction: column;
-    /* Allow internal horizontal scroll for unusually wide email content without creating a page-level scrollbar */
+    padding: 1.5rem;
+    gap: 1rem;
     overflow-x: auto;
+    overflow-y: visible;
 }
 
 .wm-email-loading {
@@ -1195,6 +1241,7 @@ input:autofill {
 
     .wm-card-body { padding: 1rem; }
     .wm-toolbar { padding: .5rem; flex-wrap: wrap; }
+    .wm-toolbar-actions { flex-basis: 100%; width: auto; margin-left: 0; justify-content: flex-start; }
     .btn { padding: .35rem .75rem; font-size: .8rem; }
 
     .wm-view-header { padding: 1.25rem 1rem; }
@@ -1210,6 +1257,7 @@ input:autofill {
         border-right: none;
         border-top: 1px solid var(--wm-border);
     }
+    .wm-email-body-shadow { padding: 1rem; }
     
     .wm-email-container.plain-text { padding: 1.5rem 1.25rem; }
     
@@ -1221,6 +1269,15 @@ input:autofill {
     }
     .wm-mail-date { grid-column: 2; font-size: .7rem; margin-top: .2rem; }
     .wm-mail-subject { grid-column: 2; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    
+    #user-menu-btn { margin-left: auto; }
+    #user-menu {
+        left: auto;
+        right: 0;
+        width: calc(100vw - 2 * var(--wm-menu-edge-gap, 12px));
+        max-width: 380px;
+        min-width: 0;
+    }
 }
 
 @media (max-width: 480px) {
