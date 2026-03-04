@@ -251,7 +251,7 @@ a:hover { text-decoration: underline; }
 
 /* Main content */
 .wm-main {
-    overflow-y: auto;
+    overflow-y: visible;
     overflow-x: hidden;
     display: flex;
     flex-direction: column;
