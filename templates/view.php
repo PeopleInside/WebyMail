@@ -203,7 +203,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
         '#wm-shadow-wrapper pre,#wm-shadow-wrapper code{white-space:pre-wrap;word-break:break-word;}',
         '#wm-shadow-wrapper blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--wm-border, #d8e0e8);}',
         '#wm-shadow-wrapper a{word-break:break-word;}'
-    ].join('\\n');
+    ].join('\n');
 
     if (btn && modal) {
         btn.addEventListener('click', function() {
