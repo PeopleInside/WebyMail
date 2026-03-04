@@ -612,6 +612,7 @@ input:autofill {
     line-height: 1.6;
 }
 
+/* Prevent message body from forcing page scrollbars while keeping vertical flow */
 .wm-email-body-shadow {
     min-height: 200px;
     flex: 1;
@@ -1235,6 +1236,7 @@ input:autofill {
         border-right: none;
         border-top: 1px solid var(--wm-border);
     }
+    .wm-email-body-shadow { padding: 1rem; }
     
     .wm-email-container.plain-text { padding: 1.5rem 1.25rem; }
     
