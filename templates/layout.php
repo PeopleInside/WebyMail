@@ -117,7 +117,7 @@
                     <polyline points="6 9 12 15 18 9"/>
                 </svg>
             </button>
-            <div id="user-menu" style="display:none;position:absolute;right:0;left:auto;top:calc(100% + 4px);background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:8px;min-width:0;max-width:calc(100vw - 12px);width:360px;max-height:calc(100dvh - 64px);overflow-y:auto;overflow-x:hidden;box-shadow:var(--wm-shadow);z-index:300;padding-bottom:1rem">
+            <div id="user-menu" class="wm-user-menu" style="display:none;">
                 <?php if (!empty($accounts) && count($accounts) > 1): ?>
                 <div style="padding:.6rem 1rem;font-size:.75rem;font-weight:600;color:var(--wm-text-muted);text-transform:uppercase;letter-spacing:.03em">
                     Accounts

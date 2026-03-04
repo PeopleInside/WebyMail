@@ -194,6 +194,25 @@ a:hover { text-decoration: underline; }
 
 .wm-topbar-spacer { flex: 1; }
 
+.wm-user-menu {
+    position: absolute;
+    right: 0;
+    left: auto;
+    top: calc(100% + 4px);
+    background: var(--wm-surface);
+    border: 1px solid var(--wm-border);
+    border-radius: 8px;
+    min-width: 0;
+    max-width: calc(100vw - 12px);
+    width: 360px;
+    max-height: calc(100dvh - 64px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-shadow: var(--wm-shadow);
+    z-index: 300;
+    padding-bottom: 1rem;
+}
+
 /* Sidebar */
 .wm-sidebar {
     background: var(--wm-sidebar-bg);
