@@ -853,7 +853,7 @@ function sanitizeHtml(string $html, bool $showImages, string $theme): string
                 overflow-wrap: anywhere;
                 max-width: 100%;
                 margin: 0 auto;
-                overflow-x: auto !important;
+                overflow-x: hidden;
             }
 
             /* Force wrapping for all elements */

@@ -20,8 +20,6 @@ $isInbox   = strtoupper($folder) === 'INBOX';
         Back
     </a>
 
-    <div style="width:1px;height:20px;background:var(--wm-border);margin:0 .25rem"></div>
-
     <a href="?action=compose&reply=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-outline btn-sm" title="Reply">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
         Reply
