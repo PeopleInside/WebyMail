@@ -732,10 +732,22 @@ input:autofill {
 .wm-attachment-name {
     font-size: .82rem;
     font-weight: 500;
+    color: var(--wm-text);
+    display: flex;
+    min-width: 0;
+}
+
+.wm-attachment-basename {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: var(--wm-text);
+    min-width: 0;
+    flex: 1;
+}
+
+.wm-attachment-ext {
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .wm-attachment-size {

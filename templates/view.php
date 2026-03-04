@@ -139,12 +139,13 @@ $isInbox   = strtoupper($folder) === 'INBOX';
             </a>
         </div>
         <div class="wm-attachments-list">
-            <?php foreach ($message['attachments'] as $att): ?>
+            <?php foreach ($message['attachments'] as $att):
+                $ext         = strtolower(pathinfo($att['filename'], PATHINFO_EXTENSION));
+                $attBasename = $ext !== '' ? substr($att['filename'], 0, -(strlen($ext) + 1)) : $att['filename'];
+            ?>
             <div class="wm-attachment-item">
                 <div class="wm-attachment-icon">
-                    <?php 
-                    $ext = strtolower(pathinfo($att['filename'], PATHINFO_EXTENSION));
-                    if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif'])): ?>
+                    <?php if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif'])): ?>
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                     <?php elseif ($ext === 'pdf'): ?>
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
@@ -155,7 +156,9 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                     <?php endif; ?>
                 </div>
                 <div class="wm-attachment-info">
-                    <div class="wm-attachment-name" title="<?= htmlspecialchars($att['filename']) ?>"><?= htmlspecialchars($att['filename']) ?></div>
+                    <div class="wm-attachment-name" title="<?= htmlspecialchars($att['filename']) ?>">
+                        <span class="wm-attachment-basename"><?= htmlspecialchars($attBasename) ?></span><?php if ($ext !== ''): ?><span class="wm-attachment-ext">.<?= htmlspecialchars($ext) ?></span><?php endif; ?>
+                    </div>
                     <div class="wm-attachment-size"><?= number_format($att['size'] / 1024, 1) ?> KB</div>
                 </div>
                 <a href="?action=attachment&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&section=<?= urlencode($att['section']) ?>&name=<?= urlencode($att['filename']) ?>" 
@@ -199,6 +202,9 @@ $isInbox   = strtoupper($folder) === 'INBOX';
         '#wm-shadow-wrapper body{margin:0;padding:0;}',
         // !important is required to override hardcoded width attributes (e.g. width="600") and
         // inline CSS widths that HTML emails commonly use, which would otherwise exceed the viewport.
+        // Block-level containers (e.g. #__MailbirdStyleContent) often carry fixed pixel widths;
+        // capping them keeps all content visible without horizontal scrolling.
+        '#wm-shadow-wrapper div,#wm-shadow-wrapper section,#wm-shadow-wrapper article,#wm-shadow-wrapper aside,#wm-shadow-wrapper center,#wm-shadow-wrapper header,#wm-shadow-wrapper footer,#wm-shadow-wrapper main,#wm-shadow-wrapper form,#wm-shadow-wrapper fieldset{max-width:100%!important;}',
         '#wm-shadow-wrapper img,#wm-shadow-wrapper video,#wm-shadow-wrapper iframe,#wm-shadow-wrapper canvas,#wm-shadow-wrapper svg{max-width:100%!important;height:auto;}',
         '#wm-shadow-wrapper table{width:auto;max-width:100%!important;border-collapse:collapse;}',
         '#wm-shadow-wrapper td,#wm-shadow-wrapper th{word-break:break-word;overflow-wrap:anywhere;min-width:0;}',
