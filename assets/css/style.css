@@ -1303,7 +1303,7 @@ input:autofill {
     }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 520px) {
     .wm-topbar { padding: 0 .5rem; gap: .5rem; }
     #user-menu-btn span { display: none; }
 }
