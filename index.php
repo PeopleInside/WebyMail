@@ -800,11 +800,26 @@ function sanitizeHtml(string $html, bool $showImages, string $theme): string
         $darkColor = '#e6edf3';
 
         $styleStr = '
-            :root { --bg: ' . $lightBg . '; --color: ' . $lightColor . '; }
-            [data-theme="dark"] { --bg: ' . $darkBg . '; --color: ' . $darkColor . '; color-scheme: dark; }
-            @media (prefers-color-scheme: dark) {
-                :root:not([data-theme="light"]) { --bg: ' . $darkBg . '; --color: ' . $darkColor . '; color-scheme: dark; }
+            :root { 
+                --bg: ' . $lightBg . '; 
+                --color: ' . $lightColor . '; 
+                color-scheme: light;
             }
+            
+            [data-theme="dark"] { 
+                --bg: ' . $darkBg . '; 
+                --color: ' . $darkColor . '; 
+                color-scheme: dark; 
+            }
+            
+            @media (prefers-color-scheme: dark) {
+                :root:not([data-theme="light"]) { 
+                    --bg: ' . $darkBg . '; 
+                    --color: ' . $darkColor . '; 
+                    color-scheme: dark; 
+                }
+            }
+
             html, body {
                 margin: 0;
                 padding: 0;
@@ -812,77 +827,112 @@ function sanitizeHtml(string $html, bool $showImages, string $theme): string
                 min-height: auto !important;
                 max-height: none !important;
                 overflow: visible !important;
+                background: var(--bg);
+                color: var(--color);
             }
+
             #wm-shadow-wrapper {
                 min-height: 100%;
                 display: block;
-                padding: 2.5rem; /* Padding on the wrapper instead of body for Shadow DOM reliability */
+                padding: 2.5rem;
                 box-sizing: border-box;
+                /* Base colors for inversion: assume light by default */
+                background: #ffffff;
+                color: #1a2332;
+                transition: background-color .2s, color .2s;
             }
+
             body {
-                padding: 0; /* Reset body padding since we use wrapper */
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                padding: 0;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
                 font-size: .95rem;
                 line-height: 1.6;
-                background: var(--bg);
-                color: var(--color);
                 word-break: break-word;
                 overflow-wrap: anywhere;
-                transition: background-color .2s, color .2s;
                 max-width: 100%;
                 margin: 0 auto;
-                overflow-x: hidden !important; /* Prevent horizontal scroll on body */
+                overflow-x: hidden !important;
             }
-            /* Force wrapping for all elements, especially pre and those with hardcoded nowrap */
+
+            /* Force wrapping for all elements */
             * {
                 overflow-wrap: anywhere !important;
                 word-break: break-word !important;
             }
+
             pre {
                 white-space: pre-wrap !important;
                 margin: 0;
+                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
             }
+
             @media (max-width: 600px) {
                 #wm-shadow-wrapper { padding: 1.25rem; }
-                /* Aggressively force wrapping on mobile */
-                * {
-                    white-space: normal !important;
-                }
-                pre, code, kbd, samp {
-                    white-space: pre-wrap !important;
-                }
+                * { white-space: normal !important; }
+                pre, code, kbd, samp { white-space: pre-wrap !important; }
             }
+
             img, table { max-width: 100% !important; height: auto !important; }
             table { border-collapse: collapse; }
             a { color: #388bfd; }
             
-            /* Dark mode overrides for hardcoded colors to ensure readability */
-            [data-theme="dark"], 
-            [data-theme="dark"] body,
-            [data-theme="dark"] #wm-shadow-wrapper { 
-                background-color: var(--bg) !important; 
-                color: var(--color) !important; 
-            }
-            [data-theme="dark"] *:not(a):not(button) {
-                /* Force inheritance of the light color in dark mode for elements with hardcoded dark colors */
-                color: inherit !important;
-            }
-            /* Specifically target common hardcoded dark colors */
-            [data-theme="dark"] [style*="color: #000"],
-            [data-theme="dark"] [style*="color: #000000"],
-            [data-theme="dark"] [style*="color: black"],
-            [data-theme="dark"] [style*="color:rgb(0,0,0)"],
-            [data-theme="dark"] font[color] {
+            /* --- SMART DARK MODE INVERSION --- */
+            /* This technique inverts the entire content and then re-inverts media to keep them looking natural. */
+            
+            /* Target the root element (html or body) when data-theme="dark" is set */
+            [data-theme="dark"] {
+                background-color: var(--bg) !important;
                 color: var(--color) !important;
             }
-            [data-theme="dark"] [style*="background-color: #fff"],
-            [data-theme="dark"] [style*="background-color: #ffffff"],
-            [data-theme="dark"] [style*="background-color: white"],
-            [data-theme="dark"] [style*="background-color:rgb(255,255,255)"] {
-                background-color: transparent !important;
+
+            /* Apply inversion to the content wrapper in dark mode */
+            [data-theme="dark"] #wm-shadow-wrapper {
+                filter: invert(100%) hue-rotate(180deg) brightness(1.02) contrast(0.95);
+                background: #ffffff !important; /* Base for inversion */
             }
-            /* Ensure links remain visible */
-            [data-theme="dark"] a { color: #58a6ff !important; }
+
+            /* Re-invert images, videos, and other media to restore their original colors */
+            [data-theme="dark"] img,
+            [data-theme="dark"] video,
+            [data-theme="dark"] iframe,
+            [data-theme="dark"] canvas,
+            [data-theme="dark"] svg,
+            [data-theme="dark"] [style*="background-image"],
+            [data-theme="dark"] [style*="background: url"],
+            [data-theme="dark"] [style*="background:url"] {
+                filter: invert(100%) hue-rotate(180deg) !important;
+            }
+
+            /* Fix for links which might become hard to read after inversion */
+            [data-theme="dark"] a {
+                filter: invert(100%) hue-rotate(180deg) !important;
+                color: #58a6ff !important;
+                text-decoration: underline;
+            }
+
+            /* Ensure background colors that were inverted to white become the theme background */
+            [data-theme="dark"] .inverted-bg-fix {
+                background-color: var(--bg) !important;
+            }
+
+            /* Additional overrides for common email elements that might still look bad */
+            [data-theme="dark"] table, 
+            [data-theme="dark"] td, 
+            [data-theme="dark"] div, 
+            [data-theme="dark"] span, 
+            [data-theme="dark"] p {
+                border-color: var(--wm-border, #30363d) !important;
+            }
+            
+            /* Special handling for blocked image placeholders in dark mode */
+            [data-theme="dark"] img[alt="[image blocked]"] {
+                filter: none !important;
+                background: #30363d;
+                color: #8b949e;
+                padding: 4px;
+                border-radius: 4px;
+                font-size: 0.75rem;
+            }
         ';
         $style = $doc->createElement('style');
         $style->appendChild($doc->createTextNode($styleStr));
