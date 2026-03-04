@@ -234,17 +234,17 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                     // Inject into shadow root
                     // We wrap it in a div to easily apply the theme and enforce responsive styling
                     var shadowCss = `
-:host{display:block;}
-#wm-shadow-wrapper{color:inherit;background:transparent;max-width:100%;overflow-wrap:anywhere;word-break:break-word;}
-#wm-shadow-wrapper *{box-sizing:border-box;}
-#wm-shadow-wrapper body{margin:0;padding:0;}
-#wm-shadow-wrapper img,#wm-shadow-wrapper video,#wm-shadow-wrapper iframe,#wm-shadow-wrapper canvas,#wm-shadow-wrapper svg{max-width:100%;height:auto;}
-#wm-shadow-wrapper table{width:auto;max-width:100%;border-collapse:collapse;}
-#wm-shadow-wrapper td,#wm-shadow-wrapper th{word-break:break-word;}
-#wm-shadow-wrapper pre,#wm-shadow-wrapper code{white-space:pre-wrap;word-break:break-word;}
-#wm-shadow-wrapper blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--wm-border, #d8e0e8);}
-#wm-shadow-wrapper a{word-break:break-word;}
-                    `;
+                        :host{display:block;}
+                        #wm-shadow-wrapper{color:inherit;background:transparent;max-width:100%;overflow-wrap:anywhere;word-break:break-word;}
+                        #wm-shadow-wrapper *{box-sizing:border-box;}
+                        #wm-shadow-wrapper body{margin:0;padding:0;}
+                        #wm-shadow-wrapper img,#wm-shadow-wrapper video,#wm-shadow-wrapper iframe,#wm-shadow-wrapper canvas,#wm-shadow-wrapper svg{max-width:100%;height:auto;}
+                        #wm-shadow-wrapper table{width:auto;max-width:100%;border-collapse:collapse;}
+                        #wm-shadow-wrapper td,#wm-shadow-wrapper th{word-break:break-word;}
+                        #wm-shadow-wrapper pre,#wm-shadow-wrapper code{white-space:pre-wrap;word-break:break-word;}
+                        #wm-shadow-wrapper blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--wm-border, #d8e0e8);}
+                        #wm-shadow-wrapper a{word-break:break-word;}
+                    `.trim();
                     shadowRoot.innerHTML = '<style>' + shadowCss + '</style><div id="wm-shadow-wrapper">' + html + '</div>';
                     
                     // Sync theme immediately
