@@ -735,6 +735,7 @@ input:autofill {
     color: var(--wm-text);
     display: flex;
     min-width: 0;
+    overflow: hidden;
 }
 
 .wm-attachment-basename {
@@ -1298,8 +1299,6 @@ input:autofill {
     
     .wm-email-container.plain-text { padding: 1.5rem 1.25rem; }
     
-    .wm-email-frame { min-width: 320px; }
-    
     .wm-mail-row {
         grid-template-columns: 24px 1fr;
         padding: .75rem;
@@ -1320,6 +1319,9 @@ input:autofill {
 @media (max-width: 520px) {
     .wm-topbar { padding: 0 .5rem; gap: .5rem; }
     #user-menu-btn span { display: none; }
+    /* Minimise horizontal padding so email content has the maximum available width */
+    .wm-email-body-shadow { padding: .75rem .5rem; }
+    .wm-email-container.plain-text { padding: 1rem .75rem; }
 }
 
 /* ----------------------------------------------------------

@@ -198,16 +198,22 @@ $isInbox   = strtoupper($folder) === 'INBOX';
     const emailShadowCss = [
         ':host{display:block;overflow:hidden;}',
         '#wm-shadow-wrapper{color:inherit;background:transparent;max-width:100%;overflow-x:hidden;overflow-wrap:anywhere;word-break:break-word;}',
-        '#wm-shadow-wrapper *{box-sizing:border-box;}',
+        // Apply box-sizing and max-width to every element so that no single node —
+        // regardless of tag, inline style, or HTML presentational attribute — can exceed
+        // the width of its parent.  This is the primary guard against any email layout
+        // (fixed-width tables, Mailbird/Outlook wrappers, inline-block spans, etc.)
+        // causing horizontal overflow on narrow viewports.
+        '#wm-shadow-wrapper *{box-sizing:border-box;max-width:100%!important;}',
         '#wm-shadow-wrapper body{margin:0;padding:0;}',
-        // !important is required to override hardcoded width attributes (e.g. width="600") and
-        // inline CSS widths that HTML emails commonly use, which would otherwise exceed the viewport.
-        // Block-level containers (e.g. #__MailbirdStyleContent) often carry fixed pixel widths;
-        // capping them keeps all content visible without horizontal scrolling.
-        '#wm-shadow-wrapper div,#wm-shadow-wrapper section,#wm-shadow-wrapper article,#wm-shadow-wrapper aside,#wm-shadow-wrapper center,#wm-shadow-wrapper header,#wm-shadow-wrapper footer,#wm-shadow-wrapper main,#wm-shadow-wrapper form,#wm-shadow-wrapper fieldset{max-width:100%!important;}',
-        '#wm-shadow-wrapper img,#wm-shadow-wrapper video,#wm-shadow-wrapper iframe,#wm-shadow-wrapper canvas,#wm-shadow-wrapper svg{max-width:100%!important;height:auto;}',
-        '#wm-shadow-wrapper table{width:auto;max-width:100%!important;border-collapse:collapse;}',
-        '#wm-shadow-wrapper td,#wm-shadow-wrapper th{word-break:break-word;overflow-wrap:anywhere;min-width:0;}',
+        // Images and replaced elements additionally need height:auto so they scale
+        // proportionally when their width is clamped by the rule above.
+        '#wm-shadow-wrapper img,#wm-shadow-wrapper video,#wm-shadow-wrapper iframe,#wm-shadow-wrapper canvas,#wm-shadow-wrapper svg{height:auto;}',
+        // Tables: reset any hard-coded width so the browser can reflow columns into
+        // the available space.  width:auto!important on td/th overrides both HTML
+        // presentational attributes (width="300") and inline style="width:300px" on
+        // individual cells, which are the most common source of wide-email overflow.
+        '#wm-shadow-wrapper table{width:auto!important;max-width:100%!important;border-collapse:collapse;}',
+        '#wm-shadow-wrapper td,#wm-shadow-wrapper th{word-break:break-word;overflow-wrap:anywhere;min-width:0;width:auto!important;}',
         '#wm-shadow-wrapper pre,#wm-shadow-wrapper code{white-space:pre-wrap;word-break:break-word;}',
         '#wm-shadow-wrapper blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--wm-border, #d8e0e8);}',
         '#wm-shadow-wrapper a{word-break:break-word;}'
