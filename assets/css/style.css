@@ -563,8 +563,9 @@ input:autofill {
     border: 1px solid var(--wm-border);
     border-radius: 12px;
     box-shadow: var(--wm-shadow);
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: visible;
+    max-width: 100%;
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -589,6 +590,7 @@ input:autofill {
     flex: 1;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 .wm-email-loading {
