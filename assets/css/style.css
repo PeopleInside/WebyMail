@@ -202,7 +202,6 @@ a:hover { text-decoration: underline; }
     background: var(--wm-surface);
     border: 1px solid var(--wm-border);
     border-radius: 8px;
-    min-width: 0;
     max-width: calc(100vw - 12px);
     width: 360px;
     max-height: calc(100dvh - 64px);
