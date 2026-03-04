@@ -110,9 +110,15 @@ class Session
             return null;
         }
 
-        // Fingerprint validation: User-Agent check
+        // Fingerprint validation: User-Agent check (tolerant to device emulation)
         $currentUa = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
-        if ($row['user_agent'] !== $currentUa) {
+        $storedFp  = $this->normalizeUserAgent($row['user_agent'] ?? '');
+        $currentFp = $this->normalizeUserAgent($currentUa);
+        $uaMatches = ($storedFp !== '' && $currentFp !== '')
+            ? ($storedFp === $currentFp)
+            : ($row['user_agent'] === $currentUa);
+
+        if (!$uaMatches) {
             $this->destroy();
             return null;
         }
@@ -193,5 +199,41 @@ class Session
             'httponly' => true,
             'samesite' => 'Strict',
         ]);
+    }
+
+    /**
+     * Reduce a User-Agent string to a stable fingerprint so that
+     * developer tools' device emulation (which tweaks the UA string)
+     * does not invalidate the session. We still keep browser family
+     * and major version to guard against cross-browser reuse.
+     */
+    private function normalizeUserAgent(string $ua): string
+    {
+        $ua = trim($ua);
+        if ($ua === '') {
+            return '';
+        }
+
+        $ua = preg_replace('/\s+/', ' ', $ua);
+
+        $patterns = [
+            'edg'     => '/Edg[A-Za-z]*\/(\d+)/i',
+            'chrome'  => '/Chrome\/(\d+)/i',
+            'firefox' => '/Firefox\/(\d+)/i',
+            'safari'  => '/Version\/(\d+)[^ ]* Safari\//i',
+        ];
+
+        foreach ($patterns as $label => $pattern) {
+            if (preg_match($pattern, $ua, $m)) {
+                return $label . ':' . $m[1];
+            }
+        }
+
+        if (preg_match('/AppleWebKit\/(\d+)/i', $ua, $m)) {
+            return 'webkit:' . $m[1];
+        }
+
+        // Fallback: keep a trimmed prefix for uncommon browsers so the fingerprint is still consistent
+        return substr($ua, 0, 80);
     }
 }

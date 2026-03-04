@@ -888,6 +888,21 @@ input:autofill {
 [data-theme="dark"] .ql-fill   { fill:   var(--wm-text-muted) !important; }
 [data-theme="dark"] .ql-picker-label { color: var(--wm-text-muted) !important; }
 
+.wm-options-menu {
+    position: fixed;
+    right: var(--wm-menu-edge-gap, 12px);
+    left: auto;
+    top: auto;
+    background: var(--wm-surface);
+    border: 1px solid var(--wm-border);
+    border-radius: 8px;
+    width: min(280px, calc(100vw - 2 * var(--wm-menu-edge-gap, 12px)));
+    min-width: min(220px, calc(100vw - 2 * var(--wm-menu-edge-gap, 12px)));
+    box-shadow: var(--wm-shadow);
+    z-index: 300;
+    padding: .75rem;
+}
+
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme]) .ql-toolbar,
     :root:not([data-theme]) .ql-container { background: var(--wm-surface) !important; color: var(--wm-text) !important; }

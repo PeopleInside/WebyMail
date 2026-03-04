@@ -36,7 +36,7 @@ $signature = $signature ?? '';
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
                 Options
             </button>
-            <div id="msg-options-menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:8px;min-width:220px;box-shadow:var(--wm-shadow);z-index:300;padding:.75rem">
+            <div id="msg-options-menu" class="wm-options-menu" style="display:none">
                 <div style="margin-bottom:.75rem">
                     <label style="display:block;font-size:.75rem;font-weight:600;margin-bottom:.35rem;color:var(--wm-text-muted)">Priority</label>
                     <select name="priority" form="compose-form" class="form-control" style="font-size:.82rem;height:32px">
@@ -572,7 +572,27 @@ $signature = $signature ?? '';
         if (!optBtn || !optMenu) return;
         optBtn.addEventListener('click', function(e) {
             e.stopPropagation();
-            optMenu.style.display = optMenu.style.display === 'none' ? 'block' : 'none';
+            var isHidden = optMenu.style.display === 'none' || !optMenu.style.display;
+            if (isHidden) {
+                var rect = optBtn.getBoundingClientRect();
+                var gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--wm-menu-edge-gap')) || 12;
+                var availableWidth = Math.max(0, window.innerWidth - (2 * gap));
+                var desiredWidth = optMenu.scrollWidth || 0;
+                var targetWidth = Math.max(220, desiredWidth);
+                var menuWidth = availableWidth > 0 ? Math.min(targetWidth, availableWidth) : targetWidth;
+
+                var left = Math.min(
+                    Math.max(rect.right - menuWidth, gap),
+                    window.innerWidth - gap - menuWidth
+                );
+
+                optMenu.style.position = 'fixed';
+                optMenu.style.width = menuWidth + 'px';
+                optMenu.style.left = left + 'px';
+                optMenu.style.right = 'auto';
+                optMenu.style.top = (rect.bottom + 4) + 'px';
+            }
+            optMenu.style.display = isHidden ? 'block' : 'none';
         });
         document.addEventListener('click', function() {
             optMenu.style.display = 'none';
