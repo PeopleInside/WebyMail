@@ -197,6 +197,14 @@ a:hover { text-decoration: underline; }
 
 .wm-topbar-spacer { flex: 1; }
 
+.wm-user-email {
+    display: inline-block;
+    max-width: clamp(96px, 22vw, 140px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .wm-user-menu {
     position: absolute;
     right: 0;
