@@ -62,6 +62,12 @@ class ImapClient
         }
     }
 
+    /** @return resource|false */
+    public function getConnection()
+    {
+        return $this->conn;
+    }
+
     // -------------------------------------------------------------------------
     // Folders
     // -------------------------------------------------------------------------
@@ -180,6 +186,13 @@ class ImapClient
         return imap_expunge($this->conn);
     }
 
+    public function deleteMessageByUid(string $folder, int $uid): bool
+    {
+        $this->reopenFolder($folder);
+        imap_delete($this->conn, (string) $uid, FT_UID);
+        return imap_expunge($this->conn);
+    }
+
     public function moveMessage(string $folder, int $msgNo, string $dest): bool
     {
         $this->reopenFolder($folder);
@@ -212,7 +225,7 @@ class ImapClient
 
     public function getUnreadCount(string $folder): int
     {
-        $this->reopenFolder($folder);
+        $this->assertConnected();
         $status = imap_status($this->conn, $this->host . mb_convert_encoding($folder, 'UTF7-IMAP', 'UTF-8'), SA_UNSEEN);
         return $status ? (int) $status->unseen : 0;
     }
@@ -450,6 +463,14 @@ class ImapClient
             throw new RuntimeException('Failed to append message to folder ' . $folder);
         }
         return true;
+    }
+
+    public function getLastUid(string $folder): int
+    {
+        $this->reopenFolder($folder);
+        $total = imap_num_msg($this->conn);
+        if ($total === 0) return 0;
+        return (int) imap_uid($this->conn, $total);
     }
 
     public function createFolder(string $name): bool

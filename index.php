@@ -389,11 +389,9 @@ $currentFolder = $_GET['folder'] ?? 'INBOX';
 try {
     $imap    = $accountMgr->imapConnect($accountId);
     $folders = $imap->getFolders();
-    // Add unread count for INBOX
+    // Add unread count for all folders
     foreach ($folders as &$f) {
-        if (strtoupper($f['name']) === 'INBOX') {
-            $f['unread'] = $imap->getUnreadCount('INBOX');
-        }
+        $f['unread'] = $imap->getUnreadCount($f['name']);
     }
     unset($f);
     // Sort: INBOX first, then others alphabetically
@@ -888,28 +886,68 @@ function sanitizeHtml(string $html, bool $showImages, string $theme): string
             }
 
             /* Apply inversion to the content wrapper in dark mode */
-            [data-theme="dark"] #wm-shadow-wrapper {
-                filter: invert(100%) hue-rotate(180deg) brightness(1.02) contrast(0.95);
+            /* data-theme="dark" is set directly on #wm-shadow-wrapper by JS syncTheme(),
+               so we must use #wm-shadow-wrapper[data-theme="dark"] (not [data-theme="dark"] #wm-shadow-wrapper) */
+            #wm-shadow-wrapper[data-theme="dark"] {
+                filter: invert(100%) hue-rotate(180deg) brightness(1.1) contrast(0.9);
                 background: #ffffff !important; /* Base for inversion */
+                color: #000000 !important; /* Ensure base text is black before inversion */
+            }
+            @media (prefers-color-scheme: dark) {
+                #wm-shadow-wrapper:not([data-theme="light"]) {
+                    filter: invert(100%) hue-rotate(180deg) brightness(1.1) contrast(0.9);
+                    background: #ffffff !important;
+                    color: #000000 !important;
+                }
             }
 
-            /* Re-invert images, videos, and other media to restore their original colors */
-            [data-theme="dark"] img,
-            [data-theme="dark"] video,
-            [data-theme="dark"] iframe,
-            [data-theme="dark"] canvas,
-            [data-theme="dark"] svg,
-            [data-theme="dark"] [style*="background-image"],
-            [data-theme="dark"] [style*="background: url"],
-            [data-theme="dark"] [style*="background:url"] {
+            /* Force very dark colors to be more readable after inversion */
+            #wm-shadow-wrapper[data-theme="dark"] * {
+                /* Nudge contrast for better readability in dark mode */
+                text-shadow: 0 0 0.5px rgba(255,255,255,0.05);
+            }
+            @media (prefers-color-scheme: dark) {
+                #wm-shadow-wrapper:not([data-theme="light"]) * {
+                    text-shadow: 0 0 0.5px rgba(255,255,255,0.05);
+                }
+            }
+
+            /* Re-invert images to restore their original colors (never show inverted images) */
+            #wm-shadow-wrapper[data-theme="dark"] img,
+            #wm-shadow-wrapper[data-theme="dark"] video,
+            #wm-shadow-wrapper[data-theme="dark"] iframe,
+            #wm-shadow-wrapper[data-theme="dark"] canvas,
+            #wm-shadow-wrapper[data-theme="dark"] svg,
+            #wm-shadow-wrapper[data-theme="dark"] [style*="background-image"],
+            #wm-shadow-wrapper[data-theme="dark"] [style*="background: url"],
+            #wm-shadow-wrapper[data-theme="dark"] [style*="background:url"] {
                 filter: invert(100%) hue-rotate(180deg) !important;
+            }
+            @media (prefers-color-scheme: dark) {
+                #wm-shadow-wrapper:not([data-theme="light"]) img,
+                #wm-shadow-wrapper:not([data-theme="light"]) video,
+                #wm-shadow-wrapper:not([data-theme="light"]) iframe,
+                #wm-shadow-wrapper:not([data-theme="light"]) canvas,
+                #wm-shadow-wrapper:not([data-theme="light"]) svg,
+                #wm-shadow-wrapper:not([data-theme="light"]) [style*="background-image"],
+                #wm-shadow-wrapper:not([data-theme="light"]) [style*="background: url"],
+                #wm-shadow-wrapper:not([data-theme="light"]) [style*="background:url"] {
+                    filter: invert(100%) hue-rotate(180deg) !important;
+                }
             }
 
             /* Fix for links which might become hard to read after inversion */
-            [data-theme="dark"] a {
+            #wm-shadow-wrapper[data-theme="dark"] a {
                 filter: invert(100%) hue-rotate(180deg) !important;
                 color: #58a6ff !important;
                 text-decoration: underline;
+            }
+            @media (prefers-color-scheme: dark) {
+                #wm-shadow-wrapper:not([data-theme="light"]) a {
+                    filter: invert(100%) hue-rotate(180deg) !important;
+                    color: #58a6ff !important;
+                    text-decoration: underline;
+                }
             }
 
             /* Ensure background colors that were inverted to white become the theme background */
@@ -1025,6 +1063,37 @@ if ($action === 'email_headers' && isAjax()) {
     }
 }
 
+// ── Check unread counts (AJAX) ───────────────────────────────────────────────
+if ($action === 'check_unread' && isAjax()) {
+    if (!$accountId) {
+        jsonResponse(['status' => 'error', 'message' => 'Not logged in']);
+    }
+
+    try {
+        $imap = $accountMgr->imapConnect($accountId);
+        $folders = $imap->getFolders();
+        $counts = [];
+        $inboxUnread = 0;
+        
+        foreach ($folders as $f) {
+            $count = $imap->getUnreadCount($f['name']);
+            $counts[$f['name']] = $count;
+            if (strtoupper($f['name']) === 'INBOX') {
+                $inboxUnread = $count;
+            }
+        }
+        $imap->disconnect();
+
+        jsonResponse([
+            'status' => 'success',
+            'counts' => $counts,
+            'inbox_unread' => $inboxUnread
+        ]);
+    } catch (Throwable $e) {
+        jsonResponse(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
 // ── Bulk actions ──────────────────────────────────────────────────────────────
 if ($action === 'bulk' && isAjax()) {
     $body   = json_decode(file_get_contents('php://input'), true) ?? [];
@@ -1121,6 +1190,7 @@ if ($action === 'attachment' || $action === 'download_all') {
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
+        $imap->selectFolder($folder);
         $data = $imap->fetchAttachment($msgNo, $section);
         $imap->disconnect();
         
@@ -1218,9 +1288,9 @@ if ($action === 'compose') {
     $prefill  = [];
     $replyMsg = 0;
 
-    // Reply
-    if (isset($_GET['reply']) || isset($_GET['reply_all']) || isset($_GET['forward'])) {
-        $origNo = (int) ($_GET['reply'] ?? $_GET['reply_all'] ?? $_GET['forward'] ?? 0);
+    // Reply / Forward / Edit Draft
+    if (isset($_GET['reply']) || isset($_GET['reply_all']) || isset($_GET['forward']) || isset($_GET['edit_draft'])) {
+        $origNo = (int) ($_GET['reply'] ?? $_GET['reply_all'] ?? $_GET['forward'] ?? $_GET['edit_draft'] ?? 0);
         try {
             $imap    = $accountMgr->imapConnect($accountId);
             $orig    = $imap->getMessage($currentFolder, $origNo);
@@ -1228,20 +1298,42 @@ if ($action === 'compose') {
 
             $isForward  = isset($_GET['forward']);
             $isReplyAll = isset($_GET['reply_all']);
+            $isEditDraft = isset($_GET['edit_draft']);
 
-            $replyAddress = $orig['reply_to'] ?: $orig['from'];
-            $quoteHeader = sprintf('Il %s, %s ha scritto:', $orig['date'], $orig['from']);
+            $bodyHtml = $orig['body_html'] ?: nl2br(htmlspecialchars($orig['body_text']));
 
-            $prefill = [
-                'to'          => $isForward ? '' : $replyAddress,
-                'cc'          => $isReplyAll ? $orig['to'] : '',
-                'subject'     => ($isForward ? 'Fwd: ' : 'Re: ') . preg_replace('/^(Re:|Fwd:)\s*/i', '', $orig['subject']),
-                'in_reply_to' => "<{$orig['uid']}@{$_SERVER['HTTP_HOST']}>",
-                'reply_to'    => '',
-                'body_html'   => $isForward
-                    ? '<br><br><hr><b>--- Forwarded message ---</b><br>' . $orig['body_html']
-                    : '<br><br>' . htmlspecialchars($quoteHeader) . '<br><blockquote style="border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666">' . $orig['body_html'] . '</blockquote>',
-            ];
+            if ($isEditDraft) {
+                $prefill = [
+                    'to'          => $orig['to'],
+                    'cc'          => $orig['cc'],
+                    'subject'     => $orig['subject'],
+                    'body_html'   => $bodyHtml,
+                    'draft_uid'   => $orig['uid'],
+                    'draft_folder'=> $currentFolder,
+                    'priority'    => $orig['priority'] ?? 'normal',
+                    'request_read_receipt' => !empty($orig['read_receipt_to']),
+                    'attachments' => $orig['attachments'] ?? []
+                ];
+            } else {
+                $replyAddress = $orig['reply_to'] ?: $orig['from'];
+                $quoteHeader = sprintf('On %s, %s wrote:', $orig['date'], $orig['from']);
+
+                $prefill = [
+                    'to'          => $isForward ? '' : $replyAddress,
+                    'cc'          => $isReplyAll ? $orig['to'] : '',
+                    'subject'     => ($isForward ? 'Fwd: ' : 'Re: ') . preg_replace('/^(Re:|Fwd:)\s*/i', '', $orig['subject']),
+                    'in_reply_to' => "<{$orig['uid']}@{$_SERVER['HTTP_HOST']}>",
+                    'reply_to'    => '',
+                    'body_html'   => $isForward
+                        ? '<br><br><hr><b>--- Forwarded Message ---</b><br>' .
+                          '<b>From:</b> ' . htmlspecialchars($orig['from']) . '<br>' .
+                          '<b>Date:</b> ' . htmlspecialchars($orig['date']) . '<br>' .
+                          '<b>Subject:</b> ' . htmlspecialchars($orig['subject']) . '<br>' .
+                          '<b>To:</b> ' . htmlspecialchars($orig['to']) . '<br><br>' .
+                          $bodyHtml
+                        : '<br><br>' . htmlspecialchars($quoteHeader) . '<br><blockquote style="border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666">' . $bodyHtml . '</blockquote>',
+                ];
+            }
             $replyMsg = $origNo;
         } catch (RuntimeException $e) {
             flashSet('danger', 'Could not load original: ' . $e->getMessage());
@@ -1299,6 +1391,36 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     ];
 
     $attachments = [];
+    
+    // Handle existing attachments to keep (from draft)
+    $keepSections = $_POST['keep_attachments'] ?? [];
+    $oldDraftUid  = (int)($_POST['draft_uid'] ?? 0);
+    $draftFolder  = $_POST['draft_folder'] ?? 'Drafts';
+    
+    if (!empty($keepSections) && $oldDraftUid > 0) {
+        try {
+            $imap = $accountMgr->imapConnect($fromAccountId);
+            $imap->selectFolder($draftFolder);
+            $msgNo = imap_msgno($imap->getConnection(), $oldDraftUid);
+            if ($msgNo) {
+                $structure = $imap->fetchStructure($msgNo);
+                $existingAtts = $imap->getAttachments($msgNo, $structure);
+                foreach ($existingAtts as $eAtt) {
+                    if (in_array($eAtt['section'], $keepSections)) {
+                        $attachments[] = [
+                            'name' => $eAtt['filename'],
+                            'type' => ($eAtt['type'] ?? 0) . '/' . ($eAtt['subtype'] ?? 'octet-stream'),
+                            'data' => $imap->fetchAttachment($msgNo, $eAtt['section']),
+                        ];
+                    }
+                }
+            }
+            $imap->disconnect();
+        } catch (Throwable $e) {
+            error_log('Failed to fetch existing attachments for draft: ' . $e->getMessage());
+        }
+    }
+
     if (!empty($_FILES['attachments']) && is_array($_FILES['attachments']['name'])) {
         $maxSize = 50 * 1024 * 1024; // 50 MB (requires matching PHP upload_max_filesize/post_max_size)
         $phpUpload = parseIniSize(ini_get('upload_max_filesize'));
@@ -1345,9 +1467,15 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $isDraft = !empty($_POST['save_draft']);
+    $isAjax  = !empty($_POST['ajax']);
 
     // Require a "to" address only when actually sending (not saving a draft)
     if (!$isDraft && trim($message['to']) === '') {
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['status' => 'error', 'message' => 'A recipient address is required to send a message.']);
+            exit;
+        }
         flashSet('danger', 'A recipient address is required to send a message.');
         redirect('?action=compose');
     }
@@ -1358,10 +1486,45 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $imap = $accountMgr->imapConnect($fromAccountId);
             $draftsFolder = findFolderName($imap->getFolders(), ['Drafts'], 'Drafts');
+
+            // If we are editing an existing draft, delete it first to replace it
+            $oldDraftUid = (int)($_POST['draft_uid'] ?? 0);
+            if ($oldDraftUid > 0) {
+                try {
+                    $imap->deleteMessageByUid($draftsFolder, $oldDraftUid);
+                } catch (Throwable $e) {
+                    // Ignore errors if draft was already deleted
+                }
+            }
+
+            // Save as unread by only providing \Draft flag (no \Seen)
             $imap->appendToFolder($draftsFolder, $raw, '\\Draft');
+            
+            // Get the UID of the draft we just saved
+            $newDraftUid = $imap->getLastUid($draftsFolder);
+
+            $unreadCount = $imap->getUnreadCount($draftsFolder);
             $imap->disconnect();
+            
+            if ($isAjax) {
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'status' => 'success',
+                    'message' => 'Draft saved.',
+                    'time' => date('H:i:s'),
+                    'folder' => $draftsFolder,
+                    'unread_count' => $unreadCount,
+                    'draft_uid' => $newDraftUid
+                ]);
+                exit;
+            }
             flashSet('success', 'Draft saved.');
         } catch (RuntimeException $e) {
+            if ($isAjax) {
+                header('Content-Type: application/json');
+                echo json_encode(['status' => 'error', 'message' => 'Could not save draft: ' . $e->getMessage()]);
+                exit;
+            }
             flashSet('danger', 'Could not save draft: ' . $e->getMessage());
         }
         redirect('?action=inbox&folder=' . urlencode($draftsFolder));
@@ -1371,6 +1534,18 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $raw = $smtp->getLastRaw() ?: $smtp->buildRaw($accountFrom['email'], $message);
         try {
             $imap = $accountMgr->imapConnect($fromAccountId);
+
+            // Delete draft if it exists
+            $draftUid = (int)($_POST['draft_uid'] ?? 0);
+            if ($draftUid > 0) {
+                $draftsFolder = findFolderName($imap->getFolders(), ['Drafts'], 'Drafts');
+                try {
+                    $imap->deleteMessageByUid($draftsFolder, $draftUid);
+                } catch (Throwable $e) {
+                    // Ignore
+                }
+            }
+
             $sent = findFolderName($imap->getFolders(), ['Sent', 'Sent Items'], 'Sent');
             $imap->appendToFolder($sent, $raw);
             $imap->disconnect();

@@ -359,6 +359,55 @@ function initAutoRefresh() {
 }
 
 /* =============================================================
+   Sidebar unread count updates
+   ============================================================= */
+window.updateFolderUnread = function(folderName, count) {
+    const badge = document.querySelector(`.badge[data-folder-unread="${folderName}"]`);
+    if (!badge) return;
+    
+    const countInt = parseInt(count, 10) || 0;
+    badge.textContent = countInt;
+    badge.style.display = countInt > 0 ? 'inline-block' : 'none';
+};
+
+/* =============================================================
+   Unread Checker Polling
+   ============================================================= */
+function initUnreadChecker() {
+    const CHECK_INTERVAL = 60000; // 1 minute
+    const originalTitle = document.title;
+
+    function check() {
+        fetch('?action=check_unread', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success' && data.counts) {
+                // Update all folder badges
+                for (const [folder, count] of Object.entries(data.counts)) {
+                    window.updateFolderUnread(folder, count);
+                }
+
+                // Update tab title
+                if (data.inbox_unread > 0) {
+                    document.title = `(${data.inbox_unread}) ${originalTitle}`;
+                } else {
+                    document.title = originalTitle;
+                }
+            }
+        })
+        .catch(err => console.error('Unread check failed:', err));
+    }
+
+    // Initial check
+    check();
+    
+    // Periodic check
+    setInterval(check, CHECK_INTERVAL);
+}
+
+/* =============================================================
    Bootstrap
    ============================================================= */
 document.addEventListener('DOMContentLoaded', () => {
@@ -374,6 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initCopyButtons();
     initSmtpPortSync();
     initAutoRefresh();
+    initUnreadChecker();
 });
 
 // Expose for inline use
