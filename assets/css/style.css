@@ -270,7 +270,7 @@ a:hover { text-decoration: underline; }
 
 .wm-sidebar a .badge {
     margin-left: auto;
-    background: var(--wm-danger);
+    background: var(--wm-primary);
     color: #fff;
     font-size: .65rem;
     padding: 1px 6px;
