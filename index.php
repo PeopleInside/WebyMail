@@ -186,6 +186,59 @@ function flashGet(): ?array
     return $flash;
 }
 
+function flashDismissMs(string $type): int
+{
+    return $type === 'danger' ? 10000 : 4000;
+}
+
+const COMPOSE_PREFILL_ALLOWED_KEYS = [
+    'to',
+    'cc',
+    'bcc',
+    'subject',
+    'reply_to',
+    'in_reply_to',
+    'body_html',
+    'priority',
+    'request_read_receipt',
+    'from_account',
+    'draft_uid',
+    'draft_folder',
+    'reply_msg',
+    'folder',
+    'resume_send',
+];
+
+function sanitizeComposePrefill(array $prefill): array
+{
+    $clean = [];
+    foreach ($prefill as $key => $value) {
+        if (!in_array($key, COMPOSE_PREFILL_ALLOWED_KEYS, true)) {
+            continue;
+        }
+        if ($key === 'body_html') {
+            $clean[$key] = is_string($value) ? $value : '';
+            continue;
+        }
+        if ($key === 'draft_folder') {
+            $cleanFolder = preg_replace('/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/', '', (string)$value);
+            $cleanFolder = preg_replace('#(\.\./|\.{2,}\\\\|[^\p{L}\p{N}\s._/-])#u', '', $cleanFolder);
+            $clean[$key] = $cleanFolder;
+            continue;
+        }
+        if (in_array($key, ['draft_uid', 'reply_msg', 'from_account'], true)) {
+            $clean[$key] = (int) $value;
+            continue;
+        }
+        if (is_bool($value) || is_int($value)) {
+            $clean[$key] = $value;
+            continue;
+        }
+        $clean[$key] = preg_replace('/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/', '', (string)$value);
+    }
+    return $clean;
+}
+
 function requireAuth(): array
 {
     $sessionObj = new Session();
@@ -1290,9 +1343,18 @@ if ($action === 'export_zip') {
 if ($action === 'compose') {
     $prefill  = [];
     $replyMsg = 0;
+    $rawResumePrefill = $_SESSION['compose_prefill'] ?? null;
+    $resumePrefill = null;
+    if ($rawResumePrefill !== null) {
+        $resumePrefill = sanitizeComposePrefill($rawResumePrefill);
+        if (empty($resumePrefill)) {
+            $resumePrefill = null;
+        }
+    }
+    $hasExistingMessageContext = isset($_GET['reply']) || isset($_GET['reply_all']) || isset($_GET['forward']) || isset($_GET['edit_draft']);
 
     // Reply / Forward / Edit Draft
-    if (isset($_GET['reply']) || isset($_GET['reply_all']) || isset($_GET['forward']) || isset($_GET['edit_draft'])) {
+    if ($hasExistingMessageContext) {
         $origNo = (int) ($_GET['reply'] ?? $_GET['reply_all'] ?? $_GET['forward'] ?? $_GET['edit_draft'] ?? 0);
         try {
             $imap    = $accountMgr->imapConnect($accountId);
@@ -1343,6 +1405,20 @@ if ($action === 'compose') {
         }
     }
 
+    // Only restore saved compose input on a fresh compose view to avoid overwriting
+    // reply/forward/draft contexts that have their own prefill sources.
+    if (!empty($resumePrefill) && !$hasExistingMessageContext) {
+        $prefill = $resumePrefill;
+        if (!empty($prefill['reply_msg'])) {
+            $replyMsg = (int)$prefill['reply_msg'];
+        }
+        if (!empty($prefill['folder'])) {
+            $currentFolder = $prefill['folder'];
+        }
+    }
+    // Clear any saved compose data to avoid leaking stale content into future visits.
+    unset($_SESSION['compose_prefill']);
+
     $account = $accountMgr->get($accountId);
     $user    = Database::getInstance()->fetch('SELECT signature FROM users WHERE id = ?', [$userId]);
     $signature = $account['signature'] ?? ($user['signature'] ?? '');
@@ -1353,6 +1429,7 @@ if ($action === 'compose') {
         'folder'            => $currentFolder,
         'currentAccountId'  => $accountId,
         'signature'         => $signature,
+        'resumeSend'        => !empty($prefill['resume_send']),
         'pageTitle'         => pageTitle('Compose'),
     ]);
     exit;
@@ -1392,6 +1469,16 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'priority'    => $_POST['priority'] ?? 'normal',
         'request_read_receipt' => !empty($_POST['request_read_receipt']),
     ];
+
+    $prefillData = array_merge($message, [
+        'from_account' => $fromAccountId,
+        'draft_uid'    => $_POST['draft_uid'] ?? 0,
+        'draft_folder' => $_POST['draft_folder'] ?? 'Drafts',
+        'reply_msg'    => $_POST['reply_msg'] ?? 0,
+        'folder'       => $_POST['folder'] ?? $currentFolder,
+        'resume_send'  => true,
+    ]);
+    $composePrefill = sanitizeComposePrefill($prefillData);
 
     $attachments = [];
     
@@ -1479,6 +1566,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode(['status' => 'error', 'message' => 'A recipient address is required to send a message.']);
             exit;
         }
+        $_SESSION['compose_prefill'] = $composePrefill;
         flashSet('danger', 'A recipient address is required to send a message.');
         redirect('?action=compose');
     }
@@ -1559,7 +1647,33 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         flashSet('success', 'Message sent successfully.');
         redirect('?action=inbox');
     } else {
-        flashSet('danger', 'Failed to send: ' . $smtp->getLog());
+        $draftSaved = false;
+        $draftError = null;
+        $newDraftUid = 0;
+        $draftsFolder = 'Drafts';
+        try {
+            $raw = $smtp->buildRaw($accountFrom['email'], $message);
+            $imap = $accountMgr->imapConnect($fromAccountId);
+            $draftsFolder = findFolderName($imap->getFolders(), ['Drafts'], 'Drafts');
+            $imap->appendToFolder($draftsFolder, $raw, '\\Draft');
+            $newDraftUid = $imap->getLastUid($draftsFolder);
+            $imap->disconnect();
+            $draftSaved = true;
+        } catch (Throwable $e) {
+            $draftError = $e->getMessage();
+        }
+
+        if ($draftSaved && $newDraftUid > 0) {
+            flashSet('danger', 'Failed to send: ' . $smtp->getLog() . ' Your message was saved to Drafts.');
+            redirect('?action=compose&edit_draft=' . (int)$newDraftUid . '&folder=' . urlencode($draftsFolder));
+        }
+
+        $_SESSION['compose_prefill'] = $composePrefill;
+        $errorMsg = 'Failed to send: ' . $smtp->getLog();
+        if ($draftError) {
+            $errorMsg .= ' (Could not save draft: ' . $draftError . ')';
+        }
+        flashSet('danger', $errorMsg);
         redirect('?action=compose');
     }
 }

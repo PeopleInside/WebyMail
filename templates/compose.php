@@ -7,11 +7,13 @@
  * @var array  $accounts  all accounts (for From selector)
  * @var int    $currentAccountId
  * @var string $signature  HTML signature for the active account's user
+ * @var bool   $resumeSend whether we are returning from a failed send
  */
 $isReply   = !empty($replyMsg);
 $folder    = $folder    ?? 'INBOX';
 $folderEnc = urlencode($folder);
 $signature = $signature ?? '';
+$resumeSend = !empty($resumeSend);
 ?>
 
 <div class="wm-compose-wrap" style="height:calc(100dvh - 52px)">
@@ -221,6 +223,7 @@ $signature = $signature ?? '';
     var initialHtml = <?= json_encode((string)($prefill['body_html'] ?? '')) ?>;
     var signature   = <?= json_encode((string)$signature) ?>;
     var isEditDraft = <?= !empty($prefill['draft_uid']) ? 'true' : 'false' ?>;
+    var resumeSend  = <?= $resumeSend ? 'true' : 'false' ?>;
     var defaultColor = '';
     var imgOverlay = null;
     var dragState = null;
@@ -237,7 +240,7 @@ $signature = $signature ?? '';
         var content = '';
         // Only add signature automatically for new messages/replies, not when resuming a draft
         // as the draft likely already contains the signature from the previous save.
-        if (signature && !isEditDraft) {
+        if (signature && !isEditDraft && !resumeSend) {
             content += '<p><br></p>' + signature + '<br><br>';
         }
         if (initialHtml) content += initialHtml;
