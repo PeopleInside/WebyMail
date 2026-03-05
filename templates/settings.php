@@ -679,7 +679,27 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
         $userHas2FA = (int)($user['totp_enabled'] ?? 0) === 1;
         $captchaEnabled = Config::get('captcha_enabled', true);
         $twoFaOk = $twoFaSystemEnabled && $userHas2FA;
-        $securityCardBorder = ($twoFaOk && $captchaEnabled) ? 'var(--wm-success)' : 'var(--wm-warning)';
+
+        // Show "activation in progress" for 3 minutes after enabling; the flash message
+        // advertises ~5 minutes as a conservative propagation estimate for the user.
+        $captchaActivationTime = $_SESSION['captcha_activation_time'] ?? null;
+        $captchaActivationPending = false;
+        if ($captchaActivationTime !== null) {
+            $elapsed = time() - $captchaActivationTime;
+            if ($elapsed < 180) { // 3-minute "in progress" display window
+                $captchaActivationPending = true;
+            } else {
+                unset($_SESSION['captcha_activation_time']);
+            }
+        }
+
+        if ($twoFaOk && $captchaEnabled && !$captchaActivationPending) {
+            $securityCardBorder = 'var(--wm-success)';
+        } elseif ($captchaActivationPending) {
+            $securityCardBorder = 'var(--wm-info)';
+        } else {
+            $securityCardBorder = 'var(--wm-warning)';
+        }
         ?>
         <div class="wm-card" style="margin-bottom:1.5rem;border-left:4px solid <?= $securityCardBorder ?>">
             <div class="wm-card-header" style="color:<?= $securityCardBorder ?>">Security Status</div>
@@ -712,7 +732,15 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 <a href="?action=settings&tab=security" class="btn btn-primary btn-xs" style="margin-bottom:.75rem">Enable 2FA now</a>
                 <?php endif; ?>
 
-                <?php if ($captchaEnabled): ?>
+                <?php if ($captchaActivationPending): ?>
+                <div style="display:flex;align-items:center;gap:.5rem;color:var(--wm-info);font-weight:600;margin-bottom:.5rem">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    CAPTCHA activation in progress
+                </div>
+                <p style="font-size:.85rem;margin:0">
+                    CAPTCHA Proof-of-Work has been enabled and is propagating. Changes should be effective in about 5 minutes.
+                </p>
+                <?php elseif ($captchaEnabled): ?>
                 <div style="display:flex;align-items:center;gap:.5rem;color:var(--wm-success);font-weight:600;margin-bottom:.5rem">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                     Login Protected: CAPTCHA Proof-of-Work is active
