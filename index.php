@@ -1807,7 +1807,10 @@ if ($action === 'settings_save') {
         case 'enable_captcha':
             Config::set('captcha_enabled', true);
             Config::save();
-            flashSet('success', 'CAPTCHA Proof-of-Work has been enabled.');
+            // Record activation time so the UI shows "in progress" for 3 minutes (see settings.php).
+            // The user-facing message says ~5 minutes as a conservative propagation estimate.
+            $_SESSION['captcha_activation_time'] = time();
+            flashSet('success', 'CAPTCHA Proof-of-Work activation started. Changes should be applied in about 5 minutes.');
             redirect('?action=settings&tab=system');
 
         default:
