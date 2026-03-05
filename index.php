@@ -222,10 +222,12 @@ function sanitizeComposePrefill(array $prefill): array
         }
         if ($key === 'draft_folder') {
             $cleanFolder = preg_replace('/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/', '', (string)$value);
-            while (str_contains($cleanFolder, '..')) {
-                $cleanFolder = str_replace('..', '', $cleanFolder);
-            }
+            $cleanFolder = preg_replace('/\.{2,}/', '.', $cleanFolder);
             $clean[$key] = $cleanFolder;
+            continue;
+        }
+        if (in_array($key, ['draft_uid', 'reply_msg', 'from_account'], true)) {
+            $clean[$key] = (int) $value;
             continue;
         }
         if (is_bool($value) || is_int($value)) {
@@ -1465,14 +1467,14 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $composePrefill = sanitizeComposePrefill(
         array_intersect_key(
-            $message + [
+            array_merge($message, [
                 'from_account' => $fromAccountId,
                 'draft_uid'    => $_POST['draft_uid'] ?? 0,
                 'draft_folder' => $_POST['draft_folder'] ?? 'Drafts',
-                'reply_msg'    => (int)($_POST['reply_msg'] ?? 0),
+                'reply_msg'    => $_POST['reply_msg'] ?? 0,
                 'folder'       => $_POST['folder'] ?? $currentFolder,
                 'resume_send'  => true,
-            ],
+            ]),
             array_flip(COMPOSE_PREFILL_ALLOWED_KEYS)
         )
     );
