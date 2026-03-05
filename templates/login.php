@@ -171,8 +171,11 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                                 <div data-pow-progress style="height:100%;width:0%;background:var(--wm-primary);transition:width 0.3s ease, background-color 0.3s"></div>
                             </div>
                         </div>
-                        <input type="hidden" name="pow_solution" id="pow-solution" value="">
-                        <input type="hidden" name="pow_token" id="pow-token" value="">
+                        <input type="hidden" name="pow_solution"   id="pow-solution"   value="">
+                        <input type="hidden" name="pow_token"      id="pow-token"      value="">
+                        <input type="hidden" name="pow_challenge"  id="pow-challenge"  value="">
+                        <input type="hidden" name="pow_difficulty" id="pow-difficulty" value="">
+                        <input type="hidden" name="pow_expires"    id="pow-expires"    value="">
                         <noscript>
                             <p class="form-hint text-danger">JavaScript is required to complete the security check.</p>
                         </noscript>

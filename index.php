@@ -266,9 +266,12 @@ if ($action === 'login') {
         // Verify proof-of-work captcha
         $captchaCheckPassed = !$captchaEnabled;
         if ($captchaEnabled) {
-            $powSolution = $_POST['pow_solution'] ?? '';
-            $powToken    = $_POST['pow_token'] ?? '';
-            if ($captcha->verify($powSolution, $powToken)) {
+            $powSolution   = $_POST['pow_solution']   ?? '';
+            $powToken      = $_POST['pow_token']      ?? '';
+            $powChallenge  = $_POST['pow_challenge']  ?? '';
+            $powDifficulty = (int) ($_POST['pow_difficulty'] ?? 0);
+            $powExpires    = (int) ($_POST['pow_expires']    ?? 0);
+            if ($captcha->verify($powSolution, $powToken, $powChallenge, $powDifficulty, $powExpires)) {
                 $captchaCheckPassed = true;
             } else {
                 $error = 'Security check failed. Please try again.';
