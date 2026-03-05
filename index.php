@@ -223,6 +223,7 @@ function sanitizeComposePrefill(array $prefill): array
         if ($key === 'draft_folder') {
             $cleanFolder = preg_replace('/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/', '', (string)$value);
             $cleanFolder = preg_replace('/\.{2,}/', '.', $cleanFolder);
+            $cleanFolder = str_replace(['../', '..\\'], '', $cleanFolder);
             $clean[$key] = $cleanFolder;
             continue;
         }
@@ -1347,7 +1348,6 @@ if ($action === 'compose') {
     if ($resumePrefill !== null) {
         $resumePrefill = sanitizeComposePrefill($resumePrefill);
     }
-    unset($_SESSION['compose_prefill']);
     $hasSourceMessage = isset($_GET['reply']) || isset($_GET['reply_all']) || isset($_GET['forward']) || isset($_GET['edit_draft']);
 
     // Reply / Forward / Edit Draft
@@ -1404,7 +1404,7 @@ if ($action === 'compose') {
 
     // Only restore saved compose input on a fresh compose view to avoid overwriting
     // reply/forward/draft contexts that have their own prefill sources.
-    if ($resumePrefill !== null && !$hasSourceMessage) {
+    if (!empty($resumePrefill) && !$hasSourceMessage) {
         $prefill = $resumePrefill;
         if (!empty($prefill['reply_msg'])) {
             $replyMsg = (int)$prefill['reply_msg'];
@@ -1413,6 +1413,7 @@ if ($action === 'compose') {
             $currentFolder = $prefill['folder'];
         }
     }
+    unset($_SESSION['compose_prefill']);
 
     $account = $accountMgr->get($accountId);
     $user    = Database::getInstance()->fetch('SELECT signature FROM users WHERE id = ?', [$userId]);
