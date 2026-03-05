@@ -199,6 +199,11 @@ function sanitizeComposePrefill(array $prefill): array
             $clean[$key] = is_string($value) ? $value : '';
             continue;
         }
+        if ($key === 'draft_folder') {
+            $cleanFolder = preg_replace('/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/', '', (string)$value);
+            $clean[$key] = str_replace('..', '', $cleanFolder);
+            continue;
+        }
         if (is_bool($value) || is_int($value)) {
             $clean[$key] = $value;
             continue;
@@ -1313,6 +1318,9 @@ if ($action === 'compose') {
     $prefill  = [];
     $replyMsg = 0;
     $resumePrefill = $_SESSION['compose_prefill'] ?? null;
+    if ($resumePrefill !== null) {
+        $resumePrefill = sanitizeComposePrefill($resumePrefill);
+    }
     unset($_SESSION['compose_prefill']);
     $hasSourceMessage = isset($_GET['reply']) || isset($_GET['reply_all']) || isset($_GET['forward']) || isset($_GET['edit_draft']);
 
