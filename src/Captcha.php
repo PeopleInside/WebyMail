@@ -18,7 +18,7 @@ class Captcha
 {
     private const SESSION_KEY = 'wm_pow_captcha';
     private const TTL_SECONDS = 300; // 5 minutes
-    private const DEFAULT_DIFFICULTY = 3; // 3 leading hex zeros ≈ 4 096 hashes on average
+    private const DEFAULT_DIFFICULTY = 4; // 4 leading hex zeros ≈ 65k hashes on average
 
     public function issue(int $difficulty = self::DEFAULT_DIFFICULTY): array
     {
@@ -65,22 +65,40 @@ class Captcha
         $stored = $_SESSION[self::SESSION_KEY] ?? null;
         unset($_SESSION[self::SESSION_KEY]);
 
+        // Normalize client-provided fallback payload
+        $fallbackChallenge  = (string) $challenge;
+        $fallbackDifficulty = max(1, (int) $difficulty);
+        $fallbackExpires    = (int) $expires;
+
+        $challenge  = $fallbackChallenge;
+        $difficulty = $fallbackDifficulty;
+        $expires    = $fallbackExpires;
+        $expected   = null;
+
         if ($stored !== null) {
             // Primary path: use session data.
             $challenge  = (string) ($stored['challenge'] ?? '');
             $difficulty = max(1, (int) ($stored['difficulty'] ?? self::DEFAULT_DIFFICULTY));
             $expires    = (int) ($stored['expires'] ?? 0);
             $expected   = (string) ($stored['token'] ?? '');
-        } else {
-            // Fallback path: re-derive expected token from client-supplied metadata.
-            if ($challenge === '' || $difficulty <= 0 || $expires <= 0) {
-                return false;
-            }
-            $difficulty = max(1, $difficulty);
-            $expected   = $this->signChallenge($challenge, $difficulty, $expires);
         }
 
-        if (!hash_equals($expected, $token)) {
+        // Primary verification (session-backed). If it fails or session was lost,
+        // fall back to client-provided metadata, which is HMAC-signed.
+        $matched = false;
+        if ($expected !== null && hash_equals($expected, $token)) {
+            $matched = true;
+        } elseif ($fallbackChallenge !== '' && $fallbackDifficulty > 0 && $fallbackExpires > 0) {
+            $expected = $this->signChallenge($fallbackChallenge, $fallbackDifficulty, $fallbackExpires);
+            if (hash_equals($expected, $token)) {
+                $matched    = true;
+                $challenge  = $fallbackChallenge;
+                $difficulty = $fallbackDifficulty;
+                $expires    = $fallbackExpires;
+            }
+        }
+
+        if (!$matched) {
             return false;
         }
         if (time() > $expires) {
