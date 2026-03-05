@@ -890,13 +890,13 @@ function sanitizeHtml(string $html, bool $showImages, string $theme): string
                so we must use #wm-shadow-wrapper[data-theme="dark"] (not [data-theme="dark"] #wm-shadow-wrapper) */
             #wm-shadow-wrapper[data-theme="dark"] {
                 filter: invert(100%) hue-rotate(180deg) brightness(1.1) contrast(0.9);
-                background: #ffffff !important; /* Base for inversion */
+                background: transparent !important; /* Transparent so the container #161b22 surface shows through */
                 color: #000000 !important; /* Ensure base text is black before inversion */
             }
             @media (prefers-color-scheme: dark) {
                 #wm-shadow-wrapper:not([data-theme="light"]) {
                     filter: invert(100%) hue-rotate(180deg) brightness(1.1) contrast(0.9);
-                    background: #ffffff !important;
+                    background: transparent !important;
                     color: #000000 !important;
                 }
             }
