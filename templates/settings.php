@@ -47,7 +47,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
     <div class="wm-settings-content">
 
         <?php if (!empty($flash)): ?>
-        <?php $dismissMs = ($flash['type'] ?? '') === 'danger' ? 10000 : 4000; ?>
+        <?php $dismissMs = flashDismissMs($flash['type'] ?? ''); ?>
         <div class="alert alert-<?= htmlspecialchars($flash['type']) ?>" data-dismiss="<?= (int)$dismissMs ?>">
             <?= htmlspecialchars($flash['message']) ?>
         </div>

@@ -186,6 +186,11 @@ function flashGet(): ?array
     return $flash;
 }
 
+function flashDismissMs(string $type): int
+{
+    return $type === 'danger' ? 10000 : 4000;
+}
+
 function requireAuth(): array
 {
     $sessionObj = new Session();
@@ -1292,9 +1297,10 @@ if ($action === 'compose') {
     $replyMsg = 0;
     $resumePrefill = $_SESSION['compose_prefill'] ?? null;
     unset($_SESSION['compose_prefill']);
+    $hasSourceMessage = isset($_GET['reply']) || isset($_GET['reply_all']) || isset($_GET['forward']) || isset($_GET['edit_draft']);
 
     // Reply / Forward / Edit Draft
-    if (isset($_GET['reply']) || isset($_GET['reply_all']) || isset($_GET['forward']) || isset($_GET['edit_draft'])) {
+    if ($hasSourceMessage) {
         $origNo = (int) ($_GET['reply'] ?? $_GET['reply_all'] ?? $_GET['forward'] ?? $_GET['edit_draft'] ?? 0);
         try {
             $imap    = $accountMgr->imapConnect($accountId);
@@ -1345,7 +1351,7 @@ if ($action === 'compose') {
         }
     }
 
-    if ($resumePrefill !== null && empty($prefill)) {
+    if ($resumePrefill !== null && !$hasSourceMessage) {
         $prefill = $resumePrefill;
         if (!empty($prefill['reply_msg'])) {
             $replyMsg = (int)$prefill['reply_msg'];
@@ -1406,16 +1412,10 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'request_read_receipt' => !empty($_POST['request_read_receipt']),
     ];
 
-    $composePrefill = [
-        'to'          => $message['to'],
-        'cc'          => $message['cc'],
-        'bcc'         => $message['bcc'],
-        'subject'     => $message['subject'],
-        'reply_to'    => $message['reply_to'],
-        'in_reply_to' => $message['in_reply_to'],
-        'body_html'   => $message['body_html'],
-        'priority'    => $message['priority'],
-        'request_read_receipt' => $message['request_read_receipt'],
+    $composePrefill = array_intersect_key(
+        $message,
+        array_flip(['to', 'cc', 'bcc', 'subject', 'reply_to', 'in_reply_to', 'body_html', 'priority', 'request_read_receipt'])
+    ) + [
         'from_account' => $fromAccountId,
         'draft_uid'    => (int)($_POST['draft_uid'] ?? 0),
         'draft_folder' => $_POST['draft_folder'] ?? 'Drafts',
