@@ -674,57 +674,68 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             </div>
         </div>
 
-        <?php if (Config::get('2fa_enabled', true)): ?>
-            <?php if ((int)($user['totp_enabled'] ?? 0) === 0): ?>
-            <div class="wm-card" style="margin-bottom:1.5rem;border-left:4px solid var(--wm-primary)">
-                <div class="wm-card-header" style="color:var(--wm-primary)">Security Suggestion</div>
-                <div class="wm-card-body">
-                    <p style="font-size:.85rem;margin-top:0">
-                        <strong>Improve your account security:</strong> Two-Factor Authentication (2FA) is not currently enabled for your account. 
-                        Enabling 2FA adds an extra layer of protection beyond just your password.
-                    </p>
-                    <a href="?action=settings&tab=security" class="btn btn-primary btn-xs">Enable 2FA now</a>
-                </div>
-            </div>
-            <?php else: ?>
-            <div class="wm-card" style="margin-bottom:1.5rem;border-left:4px solid var(--wm-success)">
-                <div class="wm-card-header" style="color:var(--wm-success)">Security Status</div>
-                <div class="wm-card-body">
-                    <div style="display:flex;align-items:center;gap:.5rem;color:var(--wm-success);font-weight:600;margin-bottom:.5rem">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-                        Two-Factor Authentication is active
-                    </div>
-                    <p style="font-size:.85rem;margin:0">
-                        Your account is protected with an extra layer of security. This is excellent for your account protection.
-                    </p>
-                    <?php if (Config::get('captcha_enabled', true)): ?>
-                    <div style="display:flex;align-items:center;gap:.5rem;color:var(--wm-success);font-weight:600;margin-top:.75rem;margin-bottom:.5rem">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                        Login Protected: CAPTCHA Proof-of-Work is active
-                    </div>
-                    <p style="font-size:.85rem;margin:0">
-                        CAPTCHA Proof-of-Work is active and protecting your account from automated attacks.
-                    </p>
-                    <?php endif; ?>
-                </div>
-            </div>
-            <?php endif; ?>
-        <?php endif; ?>
-
-        <?php if (!Config::get('captcha_enabled', true)): ?>
-        <div class="wm-card" style="margin-bottom:1.5rem;border-left:4px solid var(--wm-danger)">
-            <div class="wm-card-header" style="color:var(--wm-danger)">Security Warning</div>
+        <?php
+        $twoFaSystemEnabled = Config::get('2fa_enabled', true);
+        $userHas2FA = (int)($user['totp_enabled'] ?? 0) === 1;
+        $captchaEnabled = Config::get('captcha_enabled', true);
+        $twoFaOk = $twoFaSystemEnabled && $userHas2FA;
+        $securityCardBorder = ($twoFaOk && $captchaEnabled) ? 'var(--wm-success)' : 'var(--wm-warning)';
+        ?>
+        <div class="wm-card" style="margin-bottom:1.5rem;border-left:4px solid <?= $securityCardBorder ?>">
+            <div class="wm-card-header" style="color:<?= $securityCardBorder ?>">Security Status</div>
             <div class="wm-card-body">
-                <p style="font-size:.85rem;margin-top:0">
-                    <strong>Captcha is disabled:</strong> The Proof-of-Work captcha is currently disabled in the configuration. 
-                    This makes the login page more vulnerable to automated brute-force attacks.
+
+                <?php if ($twoFaOk): ?>
+                <div style="display:flex;align-items:center;gap:.5rem;color:var(--wm-success);font-weight:600;margin-bottom:.5rem">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                    Two-Factor Authentication is active
+                </div>
+                <p style="font-size:.85rem;margin:0 0 .75rem">
+                    Your account is protected with an extra layer of security. This is excellent for your account protection.
                 </p>
-                <p style="font-size:.82rem;color:var(--wm-text-muted);margin-bottom:0">
-                    It is highly recommended to enable <code>captcha_enabled</code> in your <code>config/config.php</code> file.
+                <?php elseif (!$twoFaSystemEnabled): ?>
+                <div style="display:flex;align-items:center;gap:.5rem;color:var(--wm-warning);font-weight:600;margin-bottom:.5rem">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    Two-Factor Authentication is globally disabled
+                </div>
+                <p style="font-size:.85rem;margin:0 0 .75rem">
+                    2FA is disabled in the configuration file. Enable <code>2fa_enabled</code> in <code>config/config.php</code> to allow users to protect their accounts.
                 </p>
+                <?php else: ?>
+                <div style="display:flex;align-items:center;gap:.5rem;color:var(--wm-warning);font-weight:600;margin-bottom:.5rem">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    Two-Factor Authentication is not enabled for your account
+                </div>
+                <p style="font-size:.85rem;margin:0 0 .5rem">
+                    Enabling 2FA adds an extra layer of protection beyond just your password.
+                </p>
+                <a href="?action=settings&tab=security" class="btn btn-primary btn-xs" style="margin-bottom:.75rem">Enable 2FA now</a>
+                <?php endif; ?>
+
+                <?php if ($captchaEnabled): ?>
+                <div style="display:flex;align-items:center;gap:.5rem;color:var(--wm-success);font-weight:600;margin-bottom:.5rem">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    Login Protected: CAPTCHA Proof-of-Work is active
+                </div>
+                <p style="font-size:.85rem;margin:0">
+                    CAPTCHA Proof-of-Work is active and protecting your account from automated attacks.
+                </p>
+                <?php else: ?>
+                <div style="display:flex;align-items:center;gap:.5rem;color:var(--wm-warning);font-weight:600;margin-bottom:.5rem">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    CAPTCHA Proof-of-Work is disabled
+                </div>
+                <p style="font-size:.85rem;margin:0 0 .5rem">
+                    The login page is more vulnerable to automated brute-force attacks without CAPTCHA protection.
+                </p>
+                <form method="post" action="?action=settings_save&tab=enable_captcha" style="display:inline">
+                    <?= csrfInput() ?>
+                    <button type="submit" class="btn btn-outline btn-xs">Enable CAPTCHA now</button>
+                </form>
+                <?php endif; ?>
+
             </div>
         </div>
-        <?php endif; ?>
 
         <div class="wm-card" style="margin-bottom:1.5rem">
             <div class="wm-card-header">System Information</div>

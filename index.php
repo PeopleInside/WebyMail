@@ -1804,6 +1804,12 @@ if ($action === 'settings_save') {
             flashSet('success', 'Theme preference saved.');
             redirect('?action=settings&tab=appearance');
 
+        case 'enable_captcha':
+            Config::set('captcha_enabled', true);
+            Config::save();
+            flashSet('success', 'CAPTCHA Proof-of-Work has been enabled.');
+            redirect('?action=settings&tab=system');
+
         default:
             redirect('?action=settings');
     }
