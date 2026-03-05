@@ -2,32 +2,26 @@
 declare(strict_types=1);
 
 /**
- * Self-hosted proof-of-work captcha.
+ * Self-hosted proof-of-work captcha (stateless HMAC-based).
  *
  * The server issues a challenge (random nonce) and a difficulty (leading hex
  * zeroes). The client must find an integer solution such that:
  *   sha256("<challenge>:<solution>") starts with the required zero prefix.
  *
- * Challenges are stored in the session with a short TTL to prevent replay.
+ * Challenges are verified using an HMAC signature so no session storage is
+ * required. This works correctly across multiple browser tabs and in private/
+ * incognito browsing modes where sessions may not persist reliably.
  */
 class Captcha
 {
-    private const SESSION_KEY = 'wm_pow_captcha';
     private const TTL_SECONDS = 300; // 5 minutes
-    private const DEFAULT_DIFFICULTY = 5; // increased difficulty
+    private const DEFAULT_DIFFICULTY = 5;
 
     public function issue(int $difficulty = self::DEFAULT_DIFFICULTY): array
     {
         $challenge = bin2hex(random_bytes(16));
-        $token     = bin2hex(random_bytes(16));
         $expires   = time() + self::TTL_SECONDS;
-
-        $_SESSION[self::SESSION_KEY] = [
-            'token'      => $token,
-            'challenge'  => $challenge,
-            'difficulty' => $difficulty,
-            'expires'    => $expires,
-        ];
+        $token     = $this->sign($challenge, $difficulty, $expires);
 
         return [
             'token'      => $token,
@@ -37,29 +31,53 @@ class Captcha
         ];
     }
 
-    public function verify(string $solution, string $token): bool
-    {
-        $stored = $_SESSION[self::SESSION_KEY] ?? null;
-        unset($_SESSION[self::SESSION_KEY]);
+    /**
+     * Verify a proof-of-work solution.
+     *
+     * @param string $solution   Nonce found by the client
+     * @param string $challenge  Random challenge string from issue()
+     * @param int    $difficulty Number of leading hex zeroes required
+     * @param int    $expires    Unix timestamp when the challenge expires
+     * @param string $token      HMAC token from issue() to prevent forgery
+     */
+    public function verify(
+        string $solution,
+        string $challenge,
+        int    $difficulty,
+        int    $expires,
+        string $token
+    ): bool {
+        if ($challenge === '' || $solution === '' || $token === '') {
+            return false;
+        }
 
-        if ($stored === null) {
-            return false;
-        }
-        if (!hash_equals($stored['token'] ?? '', $token)) {
-            return false;
-        }
-        if (time() > (int) ($stored['expires'] ?? 0)) {
+        // Verify the HMAC to ensure the challenge was issued by this server
+        // and that difficulty/expires have not been tampered with.
+        $expected = $this->sign($challenge, $difficulty, $expires);
+        if (!hash_equals($expected, $token)) {
             return false;
         }
 
-        $difficulty = max(1, (int) ($stored['difficulty'] ?? self::DEFAULT_DIFFICULTY));
-        $challenge  = (string) ($stored['challenge'] ?? '');
-        if ($challenge === '' || $solution === '') {
+        // Verify expiry
+        if (time() > $expires) {
             return false;
         }
 
-        $hash = hash('sha256', $challenge . ':' . $solution);
-        $prefix = str_repeat('0', $difficulty);
+        // Verify proof-of-work solution
+        $difficulty = max(1, $difficulty);
+        $hash       = hash('sha256', $challenge . ':' . $solution);
+        $prefix     = str_repeat('0', $difficulty);
         return str_starts_with($hash, $prefix);
+    }
+
+    private function sign(string $challenge, int $difficulty, int $expires): string
+    {
+        $secret = Config::get('app_secret', '');
+        if ($secret === '') {
+            // app_secret must be set in config; this is generated automatically during setup.
+            throw new \RuntimeException('app_secret is not configured. Captcha cannot be verified securely.');
+        }
+        $data = $challenge . '|' . $difficulty . '|' . $expires;
+        return hash_hmac('sha256', $data, $secret);
     }
 }

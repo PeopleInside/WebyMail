@@ -263,12 +263,15 @@ if ($action === 'login') {
         $error = $flashMsg['message'];
     }
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        // Verify proof-of-work captcha
+        // Verify proof-of-work captcha (stateless HMAC-based, no session required)
         $captchaCheckPassed = !$captchaEnabled;
         if ($captchaEnabled) {
-            $powSolution = $_POST['pow_solution'] ?? '';
-            $powToken    = $_POST['pow_token'] ?? '';
-            if ($captcha->verify($powSolution, $powToken)) {
+            $powSolution   = $_POST['pow_solution']   ?? '';
+            $powChallenge  = $_POST['pow_challenge']  ?? '';
+            $powDifficulty = (int) ($_POST['pow_difficulty'] ?? 0);
+            $powExpires    = (int) ($_POST['pow_expires']    ?? 0);
+            $powToken      = $_POST['pow_token']      ?? '';
+            if ($captcha->verify($powSolution, $powChallenge, $powDifficulty, $powExpires, $powToken)) {
                 $captchaCheckPassed = true;
             } else {
                 $error = 'Security check failed. Please try again.';
