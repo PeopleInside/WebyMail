@@ -3,19 +3,20 @@
     const widget = document.getElementById('pow-widget');
     if (!widget) return;
 
-    const statusEl   = widget.querySelector('[data-pow-status]');
-    const spinnerEl  = widget.querySelector('[data-pow-spinner]');
-    const progressEl = widget.querySelector('[data-pow-progress]');
-    const refreshBtn = widget.querySelector('[data-pow-refresh]');
-    const solutionEl = document.getElementById('pow-solution');
-    const tokenEl    = document.getElementById('pow-token');
-    const form       = document.getElementById('login-form');
-    const submitBtn  = form?.querySelector('button[type="submit"]');
-    const cryptoApi  = window.crypto || window.msCrypto || null;
-    const subtle     = cryptoApi?.subtle || cryptoApi?.webkitSubtle || null;
+    const statusEl     = widget.querySelector('[data-pow-status]');
+    const spinnerEl    = widget.querySelector('[data-pow-spinner]');
+    const progressEl   = widget.querySelector('[data-pow-progress]');
+    const refreshBtn   = widget.querySelector('[data-pow-refresh]');
+    const solutionEl   = document.getElementById('pow-solution');
+    const tokenEl      = document.getElementById('pow-token');
+    const challengeEl  = document.getElementById('pow-challenge');
+    const difficultyEl = document.getElementById('pow-difficulty');
+    const expiresEl    = document.getElementById('pow-expires');
+    const form         = document.getElementById('login-form');
+    const submitBtn    = form?.querySelector('button[type="submit"]');
 
-    let current = null;
-    let solving = false;
+    let current     = null;
+    let solving     = false;
     let expiryTimer = null;
 
     function setStatus(text, isError = false) {
@@ -130,23 +131,19 @@
         return result;
     }
 
-    async function hashString(str) {
-        if (subtle) {
-            const encoder = typeof TextEncoder !== 'undefined'
-                ? new TextEncoder()
-                : { encode: (s) => new Uint8Array([...s].map(c => c.charCodeAt(0))) };
-            const data = encoder.encode(str);
-            const buf  = await subtle.digest('SHA-256', data);
-            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-        }
-        // Fallback for browsers/contexts without WebCrypto (e.g., some incognito/insecure contexts)
-        return sha256Fallback(str);
-    }
+    // Always use the sync fallback for batched PoW hashing.
+    // WebCrypto is async-only, which would require one Promise per hash and
+    // create enormous overhead for large nonce searches.  The sync fallback
+    // produces identical SHA-256 output for the ASCII inputs used here and
+    // is fast enough for the configured difficulty level.
 
     function loadChallenge(ch) {
         current = ch;
-        solutionEl.value = '';
-        tokenEl.value    = ch.token || '';
+        solutionEl.value    = '';
+        tokenEl.value       = ch.token      || '';
+        if (challengeEl)  challengeEl.value  = ch.challenge  || '';
+        if (difficultyEl) difficultyEl.value = ch.difficulty != null ? String(ch.difficulty) : '';
+        if (expiresEl)    expiresEl.value    = ch.expires    != null ? String(ch.expires)    : '';
         disableSubmit(true, 'Waiting for security check...');
         setProgress(0);
         if (expiryTimer) clearInterval(expiryTimer);
@@ -158,7 +155,6 @@
 
         // Set expiration timer based on server-provided expiry
         const expiresAt = parseInt(ch.expires || '0', 10) * 1000;
-        const totalTtl  = 300000; // 5 minutes in ms
 
         expiryTimer = setInterval(() => {
             const now = Date.now();
@@ -189,40 +185,42 @@
     async function solve(challenge) {
         solving = true;
         setStatus('Solving… this may take a moment.');
-        
-        const difficulty = Math.max(1, parseInt(challenge.difficulty || '5', 10));
-        const target = '0'.repeat(difficulty);
-        let nonce = 0;
-        
-        // We can't easily predict the exact number of iterations, 
-        // but we can show some movement.
+
+        const difficulty  = Math.max(1, parseInt(challenge.difficulty || '3', 10));
+        const target      = '0'.repeat(difficulty);
+        const expiresAtMs = parseInt(challenge.expires || '0', 10) * 1000;
+        const prefix      = challenge.challenge + ':';
+        // Batch size: number of synchronous hashes before yielding to the
+        // browser event loop.  Larger batches = faster solving; smaller
+        // batches = more responsive UI.
+        const BATCH = 2000;
+        let nonce    = 0;
         let progress = 0;
 
         while (solving) {
-            const candidate = challenge.challenge + ':' + nonce;
-            const digest = await hashString(candidate);
-            
-            if (digest.startsWith(target)) {
-                solutionEl.value = String(nonce);
-                solving = false;
-                setStatus('Security check solved.');
-                setProgress(100);
-                disableSubmit(false);
-                return;
-            }
-            nonce++;
-            
-            if (nonce % 250 === 0) {
-                // Update fake progress to show activity
-                progress = Math.min(95, progress + (100 - progress) * 0.05);
-                setProgress(progress);
-
-                await new Promise(r => setTimeout(r, 0));
-                if (Date.now() > (parseInt(challenge.expires || '0', 10) * 1000)) {
+            // Run a batch of synchronous SHA-256 computations.
+            const end = nonce + BATCH;
+            while (nonce < end) {
+                if (sha256Fallback(prefix + nonce).startsWith(target)) {
+                    solutionEl.value = String(nonce);
                     solving = false;
-                    setStatus('Security check expired.', true);
+                    setStatus('Security check solved.');
+                    setProgress(100);
+                    disableSubmit(false);
                     return;
                 }
+                nonce++;
+            }
+
+            // Yield once per batch so the browser stays responsive.
+            progress = Math.min(95, progress + (100 - progress) * 0.1);
+            setProgress(progress);
+            await new Promise(r => setTimeout(r, 0));
+
+            if (Date.now() > expiresAtMs) {
+                solving = false;
+                setStatus('Security check expired.', true);
+                return;
             }
         }
     }
