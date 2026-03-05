@@ -19,7 +19,7 @@ class Captcha
     private const SESSION_KEY = 'wm_pow_captcha';
     private const TTL_SECONDS = 300; // 5 minutes
     private const CLOCK_SKEW_SECONDS = 5;
-    private const DEFAULT_DIFFICULTY = 4; // 4 leading hex zeros ≈ 65 536 hashes on average
+    private const DEFAULT_DIFFICULTY = 5; // 5 leading hex zeros ≈ 1 048 576 hashes on average
     private const MIN_FALLBACK_DIFFICULTY = 3; // Backward compatibility for pre-upgrade challenges
     private const MAX_DIFFICULTY = 8;
 

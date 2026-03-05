@@ -260,7 +260,8 @@
         <?php endif; ?>
 
         <?php if (!empty($flash)): ?>
-        <div class="alert alert-<?= htmlspecialchars($flash['type']) ?>" data-dismiss="4000" style="margin:1rem;border-radius:8px">
+        <?php $dismissMs = ($flash['type'] ?? '') === 'danger' ? 10000 : 4000; ?>
+        <div class="alert alert-<?= htmlspecialchars($flash['type']) ?>" data-dismiss="<?= (int)$dismissMs ?>" style="margin:1rem;border-radius:8px">
             <?= htmlspecialchars($flash['message']) ?>
         </div>
         <?php endif; ?>

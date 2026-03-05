@@ -1290,6 +1290,8 @@ if ($action === 'export_zip') {
 if ($action === 'compose') {
     $prefill  = [];
     $replyMsg = 0;
+    $resumePrefill = $_SESSION['compose_prefill'] ?? null;
+    unset($_SESSION['compose_prefill']);
 
     // Reply / Forward / Edit Draft
     if (isset($_GET['reply']) || isset($_GET['reply_all']) || isset($_GET['forward']) || isset($_GET['edit_draft'])) {
@@ -1343,6 +1345,16 @@ if ($action === 'compose') {
         }
     }
 
+    if ($resumePrefill !== null && empty($prefill)) {
+        $prefill = $resumePrefill;
+        if (!empty($prefill['reply_msg'])) {
+            $replyMsg = (int)$prefill['reply_msg'];
+        }
+        if (!empty($prefill['folder'])) {
+            $currentFolder = $prefill['folder'];
+        }
+    }
+
     $account = $accountMgr->get($accountId);
     $user    = Database::getInstance()->fetch('SELECT signature FROM users WHERE id = ?', [$userId]);
     $signature = $account['signature'] ?? ($user['signature'] ?? '');
@@ -1353,6 +1365,7 @@ if ($action === 'compose') {
         'folder'            => $currentFolder,
         'currentAccountId'  => $accountId,
         'signature'         => $signature,
+        'resumeSend'        => !empty($prefill['resume_send']),
         'pageTitle'         => pageTitle('Compose'),
     ]);
     exit;
@@ -1391,6 +1404,24 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'from_name'   => $fromName,
         'priority'    => $_POST['priority'] ?? 'normal',
         'request_read_receipt' => !empty($_POST['request_read_receipt']),
+    ];
+
+    $composePrefill = [
+        'to'          => $message['to'],
+        'cc'          => $message['cc'],
+        'bcc'         => $message['bcc'],
+        'subject'     => $message['subject'],
+        'reply_to'    => $message['reply_to'],
+        'in_reply_to' => $message['in_reply_to'],
+        'body_html'   => $message['body_html'],
+        'priority'    => $message['priority'],
+        'request_read_receipt' => $message['request_read_receipt'],
+        'from_account' => $fromAccountId,
+        'draft_uid'    => (int)($_POST['draft_uid'] ?? 0),
+        'draft_folder' => $_POST['draft_folder'] ?? 'Drafts',
+        'reply_msg'    => (int)($_POST['reply_msg'] ?? 0),
+        'folder'       => $_POST['folder'] ?? $currentFolder,
+        'resume_send'  => true,
     ];
 
     $attachments = [];
@@ -1479,6 +1510,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode(['status' => 'error', 'message' => 'A recipient address is required to send a message.']);
             exit;
         }
+        $_SESSION['compose_prefill'] = $composePrefill;
         flashSet('danger', 'A recipient address is required to send a message.');
         redirect('?action=compose');
     }
@@ -1559,6 +1591,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         flashSet('success', 'Message sent successfully.');
         redirect('?action=inbox');
     } else {
+        $_SESSION['compose_prefill'] = $composePrefill;
         flashSet('danger', 'Failed to send: ' . $smtp->getLog());
         redirect('?action=compose');
     }
