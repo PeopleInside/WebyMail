@@ -149,10 +149,10 @@ class Config
             ];
         }
 
-        // Update last check info
-        self::set('last_system_check_at', time());
-        self::set('last_system_check_ok', $results['all_ok']);
-        self::save();
+        // Cache check results in session (avoids writing to config.php on every check)
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['system_check_cache'] = ['at' => time(), 'ok' => $results['all_ok']];
+        }
 
         return $results;
     }
@@ -185,16 +185,16 @@ class Config
             return false;
         }
 
-        $lastCheck = (int)self::get('last_system_check_at', 0);
-        $lastOk    = (bool)self::get('last_system_check_ok', true);
-        
-        // Re-check every 4 hours during normal use
-        if (time() - $lastCheck > 14400) {
-            $check = self::checkSystem();
-            return !$check['all_ok'];
+        // Use session cache to avoid re-running (and writing) the check too often
+        if (isset($_SESSION['system_check_cache']['at'], $_SESSION['system_check_cache']['ok'])) {
+            $cache = $_SESSION['system_check_cache'];
+            if (time() - (int)$cache['at'] <= 14400) {
+                return !(bool)$cache['ok'];
+            }
         }
-        
-        return !$lastOk;
+
+        $check = self::checkSystem();
+        return !$check['all_ok'];
     }
 
     public static function getNewerVersion(): ?string
@@ -356,8 +356,6 @@ class Config
             'setup_complete'  => false,
             'timezone'        => 'Europe/Rome',
             'hide_server_on_login' => true,
-            'last_system_check_at' => 0,
-            'last_system_check_ok' => true,
             'allow_insecure_imap_cert' => false,
         ];
     }
