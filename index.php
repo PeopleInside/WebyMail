@@ -886,35 +886,68 @@ function sanitizeHtml(string $html, bool $showImages, string $theme): string
             }
 
             /* Apply inversion to the content wrapper in dark mode */
-            [data-theme="dark"] #wm-shadow-wrapper {
+            /* data-theme="dark" is set directly on #wm-shadow-wrapper by JS syncTheme(),
+               so we must use #wm-shadow-wrapper[data-theme="dark"] (not [data-theme="dark"] #wm-shadow-wrapper) */
+            #wm-shadow-wrapper[data-theme="dark"] {
                 filter: invert(100%) hue-rotate(180deg) brightness(1.1) contrast(0.9);
                 background: #ffffff !important; /* Base for inversion */
                 color: #000000 !important; /* Ensure base text is black before inversion */
             }
-            
+            @media (prefers-color-scheme: dark) {
+                #wm-shadow-wrapper:not([data-theme="light"]) {
+                    filter: invert(100%) hue-rotate(180deg) brightness(1.1) contrast(0.9);
+                    background: #ffffff !important;
+                    color: #000000 !important;
+                }
+            }
+
             /* Force very dark colors to be more readable after inversion */
-            [data-theme="dark"] #wm-shadow-wrapper * {
+            #wm-shadow-wrapper[data-theme="dark"] * {
                 /* Nudge contrast for better readability in dark mode */
                 text-shadow: 0 0 0.5px rgba(255,255,255,0.05);
             }
+            @media (prefers-color-scheme: dark) {
+                #wm-shadow-wrapper:not([data-theme="light"]) * {
+                    text-shadow: 0 0 0.5px rgba(255,255,255,0.05);
+                }
+            }
 
-            /* Re-invert images, videos, and other media to restore their original colors */
-            [data-theme="dark"] img,
-            [data-theme="dark"] video,
-            [data-theme="dark"] iframe,
-            [data-theme="dark"] canvas,
-            [data-theme="dark"] svg,
-            [data-theme="dark"] [style*="background-image"],
-            [data-theme="dark"] [style*="background: url"],
-            [data-theme="dark"] [style*="background:url"] {
+            /* Re-invert images to restore their original colors (never show inverted images) */
+            #wm-shadow-wrapper[data-theme="dark"] img,
+            #wm-shadow-wrapper[data-theme="dark"] video,
+            #wm-shadow-wrapper[data-theme="dark"] iframe,
+            #wm-shadow-wrapper[data-theme="dark"] canvas,
+            #wm-shadow-wrapper[data-theme="dark"] svg,
+            #wm-shadow-wrapper[data-theme="dark"] [style*="background-image"],
+            #wm-shadow-wrapper[data-theme="dark"] [style*="background: url"],
+            #wm-shadow-wrapper[data-theme="dark"] [style*="background:url"] {
                 filter: invert(100%) hue-rotate(180deg) !important;
+            }
+            @media (prefers-color-scheme: dark) {
+                #wm-shadow-wrapper:not([data-theme="light"]) img,
+                #wm-shadow-wrapper:not([data-theme="light"]) video,
+                #wm-shadow-wrapper:not([data-theme="light"]) iframe,
+                #wm-shadow-wrapper:not([data-theme="light"]) canvas,
+                #wm-shadow-wrapper:not([data-theme="light"]) svg,
+                #wm-shadow-wrapper:not([data-theme="light"]) [style*="background-image"],
+                #wm-shadow-wrapper:not([data-theme="light"]) [style*="background: url"],
+                #wm-shadow-wrapper:not([data-theme="light"]) [style*="background:url"] {
+                    filter: invert(100%) hue-rotate(180deg) !important;
+                }
             }
 
             /* Fix for links which might become hard to read after inversion */
-            [data-theme="dark"] a {
+            #wm-shadow-wrapper[data-theme="dark"] a {
                 filter: invert(100%) hue-rotate(180deg) !important;
                 color: #58a6ff !important;
                 text-decoration: underline;
+            }
+            @media (prefers-color-scheme: dark) {
+                #wm-shadow-wrapper:not([data-theme="light"]) a {
+                    filter: invert(100%) hue-rotate(180deg) !important;
+                    color: #58a6ff !important;
+                    text-decoration: underline;
+                }
             }
 
             /* Ensure background colors that were inverted to white become the theme background */
@@ -1157,6 +1190,7 @@ if ($action === 'attachment' || $action === 'download_all') {
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
+        $imap->selectFolder($folder);
         $data = $imap->fetchAttachment($msgNo, $section);
         $imap->disconnect();
         
