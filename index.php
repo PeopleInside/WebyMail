@@ -223,7 +223,9 @@ function sanitizeComposePrefill(array $prefill): array
         if ($key === 'draft_folder') {
             $cleanFolder = preg_replace('/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/', '', (string)$value);
             $cleanFolder = preg_replace('/\.{2,}/', '.', $cleanFolder);
-            $cleanFolder = str_replace(['../', '..\\'], '', $cleanFolder);
+            while (str_contains($cleanFolder, '../') || str_contains($cleanFolder, '..\\')) {
+                $cleanFolder = str_replace(['../', '..\\'], '', $cleanFolder);
+            }
             $clean[$key] = $cleanFolder;
             continue;
         }
@@ -1347,6 +1349,9 @@ if ($action === 'compose') {
     $resumePrefill = $_SESSION['compose_prefill'] ?? null;
     if ($resumePrefill !== null) {
         $resumePrefill = sanitizeComposePrefill($resumePrefill);
+        if (empty($resumePrefill)) {
+            $resumePrefill = null;
+        }
     }
     $hasExistingMessageContext = isset($_GET['reply']) || isset($_GET['reply_all']) || isset($_GET['forward']) || isset($_GET['edit_draft']);
 
