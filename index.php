@@ -191,6 +191,23 @@ function flashDismissMs(string $type): int
     return $type === 'danger' ? 10000 : 4000;
 }
 
+function sanitizeComposePrefill(array $prefill): array
+{
+    $clean = [];
+    foreach ($prefill as $key => $value) {
+        if ($key === 'body_html') {
+            $clean[$key] = is_string($value) ? $value : '';
+            continue;
+        }
+        if (is_bool($value) || is_int($value)) {
+            $clean[$key] = $value;
+            continue;
+        }
+        $clean[$key] = preg_replace('/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/', '', (string)$value);
+    }
+    return $clean;
+}
+
 function requireAuth(): array
 {
     $sessionObj = new Session();
@@ -1351,6 +1368,8 @@ if ($action === 'compose') {
         }
     }
 
+    // Only restore saved compose input on a fresh compose view to avoid overwriting
+    // reply/forward/draft contexts that have their own prefill sources.
     if ($resumePrefill !== null && !$hasSourceMessage) {
         $prefill = $resumePrefill;
         if (!empty($prefill['reply_msg'])) {
@@ -1412,17 +1431,19 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'request_read_receipt' => !empty($_POST['request_read_receipt']),
     ];
 
-    $composePrefill = array_intersect_key(
-        $message,
-        array_flip(['to', 'cc', 'bcc', 'subject', 'reply_to', 'in_reply_to', 'body_html', 'priority', 'request_read_receipt'])
-    ) + [
-        'from_account' => $fromAccountId,
-        'draft_uid'    => (int)($_POST['draft_uid'] ?? 0),
-        'draft_folder' => $_POST['draft_folder'] ?? 'Drafts',
-        'reply_msg'    => (int)($_POST['reply_msg'] ?? 0),
-        'folder'       => $_POST['folder'] ?? $currentFolder,
-        'resume_send'  => true,
-    ];
+    $composePrefill = sanitizeComposePrefill(
+        array_intersect_key(
+            $message,
+            array_flip(['to', 'cc', 'bcc', 'subject', 'reply_to', 'in_reply_to', 'body_html', 'priority', 'request_read_receipt'])
+        ) + [
+            'from_account' => $fromAccountId,
+            'draft_uid'    => (int)($_POST['draft_uid'] ?? 0),
+            'draft_folder' => $_POST['draft_folder'] ?? 'Drafts',
+            'reply_msg'    => (int)($_POST['reply_msg'] ?? 0),
+            'folder'       => $_POST['folder'] ?? $currentFolder,
+            'resume_send'  => true,
+        ]
+    );
 
     $attachments = [];
     
