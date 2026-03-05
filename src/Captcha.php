@@ -18,7 +18,10 @@ class Captcha
 {
     private const SESSION_KEY = 'wm_pow_captcha';
     private const TTL_SECONDS = 300; // 5 minutes
-    private const DEFAULT_DIFFICULTY = 4; // 4 leading hex zeros ≈ 65k hashes on average
+    private const CLOCK_SKEW_SECONDS = 5;
+    private const DEFAULT_DIFFICULTY = 4; // 4 leading hex zeros ≈ 65 536 hashes on average
+    private const MIN_FALLBACK_DIFFICULTY = 3; // Backward compatibility for pre-upgrade challenges
+    private const MAX_DIFFICULTY = 8;
 
     public function issue(int $difficulty = self::DEFAULT_DIFFICULTY): array
     {
@@ -65,15 +68,17 @@ class Captcha
         $stored = $_SESSION[self::SESSION_KEY] ?? null;
         unset($_SESSION[self::SESSION_KEY]);
 
-        // Normalize client-provided fallback payload
+        // Keep the raw client-supplied values for fallback verification before
+        // any mutation of the working variables.
         $fallbackChallenge  = (string) $challenge;
-        $fallbackDifficulty = max(1, (int) $difficulty);
+        $fallbackDifficulty = min(
+            self::MAX_DIFFICULTY,
+            max(self::MIN_FALLBACK_DIFFICULTY, (int) $difficulty)
+        );
         $fallbackExpires    = (int) $expires;
 
-        $challenge  = $fallbackChallenge;
-        $difficulty = $fallbackDifficulty;
-        $expires    = $fallbackExpires;
-        $expected   = null;
+        // Default token; will be replaced by session or validated fallback.
+        $expected = '';
 
         if ($stored !== null) {
             // Primary path: use session data.
@@ -85,10 +90,29 @@ class Captcha
 
         // Primary verification (session-backed). If it fails or session was lost,
         // fall back to client-provided metadata, which is HMAC-signed.
-        $matched = false;
-        if ($expected !== null && hash_equals($expected, $token)) {
-            $matched = true;
-        } elseif ($fallbackChallenge !== '' && $fallbackDifficulty > 0 && $fallbackExpires > 0) {
+        $matched = ($expected !== '' && hash_equals($expected, $token));
+
+        if (!$matched) {
+            // Fallback path: re-derive expected token from client-supplied metadata.
+            $now       = time();
+            $maxAllowed = $now + self::TTL_SECONDS + self::CLOCK_SKEW_SECONDS; // Expiry must stay within TTL window plus skew
+            $impliedIssuedAt = $fallbackExpires - self::TTL_SECONDS;
+            if ($fallbackExpires <= 0 || $fallbackExpires > $maxAllowed) {
+                return false;
+            }
+            if ($impliedIssuedAt > ($now + self::CLOCK_SKEW_SECONDS)) {
+                return false;
+            }
+
+            $remaining = $fallbackExpires - $now;
+            // Bound difficulty and expiry from client-supplied metadata.
+            if (
+                $fallbackChallenge === '' ||
+                $remaining <= 0
+            ) {
+                return false;
+            }
+
             $expected = $this->signChallenge($fallbackChallenge, $fallbackDifficulty, $fallbackExpires);
             if (hash_equals($expected, $token)) {
                 $matched    = true;
@@ -101,7 +125,8 @@ class Captcha
         if (!$matched) {
             return false;
         }
-        if (time() > $expires) {
+        // $expires now comes from the validated session or fallback payload.
+        if (time() > ($expires + self::CLOCK_SKEW_SECONDS)) {
             return false;
         }
         if ($solution === '') {
