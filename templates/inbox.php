@@ -67,11 +67,16 @@ $folderDisplay = htmlspecialchars($folder ?? 'INBOX');
     <?php else: ?>
     <?php foreach ($messages as $msg): ?>
     <div class="wm-mail-row <?= $msg['is_read'] ? '' : 'unread' ?>"
-         data-href="?action=view&folder=<?= $folderEnc ?>&msg=<?= (int)$msg['msg_no'] ?>">
+         data-href="<?= '?action=view&folder=' . $folderEnc . '&msg=' . (int)$msg['msg_no'] ?>">
         <div class="wm-mail-check">
             <input type="checkbox" class="mail-checkbox" data-uid="<?= (int)$msg['msg_no'] ?>">
         </div>
-        <div class="wm-mail-from"><?= htmlspecialchars($msg['from']) ?></div>
+        <div class="wm-mail-from">
+            <?php if (!$msg['is_read']): ?>
+            <span style="display:inline-block;width:8px;height:8px;background:var(--wm-primary);border-radius:50%;margin-right:6px;vertical-align:middle" title="Unread"></span>
+            <?php endif; ?>
+            <?= htmlspecialchars($msg['from']) ?>
+        </div>
         <div class="wm-mail-date"><?= htmlspecialchars($msg['date']) ?></div>
         <div class="wm-mail-subject">
             <?php if (($msg['priority'] ?? 'normal') === 'high'): ?>

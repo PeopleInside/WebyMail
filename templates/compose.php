@@ -27,6 +27,7 @@ $signature = $signature ?? '';
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M4 9h16"/><path d="M9 4v5"/></svg>
             Save draft
         </button>
+        <span id="draft-status" style="font-size:.75rem;color:var(--wm-text-muted);margin-right:1rem;display:none"></span>
         <button type="submit" form="compose-form" class="btn btn-primary btn-sm">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             Send
@@ -40,13 +41,13 @@ $signature = $signature ?? '';
                 <div style="margin-bottom:.75rem">
                     <label style="display:block;font-size:.75rem;font-weight:600;margin-bottom:.35rem;color:var(--wm-text-muted)">Priority</label>
                     <select name="priority" form="compose-form" class="form-control" style="font-size:.82rem;height:32px">
-                        <option value="normal">Normal</option>
-                        <option value="high">High</option>
-                        <option value="low">Low</option>
+                        <option value="normal" <?= ($prefill['priority'] ?? '') === 'normal' ? 'selected' : '' ?>>Normal</option>
+                        <option value="high"   <?= ($prefill['priority'] ?? '') === 'high'   ? 'selected' : '' ?>>High</option>
+                        <option value="low"    <?= ($prefill['priority'] ?? '') === 'low'    ? 'selected' : '' ?>>Low</option>
                     </select>
                 </div>
                 <div style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
-                    <input type="checkbox" name="request_read_receipt" form="compose-form" id="req-receipt" value="1" style="width:14px;height:14px">
+                    <input type="checkbox" name="request_read_receipt" form="compose-form" id="req-receipt" value="1" style="width:14px;height:14px" <?= !empty($prefill['request_read_receipt']) ? 'checked' : '' ?>>
                     <label for="req-receipt" style="font-size:.82rem;cursor:pointer">Request read receipt</label>
                 </div>
             </div>
@@ -59,6 +60,8 @@ $signature = $signature ?? '';
         <input type="hidden" name="folder"       value="<?= htmlspecialchars($folder) ?>">
         <input type="hidden" name="in_reply_to"  value="<?= htmlspecialchars($prefill['in_reply_to'] ?? '') ?>">
         <input type="hidden" name="reply_msg"    value="<?= (int)($replyMsg ?? 0) ?>">
+        <input type="hidden" name="draft_uid"    id="draft-uid" value="<?= (int)($prefill['draft_uid'] ?? 0) ?>">
+        <input type="hidden" name="draft_folder" value="<?= htmlspecialchars($prefill['draft_folder'] ?? $folder) ?>">
         <input type="hidden" name="body_html"    id="body-html-hidden">
 
         <!-- Address fields -->
@@ -124,7 +127,17 @@ $signature = $signature ?? '';
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3.5 3.5 0 114.95 4.95l-8.48 8.48a2 2 0 01-2.83-2.83l7.78-7.78"/></svg>
                         Add attachment
                     </button>
-                    <div id="attachment-list" style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center"></div>
+                    <div id="attachment-list" style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:center">
+                        <?php if (!empty($prefill['attachments'])): ?>
+                            <?php foreach ($prefill['attachments'] as $att): ?>
+                                <span class="existing-attachment" style="display:inline-flex;align-items:center;gap:.2rem;background:var(--wm-surface-2);border:1px solid var(--wm-border);border-radius:5px;padding:.15rem .45rem;font-size:.8rem" data-section="<?= htmlspecialchars($att['section']) ?>">
+                                    <input type="hidden" name="keep_attachments[]" value="<?= htmlspecialchars($att['section']) ?>">
+                                    <?= htmlspecialchars($att['filename']) ?>
+                                    <button type="button" class="remove-existing" style="background:none;border:none;cursor:pointer;color:var(--wm-danger);font-size:1rem;line-height:1;padding:0 .1rem" title="Remove">×</button>
+                                </span>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
         </div>
@@ -205,8 +218,9 @@ $signature = $signature ?? '';
     var hidden     = document.getElementById('body-html-hidden');
     var imageInput = document.getElementById('inline-image-input');
     var inlineLimit = 2 * 1024 * 1024; // 2 MB inline embed cap
-    var initialHtml = <?= json_encode($prefill['body_html'] ?? '') ?>;
-    var signature   = <?= json_encode($signature) ?>;
+    var initialHtml = <?= json_encode((string)($prefill['body_html'] ?? '')) ?>;
+    var signature   = <?= json_encode((string)$signature) ?>;
+    var isEditDraft = <?= !empty($prefill['draft_uid']) ? 'true' : 'false' ?>;
     var defaultColor = '';
     var imgOverlay = null;
     var dragState = null;
@@ -221,7 +235,9 @@ $signature = $signature ?? '';
 
     function buildInitialContent() {
         var content = '';
-        if (signature) {
+        // Only add signature automatically for new messages/replies, not when resuming a draft
+        // as the draft likely already contains the signature from the previous save.
+        if (signature && !isEditDraft) {
             content += '<p><br></p>' + signature + '<br><br>';
         }
         if (initialHtml) content += initialHtml;
@@ -329,6 +345,7 @@ $signature = $signature ?? '';
                 }
                 document.execCommand(cmd, false, val);
                 editorEl.focus();
+                if (typeof checkDirty === 'function') checkDirty();
             });
         });
         toolbar.querySelectorAll('input[data-cmd], select[data-cmd]').forEach(function(el) {
@@ -337,6 +354,7 @@ $signature = $signature ?? '';
                 var val = el.value;
                 document.execCommand(cmd, false, val);
                 editorEl.focus();
+                if (typeof checkDirty === 'function') checkDirty();
             });
         });
     }
@@ -347,6 +365,7 @@ $signature = $signature ?? '';
         if (picker) {
             document.execCommand('foreColor', false, picker.value);
             editorEl.focus();
+            if (typeof checkDirty === 'function') checkDirty();
         }
     });
     document.getElementById('apply-highlight')?.addEventListener('click', function() {
@@ -354,6 +373,7 @@ $signature = $signature ?? '';
         if (picker) {
             document.execCommand('hiliteColor', false, picker.value);
             editorEl.focus();
+            if (typeof checkDirty === 'function') checkDirty();
         }
     });
 
@@ -434,6 +454,14 @@ $signature = $signature ?? '';
     }
 
     if (attachBtn && attachInput) {
+        // Handle removal of existing attachments
+        attachList.addEventListener('click', function(e) {
+            if (e.target.classList.contains('remove-existing')) {
+                var span = e.target.closest('.existing-attachment');
+                if (span) span.parentNode.removeChild(span);
+            }
+        });
+
         attachBtn.addEventListener('click', function() {
             attachInput.value = '';
             attachInput.click();
@@ -634,6 +662,138 @@ $signature = $signature ?? '';
             window.dispatchEvent(new CustomEvent('open-contacts-picker', { detail: { target: target } }));
         });
     });
+
+    // ── Unsaved changes & Auto-save ───────────────────────────────────────────
+    var isDirty = false;
+    var lastSavedContent = editorEl.innerHTML;
+    var lastSavedMeta = {
+        to: toField.value,
+        cc: document.getElementById('cc')?.value || '',
+        bcc: document.getElementById('bcc')?.value || '',
+        subject: subjectField.value
+    };
+
+    function checkDirty() {
+        var currentContent = editorEl.innerHTML;
+        var currentMeta = {
+            to: toField.value,
+            cc: document.getElementById('cc')?.value || '',
+            bcc: document.getElementById('bcc')?.value || '',
+            subject: subjectField.value
+        };
+        
+        var contentChanged = currentContent !== lastSavedContent;
+        var metaChanged = JSON.stringify(currentMeta) !== JSON.stringify(lastSavedMeta);
+        
+        isDirty = contentChanged || metaChanged;
+    }
+
+    // Listen for changes
+    editorEl.addEventListener('input', checkDirty);
+    [toField, subjectField, document.getElementById('cc'), document.getElementById('bcc')].forEach(function(el) {
+        if (el) el.addEventListener('input', checkDirty);
+    });
+
+    // Warning when leaving
+    window.addEventListener('beforeunload', function(e) {
+        if (isDirty) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+
+    // Reset dirty flag on form submission
+    form.addEventListener('submit', function() {
+        isDirty = false;
+    });
+
+    // Auto-save logic
+    var draftStatus = document.getElementById('draft-status');
+    var autoSaveInterval = 60000; // 1 minute
+
+    async function saveDraft(isAuto = false) {
+        if (isAuto && !isDirty) return;
+        
+        // Sync source editor if needed
+        var sourceEditor = document.getElementById('source-editor');
+        if (sourceEditor && sourceEditor.style.display !== 'none') {
+            editorEl.innerHTML = sourceEditor.value;
+        }
+        
+        // Ensure hidden field is updated
+        if (hidden) {
+            hidden.value = editorEl.innerHTML;
+        }
+        
+        var formData = new FormData(form);
+        formData.append('save_draft', '1');
+        formData.append('ajax', '1');
+        // Explicitly set body_html to ensure it's not empty if hidden field sync was delayed
+        formData.set('body_html', editorEl.innerHTML);
+
+        if (isAuto) {
+            draftStatus.textContent = 'Auto-saving...';
+            draftStatus.style.display = 'inline';
+        }
+
+        try {
+            var resp = await fetch(form.action, {
+                method: 'POST',
+                body: formData
+            });
+            var data = await resp.json();
+            if (data.status === 'success') {
+                isDirty = false;
+                lastSavedContent = editorEl.innerHTML;
+                lastSavedMeta = {
+                    to: toField.value,
+                    cc: document.getElementById('cc')?.value || '',
+                    bcc: document.getElementById('bcc')?.value || '',
+                    subject: subjectField.value
+                };
+                
+                if (draftStatus) {
+                    draftStatus.textContent = (isAuto ? 'Auto-saved' : 'Saved') + ' at ' + data.time;
+                    draftStatus.style.display = 'inline';
+                }
+
+                if (data.draft_uid) {
+                    document.getElementById('draft-uid').value = data.draft_uid;
+                }
+                
+                // Update sidebar unread count in real-time
+                const activeAccountId = <?= (int)$currentAccountId ?>;
+                const fromAccountEl = document.querySelector('select[name="from_account"]');
+                const fromAccountId = fromAccountEl ? parseInt(fromAccountEl.value) : activeAccountId;
+                
+                if (fromAccountId === activeAccountId && typeof window.updateFolderUnread === 'function' && data.folder && data.unread_count !== undefined) {
+                    window.updateFolderUnread(data.folder, data.unread_count);
+                }
+            } else {
+                if (isAuto && draftStatus) {
+                    draftStatus.textContent = 'Auto-save failed';
+                }
+            }
+        } catch (err) {
+            console.error('Draft save error:', err);
+            if (isAuto && draftStatus) {
+                draftStatus.textContent = 'Auto-save error';
+            }
+        }
+    }
+
+    // Manual save button override for AJAX
+    var saveBtn = document.querySelector('button[name="save_draft"]');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            saveDraft(false);
+        });
+    }
+
+    setInterval(function() {
+        saveDraft(true);
+    }, autoSaveInterval);
 
 })();
 </script>

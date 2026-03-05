@@ -188,9 +188,7 @@
                class="<?= ($currentFolder ?? 'INBOX') === $f['name'] ? 'active' : '' ?>"
                style="flex:1;min-width:0">
                 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= htmlspecialchars($f['display']) ?></span>
-                <?php if (!empty($f['unread'])): ?>
-                <span class="badge"><?= (int)$f['unread'] ?></span>
-                <?php endif; ?>
+                <span class="badge" data-folder-unread="<?= htmlspecialchars($f['name']) ?>" <?= empty($f['unread']) ? 'style="display:none"' : '' ?>><?= (int)$f['unread'] ?></span>
             </a>
             <?php if (strtoupper($f['name']) !== 'INBOX'): ?>
             <button type="button"

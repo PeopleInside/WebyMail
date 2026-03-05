@@ -20,6 +20,12 @@ $isInbox   = strtoupper($folder) === 'INBOX';
         Back
     </a>
 
+    <?php if (strtoupper($folder) === 'DRAFTS' || strtolower($message['folder'] ?? '') === 'drafts'): ?>
+    <a href="?action=compose&edit_draft=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-primary btn-sm" title="Resume Draft">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Resume
+    </a>
+    <?php else: ?>
     <a href="?action=compose&reply=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-outline btn-sm" title="Reply">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
         Reply
@@ -32,6 +38,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 014-4h12"/></svg>
         Forward
     </a>
+    <?php endif; ?>
 
     <a href="?action=export_eml&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" class="btn btn-outline btn-sm" title="Download as .eml">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
