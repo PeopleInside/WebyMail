@@ -223,9 +223,10 @@ function sanitizeComposePrefill(array $prefill): array
         if ($key === 'draft_folder') {
             $cleanFolder = preg_replace('/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/', '', (string)$value);
             $cleanFolder = preg_replace('/\.{2,}/', '.', $cleanFolder);
-            while (str_contains($cleanFolder, '../') || str_contains($cleanFolder, '..\\')) {
-                $cleanFolder = str_replace(['../', '..\\'], '', $cleanFolder);
-            }
+            do {
+                $cleanFolder = preg_replace('#\.\./|\.{2,}\\\\#', '', $cleanFolder);
+            } while (preg_match('#\.\./|\.{2,}\\\\#', $cleanFolder));
+            $cleanFolder = preg_replace('#[^\p{L}\p{N}\s._/-]#u', '', $cleanFolder);
             $clean[$key] = $cleanFolder;
             continue;
         }
@@ -1346,9 +1347,10 @@ if ($action === 'export_zip') {
 if ($action === 'compose') {
     $prefill  = [];
     $replyMsg = 0;
-    $resumePrefill = $_SESSION['compose_prefill'] ?? null;
-    if ($resumePrefill !== null) {
-        $resumePrefill = sanitizeComposePrefill($resumePrefill);
+    $rawResumePrefill = $_SESSION['compose_prefill'] ?? null;
+    $resumePrefill = null;
+    if ($rawResumePrefill !== null) {
+        $resumePrefill = sanitizeComposePrefill($rawResumePrefill);
         if (empty($resumePrefill)) {
             $resumePrefill = null;
         }
@@ -1472,19 +1474,16 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'request_read_receipt' => !empty($_POST['request_read_receipt']),
     ];
 
-    $composePrefill = sanitizeComposePrefill(
-        array_intersect_key(
-            array_merge($message, [
-                'from_account' => $fromAccountId,
-                'draft_uid'    => $_POST['draft_uid'] ?? 0,
-                'draft_folder' => $_POST['draft_folder'] ?? 'Drafts',
-                'reply_msg'    => $_POST['reply_msg'] ?? 0,
-                'folder'       => $_POST['folder'] ?? $currentFolder,
-                'resume_send'  => true,
-            ]),
-            array_flip(COMPOSE_PREFILL_ALLOWED_KEYS)
-        )
-    );
+    $prefillData = array_merge($message, [
+        'from_account' => $fromAccountId,
+        'draft_uid'    => $_POST['draft_uid'] ?? 0,
+        'draft_folder' => $_POST['draft_folder'] ?? 'Drafts',
+        'reply_msg'    => $_POST['reply_msg'] ?? 0,
+        'folder'       => $_POST['folder'] ?? $currentFolder,
+        'resume_send'  => true,
+    ]);
+    $prefillData = array_intersect_key($prefillData, array_flip(COMPOSE_PREFILL_ALLOWED_KEYS));
+    $composePrefill = sanitizeComposePrefill($prefillData);
 
     $attachments = [];
     
