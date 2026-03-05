@@ -259,7 +259,7 @@ $signature = $signature ?? '';
 
     (function setupImageOverlay() {
         var style = document.createElement('style');
-        style.textContent = '#img-resize-overlay{position:absolute;border:1px dashed var(--wm-primary);pointer-events:none;z-index:10}#img-resize-overlay .handle{width:10px;height:10px;background:var(--wm-primary);border:2px solid #fff;box-shadow:0 0 0 1px var(--wm-primary);position:absolute;pointer-events:auto;cursor:nwse-resize;border-radius:3px}#img-resize-overlay .handle.br{cursor:nwse-resize;right:-6px;bottom:-6px}#img-resize-overlay .handle.bl{cursor:nesw-resize;left:-6px;bottom:-6px}#img-resize-overlay .handle.tr{cursor:nesw-resize;right:-6px;top:-6px}#img-resize-overlay .handle.tl{cursor:nwse-resize;left:-6px;top:-6px}';
+        style.textContent = '#img-resize-overlay{position:absolute;border:1px dashed var(--wm-primary);pointer-events:none;z-index:10}#img-resize-overlay .handle{width:10px;height:10px;background:var(--wm-primary);border:2px solid #fff;box-shadow:0 0 0 1px var(--wm-primary);position:absolute;pointer-events:auto;cursor:nwse-resize;border-radius:3px;touch-action:none}#img-resize-overlay .handle.br{cursor:nwse-resize;right:-6px;bottom:-6px}#img-resize-overlay .handle.bl{cursor:nesw-resize;left:-6px;bottom:-6px}#img-resize-overlay .handle.tr{cursor:nesw-resize;right:-6px;top:-6px}#img-resize-overlay .handle.tl{cursor:nwse-resize;left:-6px;top:-6px}@media(pointer:coarse){#img-resize-overlay .handle{width:22px;height:22px;border-radius:4px}#img-resize-overlay .handle.br{right:-12px;bottom:-12px}#img-resize-overlay .handle.bl{left:-12px;bottom:-12px}#img-resize-overlay .handle.tr{right:-12px;top:-12px}#img-resize-overlay .handle.tl{left:-12px;top:-12px}}';
         document.head.appendChild(style);
 
         imgOverlay = document.createElement('div');
@@ -496,26 +496,35 @@ $signature = $signature ?? '';
         imgOverlay.style.left   = window.scrollX + rect.left + 'px';
         imgOverlay.style.top    = window.scrollY + rect.top + 'px';
     }
+    function getEventCoords(e) {
+        if (e.touches && e.touches.length) return {x: e.touches[0].clientX, y: e.touches[0].clientY};
+        if (e.changedTouches && e.changedTouches.length) return {x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY};
+        return {x: e.clientX, y: e.clientY};
+    }
     function startDrag(e, dir) {
         var target = imgOverlay?._target;
         if (!target) return;
         e.preventDefault();
+        var coords = getEventCoords(e);
         dragState = {
             target: target,
-            startX: e.clientX,
-            startY: e.clientY,
+            startX: coords.x,
+            startY: coords.y,
             startW: target.getBoundingClientRect().width,
             startH: target.getBoundingClientRect().height,
             dir: dir
         };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
+        document.addEventListener('touchmove', onMove, {passive: false});
+        document.addEventListener('touchend', onUp);
     }
     function onMove(e) {
         if (!dragState) return;
         e.preventDefault();
-        var dx = e.clientX - dragState.startX;
-        var dy = e.clientY - dragState.startY;
+        var coords = getEventCoords(e);
+        var dx = coords.x - dragState.startX;
+        var dy = coords.y - dragState.startY;
         var dir = dragState.dir;
         var newW = dragState.startW + dx * (dir.x || 0);
         var newH = dragState.startH + dy * (dir.y || 0);
@@ -529,6 +538,8 @@ $signature = $signature ?? '';
         dragState = null;
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('touchend', onUp);
     }
     if (imgOverlay) {
         imgOverlay.addEventListener('mousedown', function(e) {
@@ -537,12 +548,28 @@ $signature = $signature ?? '';
             var dir = resizeDirs[dirKey];
             if (dir) startDrag(e, dir);
         });
+        imgOverlay.addEventListener('touchstart', function(e) {
+            var dirKey = e.target.dataset.dir;
+            if (!dirKey) return;
+            var dir = resizeDirs[dirKey];
+            if (dir) startDrag(e, dir);
+        }, {passive: false});
     }
 
-    // Show handles on image click
+    // Show handles on image click or tap
     editorEl.addEventListener('click', function(e) {
         var target = e.target;
         if (target && target.tagName === 'IMG') {
+            showOverlay(target);
+        } else {
+            hideOverlay();
+        }
+    });
+    editorEl.addEventListener('touchend', function(e) {
+        if (dragState) return; // ongoing resize, ignore
+        var target = e.target;
+        if (target && target.tagName === 'IMG') {
+            e.preventDefault(); // suppress emulated click to avoid double-handling
             showOverlay(target);
         } else {
             hideOverlay();
