@@ -649,7 +649,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             <h2 style="margin:0;font-size:1.1rem">System Health & Security</h2>
             <div style="text-align:right">
                 <div style="font-size:.7rem;color:var(--wm-text-muted);margin-bottom:.25rem">
-                    Last check: <?= ($lastAt = Config::get('last_system_check_at')) ? date('Y-m-d H:i:s', (int)$lastAt) : 'Never' ?>
+                    Last check: <?= ($lastAt = $_SESSION['system_check_cache']['at'] ?? null) ? date('Y-m-d H:i:s', (int)$lastAt) : 'Never' ?>
                 </div>
                 <a href="?action=settings&tab=system&recheck=1" class="btn btn-outline btn-xs">Run check now</a>
             </div>
