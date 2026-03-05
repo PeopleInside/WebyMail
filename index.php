@@ -1348,10 +1348,10 @@ if ($action === 'compose') {
     if ($resumePrefill !== null) {
         $resumePrefill = sanitizeComposePrefill($resumePrefill);
     }
-    $hasSourceMessage = isset($_GET['reply']) || isset($_GET['reply_all']) || isset($_GET['forward']) || isset($_GET['edit_draft']);
+    $hasExistingMessageContext = isset($_GET['reply']) || isset($_GET['reply_all']) || isset($_GET['forward']) || isset($_GET['edit_draft']);
 
     // Reply / Forward / Edit Draft
-    if ($hasSourceMessage) {
+    if ($hasExistingMessageContext) {
         $origNo = (int) ($_GET['reply'] ?? $_GET['reply_all'] ?? $_GET['forward'] ?? $_GET['edit_draft'] ?? 0);
         try {
             $imap    = $accountMgr->imapConnect($accountId);
@@ -1404,7 +1404,7 @@ if ($action === 'compose') {
 
     // Only restore saved compose input on a fresh compose view to avoid overwriting
     // reply/forward/draft contexts that have their own prefill sources.
-    if (!empty($resumePrefill) && !$hasSourceMessage) {
+    if (!empty($resumePrefill) && !$hasExistingMessageContext) {
         $prefill = $resumePrefill;
         if (!empty($prefill['reply_msg'])) {
             $replyMsg = (int)$prefill['reply_msg'];
@@ -1413,6 +1413,7 @@ if ($action === 'compose') {
             $currentFolder = $prefill['folder'];
         }
     }
+    // Clear any saved compose data to avoid leaking stale content into future visits.
     unset($_SESSION['compose_prefill']);
 
     $account = $accountMgr->get($accountId);
