@@ -191,6 +191,8 @@ function flashDismissMs(string $type): int
     return $type === 'danger' ? 10000 : 4000;
 }
 
+const COMPOSE_PREFILL_KEYS = ['to', 'cc', 'bcc', 'subject', 'reply_to', 'in_reply_to', 'body_html', 'priority', 'request_read_receipt'];
+
 function sanitizeComposePrefill(array $prefill): array
 {
     $clean = [];
@@ -201,7 +203,10 @@ function sanitizeComposePrefill(array $prefill): array
         }
         if ($key === 'draft_folder') {
             $cleanFolder = preg_replace('/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/', '', (string)$value);
-            $clean[$key] = str_replace('..', '', $cleanFolder);
+            while (str_contains($cleanFolder, '..')) {
+                $cleanFolder = str_replace('..', '', $cleanFolder);
+            }
+            $clean[$key] = $cleanFolder;
             continue;
         }
         if (is_bool($value) || is_int($value)) {
@@ -1442,10 +1447,10 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $composePrefill = sanitizeComposePrefill(
         array_intersect_key(
             $message,
-            array_flip(['to', 'cc', 'bcc', 'subject', 'reply_to', 'in_reply_to', 'body_html', 'priority', 'request_read_receipt'])
+            array_flip(COMPOSE_PREFILL_KEYS)
         ) + [
             'from_account' => $fromAccountId,
-            'draft_uid'    => (int)($_POST['draft_uid'] ?? 0),
+            'draft_uid'    => $_POST['draft_uid'] ?? 0,
             'draft_folder' => $_POST['draft_folder'] ?? 'Drafts',
             'reply_msg'    => (int)($_POST['reply_msg'] ?? 0),
             'folder'       => $_POST['folder'] ?? $currentFolder,
