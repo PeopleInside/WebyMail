@@ -328,8 +328,7 @@ class ImapClient
 
     private function sanitizeCharsetValue(string $value): string
     {
-        $trimmed = trim($value);
-        $withoutQuotes = trim($trimmed, '"');
+        $withoutQuotes = trim($value, " \t\n\r\0\x0B\"");
         // Strip any extra parameters, e.g. "UTF-8; format=flowed"
         $withoutParams = explode(';', $withoutQuotes, 2)[0];
         return trim($withoutParams);
@@ -380,7 +379,7 @@ class ImapClient
                     $converted = mb_convert_encoding($body, 'UTF-8', $charset);
                     if ($converted === false) return $body;
                     // Treat an unexpected empty result from non-empty input as a failure
-                    if ($body !== '' && $converted === '') return $body;
+                    if ($body !== '' && ($converted === '' || $converted === null)) return $body;
                     return $converted;
                 } catch (\Throwable $e) {
                     $ctx = $context ? " in {$context}" : '';
