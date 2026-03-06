@@ -330,6 +330,7 @@ class ImapClient
     {
         $charset = trim($value);
         $charset = trim($charset, '"');
+        // Strip any extra parameters, e.g. "UTF-8; format=flowed"
         return explode(';', $charset, 2)[0];
     }
 
@@ -351,7 +352,9 @@ class ImapClient
                     return $body;
                 }
                 try {
+                    // mb_convert_encoding may return false (older PHP) or throw (PHP 8+) on invalid charsets
                     $converted = mb_convert_encoding($body, 'UTF-8', $charset);
+                    // Treat an unexpected empty result from non-empty input as a failure
                     if ($converted === false || ($converted === '' && $body !== '')) {
                         return $body;
                     }
