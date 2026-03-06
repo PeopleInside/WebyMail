@@ -239,7 +239,7 @@ class ImapClient
     {
         $struct = imap_fetchstructure($this->conn, $msgNo);
         if ($struct === false) {
-            error_log('IMAP: fetchstructure failed for message ' . $msgNo . '; returning raw body fallback.');
+            error_log('IMAP: fetchstructure failed for message ' . $msgNo . ' - returning raw body fallback.');
             $rawBody = imap_body($this->conn, $msgNo);
             $fallback = $this->decodeBodyPart($rawBody === false ? '' : $rawBody, 0);
             return ['html' => '', 'text' => $fallback ?: ''];
@@ -428,7 +428,7 @@ class ImapClient
         $this->assertConnected();
         $struct = imap_fetchstructure($this->conn, $msgNo);
         if ($struct === false) {
-            throw new RuntimeException('Could not fetch structure for message ' . $msgNo . ' (section ' . $section . ')');
+            throw new RuntimeException('Could not fetch structure for message ' . $msgNo . ' at section ' . $section);
         }
         $part   = $this->findPartBySection($struct, $section);
         
