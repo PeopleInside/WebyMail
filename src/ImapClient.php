@@ -116,12 +116,12 @@ class ImapClient
         // For each message, if has_attachments is false, do a quick structure check
         // to be more reliable, but only for the current page.
         foreach ($messages as &$msg) {
-            $rawHeaders = imap_fetchheader($this->conn, $msg['msg_no']);
+            $rawHeaders = imap_fetchheader($this->conn, $msg['msg_no']) ?: '';
             $msg['priority'] = $this->parsePriority($rawHeaders);
 
             if (!$msg['has_attachments']) {
                 $struct = imap_fetchstructure($this->conn, $msg['msg_no']);
-                if (isset($struct->parts)) {
+                if ($struct && isset($struct->parts)) {
                     foreach ($struct->parts as $part) {
                         if ($this->isAttachment($part)) {
                             $msg['has_attachments'] = true;
@@ -149,10 +149,11 @@ class ImapClient
     {
         $this->reopenFolder($folder);
 
-        $header  = imap_headerinfo($this->conn, $msgNo);
+        $header  = imap_headerinfo($this->conn, $msgNo) ?: null;
         $body    = $this->getBody($msgNo);
         $struct  = imap_fetchstructure($this->conn, $msgNo);
-        $rawHeaders = imap_fetchheader($this->conn, $msgNo);
+        $struct  = $struct === false ? null : $struct;
+        $rawHeaders = imap_fetchheader($this->conn, $msgNo) ?: '';
 
         // Mark as read
         imap_setflag_full($this->conn, (string) $msgNo, '\\Seen');
@@ -160,16 +161,16 @@ class ImapClient
         return [
             'uid'         => imap_uid($this->conn, $msgNo),
             'msg_no'      => $msgNo,
-            'subject'     => $this->decodeHeader($header->subject ?? '(no subject)'),
-            'from'        => $this->addressToString($header->from ?? []),
-            'to'          => $this->addressToString($header->to ?? []),
-            'cc'          => $this->addressToString($header->cc ?? []),
-            'reply_to'    => $this->addressToString($header->reply_to ?? []),
-            'date'        => date('D, d M Y H:i', $header->udate ?? time()),
+            'subject'     => $this->decodeHeader($header?->subject ?? '(no subject)'),
+            'from'        => $this->addressToString($header?->from ?? []),
+            'to'          => $this->addressToString($header?->to ?? []),
+            'cc'          => $this->addressToString($header?->cc ?? []),
+            'reply_to'    => $this->addressToString($header?->reply_to ?? []),
+            'date'        => date('D, d M Y H:i', $header?->udate ?? time()),
             'body_html'   => $body['html'],
             'body_text'   => $body['text'],
-            'attachments' => $this->getAttachments($msgNo, $struct),
-            'is_read'     => (bool) ($header->Seen ?? false),
+            'attachments' => $struct ? $this->getAttachments($msgNo, $struct) : [],
+            'is_read'     => (bool) ($header?->Seen ?? false),
             'priority'    => $this->parsePriority($rawHeaders),
             'read_receipt_to' => $this->parseReadReceipt($rawHeaders),
         ];
@@ -237,6 +238,10 @@ class ImapClient
     private function getBody(int $msgNo): array
     {
         $struct = imap_fetchstructure($this->conn, $msgNo);
+        if ($struct === false) {
+            $fallback = $this->decodeBodyPart(imap_body($this->conn, $msgNo), 0);
+            return ['html' => '', 'text' => $fallback ?: ''];
+        }
         $html   = '';
         $text   = '';
 
@@ -420,6 +425,9 @@ class ImapClient
     {
         $this->assertConnected();
         $struct = imap_fetchstructure($this->conn, $msgNo);
+        if ($struct === false) {
+            throw new RuntimeException('Could not fetch structure for message ' . $msgNo);
+        }
         $part   = $this->findPartBySection($struct, $section);
         
         if ($part && $part->type === 2 && strtolower($part->subtype ?? '') === 'rfc822') {
