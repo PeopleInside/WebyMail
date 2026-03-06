@@ -14,6 +14,7 @@ class ImapClient
     private const ENC_NONE = 0;
     private const ENC_BASE64 = 3;
     private const ENC_QPRINT = 4;
+    private const CHARSET_PATTERN = '/^[A-Za-z0-9_-]+$/';
 
     public function connect(
         string $host,
@@ -344,14 +345,17 @@ class ImapClient
                 if ($charsetUpper === 'UTF-8' || $charsetUpper === 'UTF8') {
                     return $body;
                 }
-                if (!preg_match('/^[A-Za-z0-9_-]+$/', $charset)) {
+                if (!preg_match(self::CHARSET_PATTERN, $charset)) {
                     $ctx = $context ? " while decoding {$context}" : '';
                     error_log(sprintf('IMAP: unsupported charset "%s"%s', $charset, $ctx));
                     return $body;
                 }
                 try {
                     $converted = mb_convert_encoding($body, 'UTF-8', $charset);
-                    return $converted !== false ? $converted : $body;
+                    if ($converted === false || ($converted === '' && $body !== '')) {
+                        return $body;
+                    }
+                    return $converted;
                 } catch (\Throwable $e) {
                     $ctx = $context ? " in {$context}" : '';
                     error_log(sprintf('IMAP: mb_convert_encoding failed for "%s"%s: %s', $charset, $ctx, $e->getMessage()));
