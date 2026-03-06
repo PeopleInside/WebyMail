@@ -328,11 +328,11 @@ class ImapClient
 
     private function sanitizeCharsetValue(string $value): string
     {
-        $charset = trim($value);
-        $charset = trim($charset, '"');
+        $trimmed = trim($value);
+        $withoutQuotes = trim($trimmed, '"');
         // Strip any extra parameters, e.g. "UTF-8; format=flowed"
-        $charset = explode(';', $charset, 2)[0];
-        return trim($charset);
+        $withoutParams = explode(';', $withoutQuotes, 2)[0];
+        return trim($withoutParams);
     }
 
     private function gatherParameters(object $part): array
@@ -345,16 +345,13 @@ class ImapClient
                 $params = array_merge($params, $raw);
             } elseif ($raw instanceof \stdClass) {
                 $vars = get_object_vars($raw);
-                if (!empty($vars)) {
-                    foreach ($vars as $v) {
-                        if (is_object($v)) {
-                            $params[] = $v;
-                        } elseif (is_array($v)) {
-                            $params = array_merge($params, $v);
-                        }
+                if (empty($vars)) continue;
+                foreach ($vars as $v) {
+                    if (is_object($v)) {
+                        $params[] = $v;
+                    } elseif (is_array($v)) {
+                        $params = array_merge($params, $v);
                     }
-                } else {
-                    $params[] = $raw;
                 }
             }
         }
@@ -381,10 +378,9 @@ class ImapClient
                 try {
                     // mb_convert_encoding may return false (older PHP) or throw (PHP 8+) on invalid charsets
                     $converted = mb_convert_encoding($body, 'UTF-8', $charset);
+                    if ($converted === false) return $body;
                     // Treat an unexpected empty result from non-empty input as a failure
-                    if ($converted === false || ($converted === '' && $body !== '')) {
-                        return $body;
-                    }
+                    if ($body !== '' && $converted === '') return $body;
                     return $converted;
                 } catch (\Throwable $e) {
                     $ctx = $context ? " in {$context}" : '';
