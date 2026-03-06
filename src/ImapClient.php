@@ -344,7 +344,18 @@ class ImapClient
             if (is_array($raw)) {
                 $params = array_merge($params, $raw);
             } elseif ($raw instanceof \stdClass) {
-                $params[] = $raw;
+                $vars = get_object_vars($raw);
+                if (!empty($vars)) {
+                    foreach ($vars as $v) {
+                        if (is_object($v)) {
+                            $params[] = $v;
+                        } elseif (is_array($v)) {
+                            $params = array_merge($params, $v);
+                        }
+                    }
+                } else {
+                    $params[] = $raw;
+                }
             }
         }
         return $params;
@@ -371,7 +382,7 @@ class ImapClient
                     // mb_convert_encoding may return false (older PHP) or throw (PHP 8+) on invalid charsets
                     $converted = mb_convert_encoding($body, 'UTF-8', $charset);
                     // Treat an unexpected empty result from non-empty input as a failure
-                    if ($converted === false || ($converted === '' && trim($body) !== '')) {
+                    if ($converted === false || ($converted === '' && $body !== '')) {
                         return $body;
                     }
                     return $converted;
