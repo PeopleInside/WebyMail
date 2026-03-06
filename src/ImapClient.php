@@ -325,21 +325,26 @@ class ImapClient
         return self::ENC_NONE;
     }
 
+    private function sanitizeCharsetValue(string $value): string
+    {
+        $charset = trim($value);
+        $charset = trim($charset, '"');
+        return explode(';', $charset, 2)[0];
+    }
+
     private function convertCharset(string $body, array $params, string $context = ''): string
     {
         foreach ($params as $p) {
             if (isset($p->attribute) && strtolower($p->attribute) === 'charset') {
-                $charset = trim((string) ($p->value ?? ''));
-                $charset = trim($charset, '"');
-                // Some malformed headers append extra parameters to the charset value
-                $charset = explode(';', $charset, 2)[0];
+                $charset = $this->sanitizeCharsetValue((string) ($p->value ?? ''));
                 if ($charset === '') {
                     continue;
                 }
-                if (strcasecmp($charset, 'UTF-8') === 0 || strcasecmp($charset, 'UTF8') === 0) {
+                $charsetUpper = strtoupper($charset);
+                if ($charsetUpper === 'UTF-8' || $charsetUpper === 'UTF8') {
                     return $body;
                 }
-                if (!preg_match('/^[A-Za-z0-9_\-]+$/', $charset)) {
+                if (!preg_match('/^[A-Za-z0-9_-]+$/', $charset)) {
                     $ctx = $context ? " while decoding {$context}" : '';
                     error_log(sprintf('IMAP: unsupported charset "%s"%s', $charset, $ctx));
                     return $body;
