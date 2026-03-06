@@ -241,7 +241,14 @@ class ImapClient
         if ($struct === false) {
             error_log('IMAP: fetchstructure failed for message ' . $msgNo . ' - returning raw body fallback.');
             $rawBody = imap_body($this->conn, $msgNo);
-            $fallback = $this->decodeBodyPart($rawBody === false ? '' : $rawBody, 0);
+            $rawHeaders = imap_fetchheader($this->conn, $msgNo) ?: '';
+            $encoding = 0;
+            if (preg_match('/^Content-Transfer-Encoding:\\s*base64/mi', $rawHeaders)) {
+                $encoding = 3;
+            } elseif (preg_match('/^Content-Transfer-Encoding:\\s*quoted-printable/mi', $rawHeaders)) {
+                $encoding = 4;
+            }
+            $fallback = $this->decodeBodyPart($rawBody === false ? '' : $rawBody, $encoding);
             return ['html' => '', 'text' => $fallback ?: ''];
         }
         $html   = '';
@@ -428,7 +435,7 @@ class ImapClient
         $this->assertConnected();
         $struct = imap_fetchstructure($this->conn, $msgNo);
         if ($struct === false) {
-            throw new RuntimeException('Could not fetch structure for message ' . $msgNo . ' at section ' . $section);
+            throw new RuntimeException('Could not fetch structure for message ' . $msgNo . ' (requested section ' . $section . ')');
         }
         $part   = $this->findPartBySection($struct, $section);
         
