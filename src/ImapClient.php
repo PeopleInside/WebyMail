@@ -242,8 +242,9 @@ class ImapClient
     {
         $struct = imap_fetchstructure($this->conn, $msgNo);
         if ($struct === false) {
-            error_log(sprintf('IMAP: fetchstructure failed for message %d (possibly malformed/DSN) - returning raw body fallback.', $msgNo));
+            error_log(sprintf('IMAP notice: fetchstructure failed for message %d (possibly malformed/DSN) - using raw body fallback.', $msgNo));
             $rawBody = imap_body($this->conn, $msgNo);
+            // Headers are often still retrievable even when the structure cannot be parsed.
             $rawHeaders = imap_fetchheader($this->conn, $msgNo) ?: '';
             $encoding = $this->detectContentTransferEncoding($rawHeaders);
             $fallback = $this->decodeBodyPart($rawBody ?: '', $encoding);
@@ -445,7 +446,7 @@ class ImapClient
         $this->assertConnected();
         $struct = imap_fetchstructure($this->conn, $msgNo);
         if ($struct === false) {
-            throw new RuntimeException(sprintf('IMAP: could not fetch structure for message %d (requested section %s)', $msgNo, $section));
+            throw new RuntimeException(sprintf('IMAP: could not fetch structure for message %d (requested MIME section %s)', $msgNo, $section));
         }
         $part   = $this->findPartBySection($struct, $section);
         
