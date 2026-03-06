@@ -329,10 +329,20 @@ class ImapClient
     {
         foreach ($params as $p) {
             if (strtolower($p->attribute) === 'charset') {
-                $charset = strtoupper($p->value);
-                if ($charset !== 'UTF-8' && $charset !== 'UTF8') {
-                    $converted = @mb_convert_encoding($body, 'UTF-8', $charset);
+                $charset = trim((string) $p->value, " \t\n\r\0\x0B\"'");
+                // Some malformed headers append extra parameters to the charset value
+                if (str_contains($charset, ';')) {
+                    $charset = substr($charset, 0, strpos($charset, ';'));
+                }
+                if ($charset === '' || strcasecmp($charset, 'UTF-8') === 0 || strcasecmp($charset, 'UTF8') === 0) {
+                    return $body;
+                }
+                try {
+                    $converted = mb_convert_encoding($body, 'UTF-8', $charset);
                     return $converted !== false ? $converted : $body;
+                } catch (\Throwable $e) {
+                    error_log(sprintf('IMAP: charset conversion failed for "%s": %s', $charset, $e->getMessage()));
+                    return $body;
                 }
             }
         }
