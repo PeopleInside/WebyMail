@@ -239,7 +239,8 @@ class ImapClient
     {
         $struct = imap_fetchstructure($this->conn, $msgNo);
         if ($struct === false) {
-            $fallback = $this->decodeBodyPart(imap_body($this->conn, $msgNo), 0);
+            $rawBody = imap_body($this->conn, $msgNo);
+            $fallback = $this->decodeBodyPart($rawBody === false ? '' : $rawBody, 0);
             return ['html' => '', 'text' => $fallback ?: ''];
         }
         $html   = '';
