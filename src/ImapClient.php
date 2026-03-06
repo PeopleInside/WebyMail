@@ -11,6 +11,10 @@ class ImapClient
     private $conn = false;
     private string $host  = '';
     private string $user  = '';
+    private const ENC_NONE = 0;
+    private const ENC_BASE64 = 3;
+    private const ENC_QPRINT = 4;
+    private const CHARSET_PATTERN = '/^[A-Za-z0-9_-]+$/';
 
     public function connect(
         string $host,
@@ -116,12 +120,12 @@ class ImapClient
         // For each message, if has_attachments is false, do a quick structure check
         // to be more reliable, but only for the current page.
         foreach ($messages as &$msg) {
-            $rawHeaders = imap_fetchheader($this->conn, $msg['msg_no']);
+            $rawHeaders = imap_fetchheader($this->conn, $msg['msg_no']) ?: '';
             $msg['priority'] = $this->parsePriority($rawHeaders);
 
             if (!$msg['has_attachments']) {
                 $struct = imap_fetchstructure($this->conn, $msg['msg_no']);
-                if (isset($struct->parts)) {
+                if ($struct && isset($struct->parts)) {
                     foreach ($struct->parts as $part) {
                         if ($this->isAttachment($part)) {
                             $msg['has_attachments'] = true;
@@ -149,10 +153,10 @@ class ImapClient
     {
         $this->reopenFolder($folder);
 
-        $header  = imap_headerinfo($this->conn, $msgNo);
+        $header  = imap_headerinfo($this->conn, $msgNo) ?: null;
         $body    = $this->getBody($msgNo);
-        $struct  = imap_fetchstructure($this->conn, $msgNo);
-        $rawHeaders = imap_fetchheader($this->conn, $msgNo);
+        $struct  = imap_fetchstructure($this->conn, $msgNo) ?: null;
+        $rawHeaders = imap_fetchheader($this->conn, $msgNo) ?: '';
 
         // Mark as read
         imap_setflag_full($this->conn, (string) $msgNo, '\\Seen');
@@ -160,16 +164,16 @@ class ImapClient
         return [
             'uid'         => imap_uid($this->conn, $msgNo),
             'msg_no'      => $msgNo,
-            'subject'     => $this->decodeHeader($header->subject ?? '(no subject)'),
-            'from'        => $this->addressToString($header->from ?? []),
-            'to'          => $this->addressToString($header->to ?? []),
-            'cc'          => $this->addressToString($header->cc ?? []),
-            'reply_to'    => $this->addressToString($header->reply_to ?? []),
-            'date'        => date('D, d M Y H:i', $header->udate ?? time()),
+            'subject'     => $this->decodeHeader($header?->subject ?? '(no subject)'),
+            'from'        => $this->addressToString($header?->from ?? []),
+            'to'          => $this->addressToString($header?->to ?? []),
+            'cc'          => $this->addressToString($header?->cc ?? []),
+            'reply_to'    => $this->addressToString($header?->reply_to ?? []),
+            'date'        => date('D, d M Y H:i', $header?->udate ?? time()),
             'body_html'   => $body['html'],
             'body_text'   => $body['text'],
-            'attachments' => $this->getAttachments($msgNo, $struct),
-            'is_read'     => (bool) ($header->Seen ?? false),
+            'attachments' => $struct ? $this->getAttachments($msgNo, $struct) : [],
+            'is_read'     => (bool) ($header?->Seen ?? false),
             'priority'    => $this->parsePriority($rawHeaders),
             'read_receipt_to' => $this->parseReadReceipt($rawHeaders),
         ];
@@ -237,6 +241,15 @@ class ImapClient
     private function getBody(int $msgNo): array
     {
         $struct = imap_fetchstructure($this->conn, $msgNo);
+        if ($struct === false) {
+            error_log(sprintf('IMAP warning: fetchstructure failed for message %d (possibly malformed/DSN) - using raw body fallback.', $msgNo));
+            $rawBody = imap_body($this->conn, $msgNo);
+            // Headers are often still retrievable even when the structure cannot be parsed.
+            $rawHeaders = imap_fetchheader($this->conn, $msgNo) ?: '';
+            $encoding = $this->detectContentTransferEncoding($rawHeaders);
+            $fallback = $this->decodeBodyPart($rawBody ?: '', $encoding);
+            return ['html' => '', 'text' => $fallback ?: ''];
+        }
         $html   = '';
         $text   = '';
 
@@ -244,7 +257,7 @@ class ImapClient
             // Single-part message
             $body = imap_body($this->conn, $msgNo);
             $body = $this->decodeBodyPart($body, $struct->encoding ?? 0);
-            $body = $this->convertCharset($body, $struct->parameters ?? []);
+            $body = $this->convertCharset($body, $struct->parameters ?? [], "msg {$msgNo}");
             if (strtolower($struct->subtype ?? 'plain') === 'html') {
                 $html = $body;
             } else {
@@ -256,7 +269,7 @@ class ImapClient
 
         if ($html === '' && $text === '') {
             $fallback = $this->decodeBodyPart(imap_body($this->conn, $msgNo), $struct->encoding ?? 0);
-            $text = $this->convertCharset($fallback, $struct->parameters ?? []);
+            $text = $this->convertCharset($fallback, $struct->parameters ?? [], "msg {$msgNo}");
         }
 
         return ['html' => $html, 'text' => $text];
@@ -281,7 +294,7 @@ class ImapClient
             if ($part->type === 0) { // text/*
                 $raw  = imap_fetchbody($this->conn, $msgNo, $section);
                 $body = $this->decodeBodyPart($raw, $part->encoding ?? 0);
-                $body = $this->convertCharset($body, $part->parameters ?? []);
+                $body = $this->convertCharset($body, $part->parameters ?? [], "msg {$msgNo} section {$section}");
                 if ($type === 'html') {
                     $html = $body;
                 } else {
@@ -295,20 +308,83 @@ class ImapClient
     {
         if ($body === false) return '';
         return match ($encoding) {
-            3 => base64_decode($body),
-            4 => quoted_printable_decode($body),
+            self::ENC_BASE64 => base64_decode($body),
+            self::ENC_QPRINT => quoted_printable_decode($body),
             default => $body,
         };
     }
 
-    private function convertCharset(string $body, array $params): string
+    private function detectContentTransferEncoding(string $rawHeaders): int
+    {
+        if (preg_match('/^Content-Transfer-Encoding:\\s*([a-z0-9_-]+)/mi', $rawHeaders, $matches)) {
+            return match (strtolower($matches[1])) {
+                'base64' => self::ENC_BASE64,
+                'quoted-printable' => self::ENC_QPRINT,
+                default => self::ENC_NONE,
+            };
+        }
+        return self::ENC_NONE;
+    }
+
+    private function sanitizeCharsetValue(string $value): string
+    {
+        $withoutQuotes = trim($value, " \t\n\r\0\x0B\"");
+        // Strip any extra parameters, e.g. "UTF-8; format=flowed"
+        $withoutParams = explode(';', $withoutQuotes, 2)[0];
+        return trim($withoutParams);
+    }
+
+    private function gatherParameters(object $part): array
+    {
+        $params = [];
+        foreach (['parameters', 'dparameters'] as $prop) {
+            if (!isset($part->$prop)) continue;
+            $raw = $part->$prop;
+            if (is_array($raw)) {
+                $params = array_merge($params, $raw);
+            } elseif ($raw instanceof \stdClass) {
+                $vars = get_object_vars($raw);
+                if (empty($vars)) continue;
+                foreach ($vars as $v) {
+                    if (is_object($v)) {
+                        $params[] = $v;
+                    } elseif (is_array($v)) {
+                        $params = array_merge($params, $v);
+                    }
+                }
+            }
+        }
+        return $params;
+    }
+
+    private function convertCharset(string $body, array $params, string $context = ''): string
     {
         foreach ($params as $p) {
-            if (strtolower($p->attribute) === 'charset') {
-                $charset = strtoupper($p->value);
-                if ($charset !== 'UTF-8' && $charset !== 'UTF8') {
-                    $converted = @mb_convert_encoding($body, 'UTF-8', $charset);
-                    return $converted !== false ? $converted : $body;
+            if (isset($p->attribute) && strtolower($p->attribute) === 'charset') {
+                $charset = $this->sanitizeCharsetValue((string) ($p->value ?? ''));
+                if ($charset === '') {
+                    continue;
+                }
+                $charsetUpper = strtoupper($charset);
+                if ($charsetUpper === 'UTF-8' || $charsetUpper === 'UTF8') {
+                    return $body;
+                }
+                if (!preg_match(self::CHARSET_PATTERN, $charset)) {
+                    $ctx = $context ? " while decoding {$context}" : '';
+                    error_log(sprintf('IMAP: unsupported charset "%s"%s', $charset, $ctx));
+                    return $body;
+                }
+                try {
+                    // mb_convert_encoding may return false (older PHP) or throw (PHP 8+) on invalid charsets
+                    $converted = mb_convert_encoding($body, 'UTF-8', $charset);
+                    if ($converted === false) return $body;
+                    // Treat an unexpected empty result from non-empty input as a failure
+                    if ($body !== '' && ($converted === '' || $converted === null)) return $body;
+                    return $converted;
+                } catch (\Throwable $e) {
+                    $ctx = $context ? " in {$context}" : '';
+                    error_log(sprintf('IMAP: mb_convert_encoding failed for "%s"%s: %s', $charset, $ctx, $e->getMessage()));
+                    return $body;
                 }
             }
         }
@@ -420,6 +496,9 @@ class ImapClient
     {
         $this->assertConnected();
         $struct = imap_fetchstructure($this->conn, $msgNo);
+        if ($struct === false) {
+            throw new RuntimeException(sprintf('IMAP: could not fetch structure for message %d (section %s - MIME part identifier)', $msgNo, $section));
+        }
         $part   = $this->findPartBySection($struct, $section);
         
         if ($part && $part->type === 2 && strtolower($part->subtype ?? '') === 'rfc822') {
@@ -515,7 +594,7 @@ class ImapClient
         }
 
         // Check for filename in parameters or dparameters
-        $params = array_merge($part->parameters ?? [], $part->dparameters ?? []);
+        $params = $this->gatherParameters($part);
         foreach ($params as $p) {
             if (isset($p->attribute) && (strtolower($p->attribute) === 'filename' || strtolower($p->attribute) === 'name')) {
                 return true;
