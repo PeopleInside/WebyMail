@@ -11,6 +11,8 @@ class ImapClient
     private $conn = false;
     private string $host  = '';
     private string $user  = '';
+    private const ENC_BASE64 = 3;
+    private const ENC_QPRINT = 4;
 
     public function connect(
         string $host,
@@ -239,14 +241,14 @@ class ImapClient
     {
         $struct = imap_fetchstructure($this->conn, $msgNo);
         if ($struct === false) {
-            error_log('IMAP: fetchstructure failed for message ' . $msgNo . ' - returning raw body fallback.');
+            error_log(sprintf('IMAP: fetchstructure failed for message %d - returning raw body fallback.', $msgNo));
             $rawBody = imap_body($this->conn, $msgNo);
             $rawHeaders = imap_fetchheader($this->conn, $msgNo) ?: '';
             $encoding = 0;
             if (preg_match('/^Content-Transfer-Encoding:\\s*base64/mi', $rawHeaders)) {
-                $encoding = 3;
+                $encoding = self::ENC_BASE64;
             } elseif (preg_match('/^Content-Transfer-Encoding:\\s*quoted-printable/mi', $rawHeaders)) {
-                $encoding = 4;
+                $encoding = self::ENC_QPRINT;
             }
             $fallback = $this->decodeBodyPart($rawBody === false ? '' : $rawBody, $encoding);
             return ['html' => '', 'text' => $fallback ?: ''];
@@ -309,8 +311,8 @@ class ImapClient
     {
         if ($body === false) return '';
         return match ($encoding) {
-            3 => base64_decode($body),
-            4 => quoted_printable_decode($body),
+            self::ENC_BASE64 => base64_decode($body),
+            self::ENC_QPRINT => quoted_printable_decode($body),
             default => $body,
         };
     }
@@ -435,7 +437,7 @@ class ImapClient
         $this->assertConnected();
         $struct = imap_fetchstructure($this->conn, $msgNo);
         if ($struct === false) {
-            throw new RuntimeException('Could not fetch structure for message ' . $msgNo . ' (requested section ' . $section . ')');
+            throw new RuntimeException(sprintf('Could not fetch structure for message %d (requested section %s)', $msgNo, $section));
         }
         $part   = $this->findPartBySection($struct, $section);
         
