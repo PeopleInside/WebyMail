@@ -333,7 +333,10 @@ class ImapClient
                 $charset = trim($charset, '"');
                 // Some malformed headers append extra parameters to the charset value
                 $charset = explode(';', $charset, 2)[0];
-                if ($charset === '' || strcasecmp($charset, 'UTF-8') === 0 || strcasecmp($charset, 'UTF8') === 0) {
+                if ($charset === '') {
+                    continue;
+                }
+                if (strcasecmp($charset, 'UTF-8') === 0 || strcasecmp($charset, 'UTF8') === 0) {
                     return $body;
                 }
                 if (!preg_match('/^[A-Za-z0-9_\-]+$/', $charset)) {
@@ -346,7 +349,7 @@ class ImapClient
                     return $converted !== false ? $converted : $body;
                 } catch (\Throwable $e) {
                     $ctx = $context ? " in {$context}" : '';
-                    error_log(sprintf('IMAP: charset conversion failed for "%s"%s: %s', $charset, $ctx, $e->getMessage()));
+                    error_log(sprintf('IMAP: mb_convert_encoding failed for "%s"%s: %s', $charset, $ctx, $e->getMessage()));
                     return $body;
                 }
             }
