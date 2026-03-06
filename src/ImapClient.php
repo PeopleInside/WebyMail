@@ -244,13 +244,8 @@ class ImapClient
             error_log(sprintf('IMAP: fetchstructure failed for message %d - returning raw body fallback.', $msgNo));
             $rawBody = imap_body($this->conn, $msgNo);
             $rawHeaders = imap_fetchheader($this->conn, $msgNo) ?: '';
-            $encoding = 0;
-            if (preg_match('/^Content-Transfer-Encoding:\\s*base64/mi', $rawHeaders)) {
-                $encoding = self::ENC_BASE64;
-            } elseif (preg_match('/^Content-Transfer-Encoding:\\s*quoted-printable/mi', $rawHeaders)) {
-                $encoding = self::ENC_QPRINT;
-            }
-            $fallback = $this->decodeBodyPart($rawBody === false ? '' : $rawBody, $encoding);
+            $encoding = $this->detectContentTransferEncoding($rawHeaders);
+            $fallback = $this->decodeBodyPart($rawBody ?: '', $encoding);
             return ['html' => '', 'text' => $fallback ?: ''];
         }
         $html   = '';
@@ -315,6 +310,17 @@ class ImapClient
             self::ENC_QPRINT => quoted_printable_decode($body),
             default => $body,
         };
+    }
+
+    private function detectContentTransferEncoding(string $rawHeaders): int
+    {
+        if (preg_match('/^Content-Transfer-Encoding:\\s*base64/mi', $rawHeaders)) {
+            return self::ENC_BASE64;
+        }
+        if (preg_match('/^Content-Transfer-Encoding:\\s*quoted-printable/mi', $rawHeaders)) {
+            return self::ENC_QPRINT;
+        }
+        return 0;
     }
 
     private function convertCharset(string $body, array $params): string
