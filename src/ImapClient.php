@@ -329,13 +329,14 @@ class ImapClient
     {
         foreach ($params as $p) {
             if (isset($p->attribute) && strtolower($p->attribute) === 'charset') {
-                $charset = trim((string) ($p->value ?? ''), " \t\n\r\0\x0B\"");
+                $charset = trim((string) ($p->value ?? ''));
+                $charset = trim($charset, "\"");
                 // Some malformed headers append extra parameters to the charset value
                 $charset = explode(';', $charset, 2)[0];
                 if ($charset === '' || strcasecmp($charset, 'UTF-8') === 0 || strcasecmp($charset, 'UTF8') === 0) {
                     return $body;
                 }
-                if (!preg_match('/^[A-Za-z0-9._-]+$/', $charset)) {
+                if (!preg_match('/^[A-Za-z0-9._:-]+$/', $charset)) {
                     $ctx = $context ? " while decoding {$context}" : '';
                     error_log(sprintf('IMAP: unsupported charset "%s"%s', $charset, $ctx));
                     return $body;
