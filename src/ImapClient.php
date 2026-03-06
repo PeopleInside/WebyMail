@@ -11,6 +11,7 @@ class ImapClient
     private $conn = false;
     private string $host  = '';
     private string $user  = '';
+    private const ENC_NONE = 0;
     private const ENC_BASE64 = 3;
     private const ENC_QPRINT = 4;
 
@@ -320,7 +321,7 @@ class ImapClient
         if (preg_match('/^Content-Transfer-Encoding:\\s*quoted-printable/mi', $rawHeaders)) {
             return self::ENC_QPRINT;
         }
-        return 0;
+        return self::ENC_NONE;
     }
 
     private function convertCharset(string $body, array $params): string
@@ -443,7 +444,7 @@ class ImapClient
         $this->assertConnected();
         $struct = imap_fetchstructure($this->conn, $msgNo);
         if ($struct === false) {
-            throw new RuntimeException(sprintf('Could not fetch structure for message %d (requested section %s)', $msgNo, $section));
+            throw new RuntimeException(sprintf('IMAP: could not fetch structure for message %d (requested section %s)', $msgNo, $section));
         }
         $part   = $this->findPartBySection($struct, $section);
         
