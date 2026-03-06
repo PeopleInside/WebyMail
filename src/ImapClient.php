@@ -242,7 +242,7 @@ class ImapClient
     {
         $struct = imap_fetchstructure($this->conn, $msgNo);
         if ($struct === false) {
-            error_log(sprintf('IMAP: fetchstructure failed for message %d - returning raw body fallback.', $msgNo));
+            error_log(sprintf('IMAP: fetchstructure failed for message %d (possibly malformed/DSN) - returning raw body fallback.', $msgNo));
             $rawBody = imap_body($this->conn, $msgNo);
             $rawHeaders = imap_fetchheader($this->conn, $msgNo) ?: '';
             $encoding = $this->detectContentTransferEncoding($rawHeaders);
@@ -315,11 +315,12 @@ class ImapClient
 
     private function detectContentTransferEncoding(string $rawHeaders): int
     {
-        if (preg_match('/^Content-Transfer-Encoding:\\s*base64/mi', $rawHeaders)) {
-            return self::ENC_BASE64;
-        }
-        if (preg_match('/^Content-Transfer-Encoding:\\s*quoted-printable/mi', $rawHeaders)) {
-            return self::ENC_QPRINT;
+        if (preg_match('/^Content-Transfer-Encoding:\\s*([a-z0-9_-]+)/mi', $rawHeaders, $matches)) {
+            return match (strtolower($matches[1])) {
+                'base64' => self::ENC_BASE64,
+                'quoted-printable' => self::ENC_QPRINT,
+                default => self::ENC_NONE,
+            };
         }
         return self::ENC_NONE;
     }
