@@ -295,6 +295,15 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
         <?php elseif (($step ?? '') === 'security'): ?>
         <!-- Step 2.5: Security Check -->
         <div class="wm-card">
+            <?php
+            $allSecurityOk = true;
+            foreach ($securityChecks as $check) {
+                if (empty($check['ok'])) {
+                    $allSecurityOk = false;
+                    break;
+                }
+            }
+            ?>
             <div class="wm-card-header" style="justify-content:space-between">
                 <div style="display:flex;align-items:center;gap:.5rem">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>

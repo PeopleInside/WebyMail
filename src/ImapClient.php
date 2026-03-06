@@ -335,6 +335,21 @@ class ImapClient
         return trim($charset);
     }
 
+    private function gatherParameters(object $part): array
+    {
+        $params = [];
+        foreach (['parameters', 'dparameters'] as $prop) {
+            if (!isset($part->$prop)) continue;
+            $raw = $part->$prop;
+            if (is_array($raw)) {
+                $params = array_merge($params, $raw);
+            } elseif ($raw instanceof \stdClass) {
+                $params[] = $raw;
+            }
+        }
+        return $params;
+    }
+
     private function convertCharset(string $body, array $params, string $context = ''): string
     {
         foreach ($params as $p) {
@@ -573,7 +588,7 @@ class ImapClient
         }
 
         // Check for filename in parameters or dparameters
-        $params = array_merge($part->parameters ?? [], $part->dparameters ?? []);
+        $params = $this->gatherParameters($part);
         foreach ($params as $p) {
             if (isset($p->attribute) && (strtolower($p->attribute) === 'filename' || strtolower($p->attribute) === 'name')) {
                 return true;
