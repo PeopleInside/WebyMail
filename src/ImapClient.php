@@ -329,9 +329,9 @@ class ImapClient
     {
         foreach ($params as $p) {
             if (isset($p->attribute) && strtolower($p->attribute) === 'charset') {
-                $charset = trim((string) ($p->value ?? ''), " \t\n\r\0\x0B\"'");
+                $charset = trim((string) ($p->value ?? ''), " \t\n\r\0\x0B\"");
                 // Some malformed headers append extra parameters to the charset value
-                $charset = strtok($charset, ';') ?: $charset;
+                $charset = explode(';', $charset, 2)[0];
                 if ($charset === '' || strcasecmp($charset, 'UTF-8') === 0 || strcasecmp($charset, 'UTF8') === 0) {
                     return $body;
                 }
