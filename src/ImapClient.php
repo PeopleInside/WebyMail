@@ -11,6 +11,9 @@ class ImapClient
     private $conn = false;
     private string $host  = '';
     private string $user  = '';
+    private const ENC_NONE = 0;
+    private const ENC_BASE64 = 3;
+    private const ENC_QPRINT = 4;
 
     public function connect(
         string $host,
@@ -116,12 +119,12 @@ class ImapClient
         // For each message, if has_attachments is false, do a quick structure check
         // to be more reliable, but only for the current page.
         foreach ($messages as &$msg) {
-            $rawHeaders = imap_fetchheader($this->conn, $msg['msg_no']);
+            $rawHeaders = imap_fetchheader($this->conn, $msg['msg_no']) ?: '';
             $msg['priority'] = $this->parsePriority($rawHeaders);
 
             if (!$msg['has_attachments']) {
                 $struct = imap_fetchstructure($this->conn, $msg['msg_no']);
-                if (isset($struct->parts)) {
+                if ($struct && isset($struct->parts)) {
                     foreach ($struct->parts as $part) {
                         if ($this->isAttachment($part)) {
                             $msg['has_attachments'] = true;
@@ -149,10 +152,10 @@ class ImapClient
     {
         $this->reopenFolder($folder);
 
-        $header  = imap_headerinfo($this->conn, $msgNo);
+        $header  = imap_headerinfo($this->conn, $msgNo) ?: null;
         $body    = $this->getBody($msgNo);
-        $struct  = imap_fetchstructure($this->conn, $msgNo);
-        $rawHeaders = imap_fetchheader($this->conn, $msgNo);
+        $struct  = imap_fetchstructure($this->conn, $msgNo) ?: null;
+        $rawHeaders = imap_fetchheader($this->conn, $msgNo) ?: '';
 
         // Mark as read
         imap_setflag_full($this->conn, (string) $msgNo, '\\Seen');
@@ -160,16 +163,16 @@ class ImapClient
         return [
             'uid'         => imap_uid($this->conn, $msgNo),
             'msg_no'      => $msgNo,
-            'subject'     => $this->decodeHeader($header->subject ?? '(no subject)'),
-            'from'        => $this->addressToString($header->from ?? []),
-            'to'          => $this->addressToString($header->to ?? []),
-            'cc'          => $this->addressToString($header->cc ?? []),
-            'reply_to'    => $this->addressToString($header->reply_to ?? []),
-            'date'        => date('D, d M Y H:i', $header->udate ?? time()),
+            'subject'     => $this->decodeHeader($header?->subject ?? '(no subject)'),
+            'from'        => $this->addressToString($header?->from ?? []),
+            'to'          => $this->addressToString($header?->to ?? []),
+            'cc'          => $this->addressToString($header?->cc ?? []),
+            'reply_to'    => $this->addressToString($header?->reply_to ?? []),
+            'date'        => date('D, d M Y H:i', $header?->udate ?? time()),
             'body_html'   => $body['html'],
             'body_text'   => $body['text'],
-            'attachments' => $this->getAttachments($msgNo, $struct),
-            'is_read'     => (bool) ($header->Seen ?? false),
+            'attachments' => $struct ? $this->getAttachments($msgNo, $struct) : [],
+            'is_read'     => (bool) ($header?->Seen ?? false),
             'priority'    => $this->parsePriority($rawHeaders),
             'read_receipt_to' => $this->parseReadReceipt($rawHeaders),
         ];
@@ -237,6 +240,15 @@ class ImapClient
     private function getBody(int $msgNo): array
     {
         $struct = imap_fetchstructure($this->conn, $msgNo);
+        if ($struct === false) {
+            error_log(sprintf('IMAP warning: fetchstructure failed for message %d (possibly malformed/DSN) - using raw body fallback.', $msgNo));
+            $rawBody = imap_body($this->conn, $msgNo);
+            // Headers are often still retrievable even when the structure cannot be parsed.
+            $rawHeaders = imap_fetchheader($this->conn, $msgNo) ?: '';
+            $encoding = $this->detectContentTransferEncoding($rawHeaders);
+            $fallback = $this->decodeBodyPart($rawBody ?: '', $encoding);
+            return ['html' => '', 'text' => $fallback ?: ''];
+        }
         $html   = '';
         $text   = '';
 
@@ -295,10 +307,22 @@ class ImapClient
     {
         if ($body === false) return '';
         return match ($encoding) {
-            3 => base64_decode($body),
-            4 => quoted_printable_decode($body),
+            self::ENC_BASE64 => base64_decode($body),
+            self::ENC_QPRINT => quoted_printable_decode($body),
             default => $body,
         };
+    }
+
+    private function detectContentTransferEncoding(string $rawHeaders): int
+    {
+        if (preg_match('/^Content-Transfer-Encoding:\\s*([a-z0-9_-]+)/mi', $rawHeaders, $matches)) {
+            return match (strtolower($matches[1])) {
+                'base64' => self::ENC_BASE64,
+                'quoted-printable' => self::ENC_QPRINT,
+                default => self::ENC_NONE,
+            };
+        }
+        return self::ENC_NONE;
     }
 
     private function convertCharset(string $body, array $params): string
@@ -420,6 +444,9 @@ class ImapClient
     {
         $this->assertConnected();
         $struct = imap_fetchstructure($this->conn, $msgNo);
+        if ($struct === false) {
+            throw new RuntimeException(sprintf('IMAP: could not fetch structure for message %d (section %s - MIME part identifier)', $msgNo, $section));
+        }
         $part   = $this->findPartBySection($struct, $section);
         
         if ($part && $part->type === 2 && strtolower($part->subtype ?? '') === 'rfc822') {
