@@ -14,6 +14,7 @@ class ImapClient
     private const ENC_NONE = 0;
     private const ENC_BASE64 = 3;
     private const ENC_QPRINT = 4;
+    private const CHARSET_PATTERN = '/^[A-Za-z0-9_-]+$/';
 
     public function connect(
         string $host,
@@ -256,7 +257,7 @@ class ImapClient
             // Single-part message
             $body = imap_body($this->conn, $msgNo);
             $body = $this->decodeBodyPart($body, $struct->encoding ?? 0);
-            $body = $this->convertCharset($body, $struct->parameters ?? []);
+            $body = $this->convertCharset($body, $struct->parameters ?? [], "msg {$msgNo}");
             if (strtolower($struct->subtype ?? 'plain') === 'html') {
                 $html = $body;
             } else {
@@ -268,7 +269,7 @@ class ImapClient
 
         if ($html === '' && $text === '') {
             $fallback = $this->decodeBodyPart(imap_body($this->conn, $msgNo), $struct->encoding ?? 0);
-            $text = $this->convertCharset($fallback, $struct->parameters ?? []);
+            $text = $this->convertCharset($fallback, $struct->parameters ?? [], "msg {$msgNo}");
         }
 
         return ['html' => $html, 'text' => $text];
@@ -293,7 +294,7 @@ class ImapClient
             if ($part->type === 0) { // text/*
                 $raw  = imap_fetchbody($this->conn, $msgNo, $section);
                 $body = $this->decodeBodyPart($raw, $part->encoding ?? 0);
-                $body = $this->convertCharset($body, $part->parameters ?? []);
+                $body = $this->convertCharset($body, $part->parameters ?? [], "msg {$msgNo} section {$section}");
                 if ($type === 'html') {
                     $html = $body;
                 } else {
@@ -325,14 +326,65 @@ class ImapClient
         return self::ENC_NONE;
     }
 
-    private function convertCharset(string $body, array $params): string
+    private function sanitizeCharsetValue(string $value): string
+    {
+        $withoutQuotes = trim($value, " \t\n\r\0\x0B\"");
+        // Strip any extra parameters, e.g. "UTF-8; format=flowed"
+        $withoutParams = explode(';', $withoutQuotes, 2)[0];
+        return trim($withoutParams);
+    }
+
+    private function gatherParameters(object $part): array
+    {
+        $params = [];
+        foreach (['parameters', 'dparameters'] as $prop) {
+            if (!isset($part->$prop)) continue;
+            $raw = $part->$prop;
+            if (is_array($raw)) {
+                $params = array_merge($params, $raw);
+            } elseif ($raw instanceof \stdClass) {
+                $vars = get_object_vars($raw);
+                if (empty($vars)) continue;
+                foreach ($vars as $v) {
+                    if (is_object($v)) {
+                        $params[] = $v;
+                    } elseif (is_array($v)) {
+                        $params = array_merge($params, $v);
+                    }
+                }
+            }
+        }
+        return $params;
+    }
+
+    private function convertCharset(string $body, array $params, string $context = ''): string
     {
         foreach ($params as $p) {
-            if (strtolower($p->attribute) === 'charset') {
-                $charset = strtoupper($p->value);
-                if ($charset !== 'UTF-8' && $charset !== 'UTF8') {
-                    $converted = @mb_convert_encoding($body, 'UTF-8', $charset);
-                    return $converted !== false ? $converted : $body;
+            if (isset($p->attribute) && strtolower($p->attribute) === 'charset') {
+                $charset = $this->sanitizeCharsetValue((string) ($p->value ?? ''));
+                if ($charset === '') {
+                    continue;
+                }
+                $charsetUpper = strtoupper($charset);
+                if ($charsetUpper === 'UTF-8' || $charsetUpper === 'UTF8') {
+                    return $body;
+                }
+                if (!preg_match(self::CHARSET_PATTERN, $charset)) {
+                    $ctx = $context ? " while decoding {$context}" : '';
+                    error_log(sprintf('IMAP: unsupported charset "%s"%s', $charset, $ctx));
+                    return $body;
+                }
+                try {
+                    // mb_convert_encoding may return false (older PHP) or throw (PHP 8+) on invalid charsets
+                    $converted = mb_convert_encoding($body, 'UTF-8', $charset);
+                    if ($converted === false) return $body;
+                    // Treat an unexpected empty result from non-empty input as a failure
+                    if ($body !== '' && ($converted === '' || $converted === null)) return $body;
+                    return $converted;
+                } catch (\Throwable $e) {
+                    $ctx = $context ? " in {$context}" : '';
+                    error_log(sprintf('IMAP: mb_convert_encoding failed for "%s"%s: %s', $charset, $ctx, $e->getMessage()));
+                    return $body;
                 }
             }
         }
@@ -542,7 +594,7 @@ class ImapClient
         }
 
         // Check for filename in parameters or dparameters
-        $params = array_merge($part->parameters ?? [], $part->dparameters ?? []);
+        $params = $this->gatherParameters($part);
         foreach ($params as $p) {
             if (isset($p->attribute) && (strtolower($p->attribute) === 'filename' || strtolower($p->attribute) === 'name')) {
                 return true;
