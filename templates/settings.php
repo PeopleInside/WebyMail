@@ -132,6 +132,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             var currentAnchor = null;
 
             function removeLinkNode(a) {
+                if (!a.parentNode) return;
                 var frag = document.createDocumentFragment();
                 while (a.firstChild) frag.appendChild(a.firstChild);
                 a.parentNode.replaceChild(frag, a);
