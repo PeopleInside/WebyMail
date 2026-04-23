@@ -277,14 +277,104 @@ $resumeSend = !empty($resumeSend);
         document.body.appendChild(imgOverlay);
     })();
 
+    // ── Link popover ──────────────────────────────────────────────────────
+    var linkPopover = document.createElement('div');
+    linkPopover.style.cssText = 'position:fixed;z-index:9999;display:none;align-items:center;gap:.4rem;' +
+        'background:var(--wm-surface-2,#fff);border:1px solid var(--wm-border,#ccc);' +
+        'border-radius:6px;padding:.35rem .5rem;box-shadow:0 2px 8px rgba(0,0,0,.15);' +
+        'font-size:.82rem;max-width:320px;';
+    document.body.appendChild(linkPopover);
+
+    var currentAnchor = null;
+
+    function removeLinkNode(a) {
+        if (!a.parentNode) return;
+        var frag = document.createDocumentFragment();
+        while (a.firstChild) frag.appendChild(a.firstChild);
+        a.parentNode.replaceChild(frag, a);
+    }
+
+    function hideLinkPopover() {
+        linkPopover.style.display = 'none';
+        currentAnchor = null;
+    }
+
+    function showLinkPopover(anchor) {
+        currentAnchor = anchor;
+        var href = anchor.getAttribute('href') || '';
+        var rect = anchor.getBoundingClientRect();
+        linkPopover.innerHTML = '';
+
+        var urlSpan = document.createElement('span');
+        urlSpan.title = href;
+        urlSpan.textContent = href;
+        urlSpan.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px;color:var(--wm-primary,#2563eb);';
+        linkPopover.appendChild(urlSpan);
+
+        var sep = document.createElement('span');
+        sep.style.cssText = 'width:1px;height:14px;background:var(--wm-border,#ccc);flex-shrink:0;';
+        linkPopover.appendChild(sep);
+
+        var openA = document.createElement('a');
+        openA.href = href;
+        openA.target = '_blank';
+        openA.rel = 'noopener noreferrer';
+        openA.title = 'Open in new tab';
+        openA.style.cssText = 'display:flex;align-items:center;color:inherit;';
+        openA.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+        linkPopover.appendChild(openA);
+
+        var editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.title = 'Edit link';
+        editBtn.style.cssText = 'border:none;background:none;cursor:pointer;padding:0;display:flex;align-items:center;color:inherit;';
+        editBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+        editBtn.addEventListener('mousedown', function(e) { e.preventDefault(); });
+        editBtn.addEventListener('click', function() {
+            var a = currentAnchor;
+            hideLinkPopover();
+            var newUrl = prompt('Edit URL', a.getAttribute('href') || '');
+            if (newUrl === null) return;
+            newUrl = newUrl.trim();
+            if (newUrl === '') { removeLinkNode(a); } else { a.href = newUrl; }
+            editorEl.focus();
+            if (typeof checkDirty === 'function') checkDirty();
+        });
+        linkPopover.appendChild(editBtn);
+
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.title = 'Remove link';
+        removeBtn.style.cssText = 'border:none;background:none;cursor:pointer;padding:0;display:flex;align-items:center;color:inherit;';
+        removeBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+        removeBtn.addEventListener('mousedown', function(e) { e.preventDefault(); });
+        removeBtn.addEventListener('click', function() {
+            var a = currentAnchor;
+            hideLinkPopover();
+            removeLinkNode(a);
+            editorEl.focus();
+            if (typeof checkDirty === 'function') checkDirty();
+        });
+        linkPopover.appendChild(removeBtn);
+
+        linkPopover.style.display = 'flex';
+        var left = Math.max(4, Math.min(rect.left, window.innerWidth - 324));
+        var top  = rect.bottom + 5;
+        if (top + 44 > window.innerHeight) top = rect.top - 49;
+        linkPopover.style.left = left + 'px';
+        linkPopover.style.top  = top  + 'px';
+    }
+
     if (toolbar) {
         toolbar.querySelectorAll('button[data-cmd]').forEach(function(btn) {
             btn.addEventListener('click', function(e) {
                 e.preventDefault();
+                hideLinkPopover();
                 var cmd = btn.dataset.cmd;
                 var val = btn.dataset.value || null;
                 if (cmd === 'createLink') {
                     var overlayTarget = imgOverlay && imgOverlay._target;
+                    var existingAnchor = null;
                     var existingUrl = '';
                     if (overlayTarget) {
                         // Check if image is already wrapped in a link
@@ -297,15 +387,16 @@ $resumeSend = !empty($resumeSend);
                         var sel = window.getSelection();
                         if (sel && sel.rangeCount > 0) {
                             var container = sel.getRangeAt(0).commonAncestorContainer;
-                            var anchor = container.nodeType === 3 ? container.parentNode : container;
-                            while (anchor && anchor !== editorEl) {
-                                if (anchor.tagName === 'A') { existingUrl = anchor.href || ''; break; }
-                                anchor = anchor.parentNode;
+                            var node = container.nodeType === 3 ? container.parentNode : container;
+                            while (node && node !== editorEl) {
+                                if (node.tagName === 'A') { existingAnchor = node; existingUrl = node.getAttribute('href') || ''; break; }
+                                node = node.parentNode;
                             }
                         }
                     }
                     val = prompt('Enter URL', existingUrl);
                     if (val === null) return; // cancelled
+                    val = val.trim();
                     if (overlayTarget) {
                         var existing = overlayTarget.parentNode;
                         if (val === '') {
@@ -322,6 +413,11 @@ $resumeSend = !empty($resumeSend);
                             overlayTarget.parentNode.insertBefore(a, overlayTarget);
                             a.appendChild(overlayTarget);
                         }
+                        editorEl.focus();
+                        return;
+                    }
+                    if (existingAnchor) {
+                        if (val === '') { removeLinkNode(existingAnchor); } else { existingAnchor.href = val; }
                         editorEl.focus();
                         return;
                     }
@@ -559,13 +655,28 @@ $resumeSend = !empty($resumeSend);
         }, {passive: false});
     }
 
-    // Show handles on image click or tap
+    // Show handles on image click or tap; show link popover on link click
     editorEl.addEventListener('click', function(e) {
         var target = e.target;
         if (target && target.tagName === 'IMG') {
+            hideLinkPopover();
             showOverlay(target);
         } else {
             hideOverlay();
+            var node = e.target;
+            while (node && node !== editorEl) {
+                if (node.tagName === 'A') {
+                    e.preventDefault();
+                    if (linkPopover.style.display !== 'none' && currentAnchor === node) {
+                        hideLinkPopover();
+                    } else {
+                        showLinkPopover(node);
+                    }
+                    return;
+                }
+                node = node.parentNode;
+            }
+            hideLinkPopover();
         }
     });
     editorEl.addEventListener('touchend', function(e) {
@@ -590,6 +701,14 @@ $resumeSend = !empty($resumeSend);
             scrollTick = false;
         });
     });
+
+    document.addEventListener('mousedown', function(e) {
+        if (linkPopover.style.display !== 'none' &&
+            !linkPopover.contains(e.target) &&
+            !editorEl.contains(e.target)) {
+            hideLinkPopover();
+        }
+    }, true);
 
     // Require "to" field only when actually sending (not saving draft)
     var toField = document.getElementById('to');
