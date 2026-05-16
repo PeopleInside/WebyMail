@@ -134,6 +134,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Auto-rename setup.php to prevent accidental re-runs
         @rename(__FILE__, __FILE__ . '.bak');
     } elseif ($step === 'fix_permissions') {
+        // Ensure a session is active so Config::checkSystem() can persist the
+        // result cache, preventing a stale "issues found" banner in the main app.
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
         Config::fixPermissions();
         $step = 'security';
         $sys = Config::checkSystem();

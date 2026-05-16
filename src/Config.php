@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '3.2';
+    public const VERSION = '3.4';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
@@ -181,11 +181,7 @@ class Config
 
     public static function shouldShowSecurityBanner(): bool
     {
-        if (!empty($_SESSION['hide_security_banner'])) {
-            return false;
-        }
-
-        // Use session cache to avoid re-running (and writing) the check too often
+        // Use session cache to avoid re-running the check too often
         if (isset($_SESSION['system_check_cache']['at'], $_SESSION['system_check_cache']['ok'])) {
             $cache = $_SESSION['system_check_cache'];
             if (time() - (int)$cache['at'] <= 14400) {
@@ -205,39 +201,71 @@ class Config
         }
 
         $newerVersion = null;
+        $repoAvailable = false;
         try {
             $opts = [
                 'http' => [
-                    'method' => 'GET',
-                    'header' => [
-                        'User-Agent: WebyMail-Update-Checker'
-                    ],
-                    'timeout' => 5
+                    'method'          => 'GET',
+                    'header'          => ['User-Agent: WebyMail-Update-Checker'],
+                    'timeout'         => 5,
+                    'ignore_errors'   => true, // receive body even on 4xx/5xx
                 ]
             ];
             $context = stream_context_create($opts);
-            $apiResponse = @file_get_contents('https://api.github.com/repos/PeopleInside/WebyMail/releases/latest', false, $context);
-            
-            if ($apiResponse) {
+            $apiResponse = @file_get_contents(
+                'https://api.github.com/repos/PeopleInside/WebyMail/releases/latest',
+                false,
+                $context
+            );
+
+            // Determine HTTP status from response headers
+            $httpStatus = 0;
+            if (!empty($http_response_header) && is_array($http_response_header)) {
+                if (preg_match('#HTTP/[\d.]+ (\d{3})#', $http_response_header[0], $m)) {
+                    $httpStatus = (int) $m[1];
+                }
+            }
+
+            if ($apiResponse !== false && $httpStatus === 200) {
+                $repoAvailable = true;
                 $data = json_decode($apiResponse, true);
                 $latestTag = $data['tag_name'] ?? '';
                 // Strip 'v' prefix if present
                 $latestVersion = ltrim($latestTag, 'v');
-                
+
                 if (version_compare($latestVersion, self::VERSION, '>')) {
                     $newerVersion = $latestVersion;
                 }
             }
+            // Any non-200 response (404, 403, 0 = network failure) → repo not available
         } catch (Exception $e) {
-            // Ignore errors
+            // Ignore errors; $repoAvailable stays false
         }
 
         $_SESSION['github_version_check'] = [
-            'version' => $newerVersion,
-            'expires' => time() + 86400 // 24 hours
+            'version'        => $newerVersion,
+            'repo_available' => $repoAvailable,
+            'expires'        => time() + 86400 // 24 hours
         ];
 
         return $newerVersion;
+    }
+
+    /**
+     * Returns whether the public GitHub repository was reachable on the last
+     * version check.  Returns null when no check has been performed yet in
+     * this session.
+     */
+    public static function isGitHubRepoAvailable(): ?bool
+    {
+        if (!isset($_SESSION['github_version_check'])) {
+            return null;
+        }
+        $cache = $_SESSION['github_version_check'];
+        if (($cache['expires'] ?? 0) <= time()) {
+            return null; // cache expired, status unknown
+        }
+        return isset($cache['repo_available']) ? (bool) $cache['repo_available'] : false;
     }
 
     /**
