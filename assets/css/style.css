@@ -167,6 +167,26 @@ a:hover { text-decoration: underline; }
     transition: grid-template-columns .2s ease;
 }
 
+.wm-setup-banner {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .7rem 1rem;
+    background: linear-gradient(90deg, rgba(37,99,235,.14), rgba(22,163,74,.14));
+    border-bottom: 1px solid rgba(37,99,235,.18);
+    color: var(--wm-text);
+    font-size: .88rem;
+    line-height: 1.45;
+}
+
+.wm-setup-banner a {
+    color: inherit;
+}
+
+.wm-setup-banner svg {
+    flex: 0 0 auto;
+}
+
 .wm-shell.sidebar-collapsed {
     grid-template-columns: 0 minmax(0, 1fr);
 }

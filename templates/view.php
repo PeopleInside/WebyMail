@@ -254,7 +254,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                     
                     // Inject into shadow root
                     // We wrap it in a div to easily apply the theme and enforce responsive styling
-                    shadowRoot.innerHTML = '<style>' + emailShadowCss + '</style><div id="wm-shadow-wrapper">' + html + '</div>';
+                    shadowRoot.innerHTML = '<style nonce="<?= htmlspecialchars(scriptNonce()) ?>">' + emailShadowCss + '</style><div id="wm-shadow-wrapper">' + html + '</div>';
                     
                     // Sync theme immediately
                     syncTheme();
