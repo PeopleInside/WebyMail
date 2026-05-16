@@ -780,6 +780,9 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
         $sys = Config::checkSystem(); 
         $ignoreBanner = Config::get('ignore_security_banner', false);
         $ignoreUpdate = Config::get('ignore_update_banner', false);
+        // Populate the GitHub version-check session cache so isGitHubRepoAvailable()
+        // has fresh data when the System Information card is rendered below.
+        Config::getNewerVersion();
         ?>
 
         <div class="wm-card" style="margin-bottom:1.5rem">
@@ -895,11 +898,34 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
                     <span style="font-size:.85rem">Latest Releases</span>
+                    <?php
+                    $repoAvailSys = Config::isGitHubRepoAvailable();
+                    if ($repoAvailSys === false):
+                    ?>
+                    <span style="font-size:.82rem;color:var(--wm-warning);display:flex;align-items:center;gap:.35rem" title="The public GitHub repository could not be reached. It may have been made private, deleted, or there is a network issue. This could indicate a security concern.">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        Repository unreachable
+                    </span>
+                    <?php else: ?>
                     <a href="<?= Config::UPDATE_URL ?>" target="_blank" style="font-size:.85rem;color:var(--wm-primary);text-decoration:none;display:flex;align-items:center;gap:.25rem">
                         GitHub Releases
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                     </a>
+                    <?php endif; ?>
                 </div>
+                <?php if ($repoAvailSys === false): ?>
+                <div style="padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border);background:rgba(var(--wm-warning-rgb),.06)">
+                    <div style="display:flex;align-items:flex-start;gap:.6rem;font-size:.82rem;color:var(--wm-warning)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:.1rem"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <div>
+                            <strong>GitHub repository unreachable.</strong>
+                            The public repository at <a href="<?= htmlspecialchars(Config::UPDATE_URL) ?>" target="_blank" style="color:inherit"><?= htmlspecialchars(Config::UPDATE_URL) ?></a> could not be found.
+                            It may have been made private, renamed, or removed — or there may be a temporary network issue.
+                            This could be a sign of a security concern. The version update check is unavailable until the repository is reachable again.
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
                     <span style="font-size:.85rem">PHP Version</span>
                     <span style="font-size:.85rem;color:var(--wm-text-muted)"><?= PHP_VERSION ?></span>

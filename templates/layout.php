@@ -236,11 +236,24 @@
                 </div>
                 <?php endif; ?>
             </div>
-            <?php if ($newVer = Config::getNewerVersion()): ?>
+            <?php
+            $newVer       = Config::getNewerVersion();
+            $repoAvail    = Config::isGitHubRepoAvailable();
+            $repoMissing  = ($repoAvail === false); // null = not checked yet
+            ?>
+            <?php if ($newVer): ?>
             <div style="margin-top:.5rem">
                 <a href="<?= Config::UPDATE_URL ?>" target="_blank" class="alert alert-info" style="display:block;padding:.4rem .6rem;font-size:.75rem;text-decoration:none;border-radius:4px;color:var(--wm-primary);border-color:var(--wm-primary);background:rgba(var(--wm-primary-rgb),.1)">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:middle;margin-right:.2rem"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
                     Update v<?= htmlspecialchars($newVer) ?> available
+                </a>
+            </div>
+            <?php endif; ?>
+            <?php if ($repoMissing): ?>
+            <div style="margin-top:.5rem">
+                <a href="?action=settings&tab=system" style="display:flex;align-items:center;gap:.35rem;padding:.4rem .6rem;font-size:.73rem;text-decoration:none;border-radius:4px;color:var(--wm-warning);border:1px solid rgba(var(--wm-warning-rgb),.4);background:rgba(var(--wm-warning-rgb),.08)" title="GitHub repository could not be reached – may be private or removed">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    Repo unreachable
                 </a>
             </div>
             <?php endif; ?>
