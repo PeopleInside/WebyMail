@@ -151,6 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($step === 'finish') {
         $step = 'done';
+        @rename(__FILE__, __FILE__ . '.bak'); // Restore setup.php auto-rename on finish
     } elseif ($step === 'fix_permissions') {
         Config::fixPermissions();
         $step = 'security';
