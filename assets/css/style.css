@@ -187,6 +187,12 @@ a:hover { text-decoration: underline; }
     flex: 0 0 auto;
 }
 
+.wm-email-error {
+    padding: 2rem;
+    text-align: center;
+    color: var(--wm-danger);
+}
+
 .wm-shell.sidebar-collapsed {
     grid-template-columns: 0 minmax(0, 1fr);
 }

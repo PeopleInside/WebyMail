@@ -229,6 +229,14 @@ $resumeSend = !empty($resumeSend);
     var dragState = null;
     var MIN_IMG_SIZE = 30;
 
+    document.querySelectorAll('.open-contacts').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            window.dispatchEvent(new CustomEvent('open-contacts-picker', {
+                detail: { target: btn.dataset.target }
+            }));
+        });
+    });
+
     // Accumulated attachment file list
     var pendingFiles = [];
     // Hidden inputs container for accumulated attachments

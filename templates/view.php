@@ -239,6 +239,27 @@ $isInbox   = strtoupper($folder) === 'INBOX';
     if (shadowHost && <?php echo $hasHtml ? 'true' : 'false'; ?>) {
         // Use Shadow DOM for isolation without iframe scrollbars
         var shadowRoot = shadowHost.shadowRoot || shadowHost.attachShadow({ mode: 'open' });
+        var emailShadowSheet = null;
+
+        function applyEmailShadowStyles() {
+            if (shadowRoot.adoptedStyleSheets !== undefined && typeof CSSStyleSheet !== 'undefined') {
+                if (!emailShadowSheet) {
+                    emailShadowSheet = new CSSStyleSheet();
+                    emailShadowSheet.replaceSync(emailShadowCss);
+                }
+                shadowRoot.adoptedStyleSheets = [emailShadowSheet];
+                return;
+            }
+
+            var existingStyle = shadowRoot.getElementById('wm-shadow-styles');
+            if (!existingStyle) {
+                existingStyle = document.createElement('style');
+                existingStyle.id = 'wm-shadow-styles';
+                existingStyle.setAttribute('nonce', '<?= htmlspecialchars(scriptNonce()) ?>');
+                shadowRoot.appendChild(existingStyle);
+            }
+            existingStyle.textContent = emailShadowCss;
+        }
         
         function loadEmailBody(showImages) {
             var url = '?action=email_body&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&images=' + (showImages ? '1' : '0');
@@ -252,16 +273,13 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                     // Clear the loading state from main DOM
                     shadowHost.innerHTML = '';
                     
-                    // Inject into shadow root using DOM nodes so the style nonce is preserved reliably.
+                    // Inject into shadow root and apply the stylesheet without inline style attributes.
                     shadowRoot.innerHTML = '';
-                    var styleEl = document.createElement('style');
-                    styleEl.setAttribute('nonce', '<?= htmlspecialchars(scriptNonce()) ?>');
-                    styleEl.textContent = emailShadowCss;
                     var wrapper = document.createElement('div');
                     wrapper.id = 'wm-shadow-wrapper';
                     wrapper.innerHTML = html;
-                    shadowRoot.appendChild(styleEl);
                     shadowRoot.appendChild(wrapper);
+                    applyEmailShadowStyles();
                     
                     // Sync theme immediately
                     syncTheme();
@@ -273,7 +291,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                     });
                 })
                 .catch(function(err) {
-                    shadowHost.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--wm-danger)">Failed to load message content.</div>';
+                    shadowHost.innerHTML = '<div class="wm-email-error">Failed to load message content.</div>';
                 });
         }
 

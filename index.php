@@ -59,7 +59,7 @@ date_default_timezone_set(Config::get('timezone', 'Europe/Rome'));
 
 $setupBanner = null;
 if (Config::isSetup() && file_exists(__DIR__ . '/setup.php')) {
-    $setupBanner = '<a href="setup.php?force=1" style="color:inherit;text-decoration:underline;font-weight:600">Update available: open the setup wizard to review or update the current configuration.</a>';
+    $setupBanner = '<a href="setup.php?force=1" style="color:inherit;text-decoration:underline;font-weight:600">Setup wizard available: review or update the current configuration.</a>';
 }
 
 function appName(): string
