@@ -996,7 +996,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
     </div><!-- /content -->
 </div><!-- /grid -->
 
-<style>
+<style nonce="<?= htmlspecialchars(scriptNonce()) ?>">
 .wm-theme-card {
     display: flex;
     flex-direction: column;

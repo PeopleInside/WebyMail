@@ -47,11 +47,7 @@ function scriptNonce(): string
 $forceSetup = !empty($_GET['force']) || !empty($_POST['force']);
 $setupCompleted = (bool) Config::get('setup_complete');
 
-if ($setupCompleted && !$forceSetup) {
-    $step = 'done';
-}
-
-$step  = 'welcome';
+$step  = ($setupCompleted && !$forceSetup) ? 'done' : 'welcome';
 $error = null;
 $requirements = [];
 $securityChecks = [];

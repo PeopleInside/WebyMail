@@ -34,7 +34,7 @@ session_start();
 
 // ── Security Headers ──────────────────────────────────────────────────────────
 $cspNonce = base64_encode(random_bytes(16));
-header("Content-Security-Policy: default-src 'self'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'; object-src 'none'; script-src 'self' 'nonce-{$cspNonce}'; style-src 'self'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self';");
+header("Content-Security-Policy: default-src 'self'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'; object-src 'none'; script-src 'self' 'nonce-{$cspNonce}'; style-src 'self'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self'; connect-src 'self';");
 header('Referrer-Policy: strict-origin-when-cross-origin');
 header('Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()');
 header('Cross-Origin-Opener-Policy: same-origin');
@@ -56,6 +56,11 @@ require_once __DIR__ . '/src/Config.php';
 
 // Set timezone from config
 date_default_timezone_set(Config::get('timezone', 'Europe/Rome'));
+
+$setupBanner = null;
+if (Config::isSetup() && file_exists(__DIR__ . '/setup.php')) {
+    $setupBanner = '<a href="setup.php?force=1" style="color:inherit;text-decoration:underline;font-weight:600">Security warning: setup wizard is available. Review or update the current configuration.</a>';
+}
 
 function appName(): string
 {
@@ -86,6 +91,7 @@ if (!Config::isSetup()) {
 function render(string $template, array $vars = [], bool $shell = true): void
 {
     extract($vars, EXTR_SKIP);
+    $setupBanner = $GLOBALS['setupBanner'] ?? null;
 
     // Capture inner template
     ob_start();
