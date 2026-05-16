@@ -252,9 +252,16 @@ $isInbox   = strtoupper($folder) === 'INBOX';
                     // Clear the loading state from main DOM
                     shadowHost.innerHTML = '';
                     
-                    // Inject into shadow root
-                    // We wrap it in a div to easily apply the theme and enforce responsive styling
-                    shadowRoot.innerHTML = '<style nonce="<?= htmlspecialchars(scriptNonce()) ?>">' + emailShadowCss + '</style><div id="wm-shadow-wrapper">' + html + '</div>';
+                    // Inject into shadow root using DOM nodes so the style nonce is preserved reliably.
+                    shadowRoot.innerHTML = '';
+                    var styleEl = document.createElement('style');
+                    styleEl.setAttribute('nonce', '<?= htmlspecialchars(scriptNonce()) ?>');
+                    styleEl.textContent = emailShadowCss;
+                    var wrapper = document.createElement('div');
+                    wrapper.id = 'wm-shadow-wrapper';
+                    wrapper.innerHTML = html;
+                    shadowRoot.appendChild(styleEl);
+                    shadowRoot.appendChild(wrapper);
                     
                     // Sync theme immediately
                     syncTheme();
