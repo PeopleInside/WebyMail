@@ -265,7 +265,7 @@ class Config
         if (($cache['expires'] ?? 0) <= time()) {
             return null; // cache expired, status unknown
         }
-        return (bool) ($cache['repo_available'] ?? false);
+        return isset($cache['repo_available']) ? (bool) $cache['repo_available'] : false;
     }
 
     /**

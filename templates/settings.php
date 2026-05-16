@@ -919,7 +919,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:.1rem"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                         <div>
                             <strong>GitHub repository unreachable.</strong>
-                            The public repository at <code>PeopleInside/WebyMail</code> could not be found.
+                            The public repository at <a href="<?= htmlspecialchars(Config::UPDATE_URL) ?>" target="_blank" style="color:inherit"><?= htmlspecialchars(Config::UPDATE_URL) ?></a> could not be found.
                             It may have been made private, renamed, or removed — or there may be a temporary network issue.
                             This could be a sign of a security concern. The version update check is unavailable until the repository is reachable again.
                         </div>
