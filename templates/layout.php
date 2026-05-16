@@ -32,7 +32,7 @@
         Theme is applied BEFORE CSS loads to prevent flash:
         Read localStorage immediately and set data-theme attribute.
     -->
-    <script>
+    <script nonce="<?= htmlspecialchars(scriptNonce()) ?>">
         (function(){
             var serverTheme = null;
             <?php
@@ -292,7 +292,7 @@
     <input type="hidden" name="name" id="delete-folder-name">
 </form>
 
-<script>
+<script nonce="<?= htmlspecialchars(scriptNonce()) ?>">
 // User menu toggle
 document.getElementById('user-menu-btn')?.addEventListener('click', function(e) {
     e.stopPropagation();
@@ -522,7 +522,7 @@ document.addEventListener('click', function() {
     </svg>
 </div>
 
-<script>
+<script nonce="<?= htmlspecialchars(scriptNonce()) ?>">
 (function() {
     var contactsBtn = document.getElementById('contacts-btn');
     var modal = document.getElementById('contacts-modal');
@@ -747,7 +747,7 @@ document.addEventListener('click', function() {
 })();
 </script>
 
-<script src="assets/js/app.js"></script>
+<script nonce="<?= htmlspecialchars(scriptNonce()) ?>" src="assets/js/app.js"></script>
 <?php if (!empty($extraScripts)) echo $extraScripts; ?>
 </body>
 </html>

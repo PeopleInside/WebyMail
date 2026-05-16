@@ -1,11 +1,24 @@
 <?php
 declare(strict_types=1);
+ini_set('expose_php', '0');
+header_remove('X-Powered-By');
 
 // Prevent caching
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Cache-Control: post-check=0, pre-check=0', false);
 header('Pragma: no-cache');
 header('Expires: Sat, 26 Jul 1997 05:00:00 GMT');
+
+$cspNonce = base64_encode(random_bytes(16));
+header("Content-Security-Policy: default-src 'self'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'; object-src 'none'; script-src 'self' 'nonce-{$cspNonce}'; style-src 'self'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';");
+header('Referrer-Policy: strict-origin-when-cross-origin');
+header('Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()');
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
+header('X-XSS-Protection: 0');
+if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+}
 
 /**
  * WebyMail – First-run setup wizard
@@ -24,9 +37,16 @@ spl_autoload_register(function (string $class): void {
 
 require_once __DIR__ . '/src/Config.php';
 
-// If already set up, redirect to main app unless force setup is requested
-if (Config::get('setup_complete') && ($_GET['force'] ?? '') !== '1' && ($_GET['action'] ?? '') !== 'setup') {
-    header('Location: index.php');
+function scriptNonce(): string
+{
+    global $cspNonce;
+    return $cspNonce;
+}
+
+// In production, setup must not be re-runnable once completed.
+if (Config::get('setup_complete')) {
+    http_response_code(403);
+    echo 'Setup is locked because installation is already complete. Remove setup.php from production.';
     exit;
 }
 
@@ -65,6 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $smtpTls   = !empty($_POST['smtp_starttls']);
         $captchaOn  = !empty($_POST['captcha_enabled']);
         $timezone  = trim($_POST['timezone'] ?? 'Europe/Rome');
+        if (!in_array($timezone, timezone_identifiers_list(), true)) {
+            $timezone = 'Europe/Rome';
+        }
         $hideServer = !empty($_POST['hide_server_on_login']);
         $removeFavicon = !empty($_POST['remove_favicon']);
 
@@ -95,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Handle Favicon upload
         if (!empty($_FILES['favicon']['name']) && $_FILES['favicon']['error'] === UPLOAD_ERR_OK) {
             $ext = strtolower(pathinfo($_FILES['favicon']['name'], PATHINFO_EXTENSION));
-            if (in_array($ext, ['ico', 'png', 'svg'])) {
+            if (in_array($ext, ['ico', 'png'], true) && ($_FILES['favicon']['size'] ?? 0) <= (512 * 1024)) {
                 $imgDir = __DIR__ . '/assets/img';
                 if (!is_dir($imgDir)) {
                     mkdir($imgDir, 0755, true);

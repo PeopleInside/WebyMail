@@ -191,7 +191,7 @@ $isInbox   = strtoupper($folder) === 'INBOX';
     </div>
 </div>
 
-<script>
+<script nonce="<?= htmlspecialchars(scriptNonce()) ?>">
 (function() {
     // Headers modal logic
     var btn   = document.getElementById('show-headers-btn');

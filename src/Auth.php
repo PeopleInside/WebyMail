@@ -6,6 +6,8 @@ declare(strict_types=1);
  */
 class Auth
 {
+    private const MAX_2FA_ATTEMPTS = 5;
+
     private Database  $db;
     private Session   $session;
     private TwoFactor $tf;
@@ -37,6 +39,16 @@ class Auth
         bool   $smtpSsl,
         bool   $smtpStarttls
     ): array {
+        if (!$this->isValidHost($host) || !$this->isValidHost($smtpHost)) {
+            return ['ok' => false, 'error' => 'Invalid mail server host.'];
+        }
+        if (!$this->isValidPort($port) || !$this->isValidPort($smtpPort)) {
+            return ['ok' => false, 'error' => 'Invalid mail server port.'];
+        }
+        if ($username === '' || strlen($username) > 254) {
+            return ['ok' => false, 'error' => 'Invalid username.'];
+        }
+
         $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
         if ($this->isIpBanned($ip)) {
             return ['ok' => false, 'error' => 'Too many failed login attempts. Please try again in 15 minutes.'];
@@ -51,7 +63,7 @@ class Auth
             $imap->disconnect();
         } catch (RuntimeException $e) {
             $this->recordFailedAttempt($ip);
-            return ['ok' => false, 'error' => 'IMAP login failed: ' . $e->getMessage()];
+            return ['ok' => false, 'error' => 'Login failed. Please verify your credentials and server settings.'];
         }
 
         // Success: clear attempts for this IP
@@ -116,6 +128,7 @@ class Auth
                 'user_id'    => $userId,
                 'account_id' => $accountId,
                 'expires'    => time() + 300,
+                'attempts'   => 0,
             ];
             return ['ok' => true, 'needs_2fa' => true, 'pending_token' => $pending];
         }
@@ -132,6 +145,12 @@ class Auth
         $pending = $_SESSION['pending_2fa'] ?? null;
         if ($pending === null || time() > $pending['expires']) {
             return ['ok' => false, 'error' => 'Session expired. Please log in again.'];
+        }
+
+        $attempts = (int)($pending['attempts'] ?? 0);
+        if ($attempts >= self::MAX_2FA_ATTEMPTS) {
+            unset($_SESSION['pending_2fa']);
+            return ['ok' => false, 'error' => 'Too many invalid 2FA attempts. Please log in again.'];
         }
 
         $userId    = (int) $pending['user_id'];
@@ -162,6 +181,7 @@ class Auth
             return ['ok' => true, 'recovery_used' => true, 'remaining' => count($updated)];
         }
 
+        $_SESSION['pending_2fa']['attempts'] = $attempts + 1;
         return ['ok' => false, 'error' => 'Invalid code.'];
     }
 
@@ -254,5 +274,24 @@ class Auth
     public function decryptPassword(string $stored): string
     {
         return Config::decrypt($stored);
+    }
+
+    private function isValidHost(string $host): bool
+    {
+        if ($host === '' || strlen($host) > 255) {
+            return false;
+        }
+        if (preg_match('/[\x00-\x1F\x7F\s]/', $host)) {
+            return false;
+        }
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            return true;
+        }
+        return (bool) preg_match('/^(?=.{1,255}$)([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/', $host);
+    }
+
+    private function isValidPort(int $port): bool
+    {
+        return $port >= 1 && $port <= 65535;
     }
 }

@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 ob_start();
+ini_set('expose_php', '0');
+header_remove('X-Powered-By');
 
 // Prevent caching for the whole app
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -31,10 +33,17 @@ session_set_cookie_params([
 session_start();
 
 // ── Security Headers ──────────────────────────────────────────────────────────
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; frame-src 'self';");
-header("X-Content-Type-Options: nosniff");
-header("X-Frame-Options: SAMEORIGIN");
-header("X-XSS-Protection: 1; mode=block");
+$cspNonce = base64_encode(random_bytes(16));
+header("Content-Security-Policy: default-src 'self'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'; object-src 'none'; script-src 'self' 'nonce-{$cspNonce}'; style-src 'self'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self';");
+header('Referrer-Policy: strict-origin-when-cross-origin');
+header('Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()');
+header('Cross-Origin-Opener-Policy: same-origin');
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
+header('X-XSS-Protection: 0');
+if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+}
 
 spl_autoload_register(function (string $class): void {
     $file = __DIR__ . '/src/' . $class . '.php';
@@ -275,6 +284,32 @@ function csrfInput(): string
     return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars(csrfToken()) . '">';
 }
 
+function scriptNonce(): string
+{
+    global $cspNonce;
+    return $cspNonce;
+}
+
+function isValidMailboxName(string $name): bool
+{
+    if ($name === '' || strlen($name) > 255) {
+        return false;
+    }
+    if (preg_match('/[\x00-\x1F\x7F]/', $name)) {
+        return false;
+    }
+    return (bool) preg_match('/^[\p{L}\p{N}\s._\/-]+$/u', $name);
+}
+
+function requireValidMailboxName(string $name): string
+{
+    $clean = trim($name);
+    if (!isValidMailboxName($clean)) {
+        throw new InvalidArgumentException('Invalid folder name.');
+    }
+    return $clean;
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 $action = $_GET['action'] ?? 'inbox';
@@ -436,12 +471,15 @@ if ($currentAccount && $currentAccount['validation_status'] === 'invalid' && emp
 // Check if setup.php still exists to show a warning banner
 $setupBanner = null;
 if (file_exists(WEBYMAIL_ROOT . '/setup.php')) {
-    $setupBanner = 'Setup is incomplete. Please open <a href="setup.php?force=1">setup.php?force=1</a> to finish configuration.';
+    $setupBanner = 'Security warning: remove setup.php from production after initial installation.';
 }
 
 // Build folder list (from IMAP)
 $folders       = [];
-$currentFolder = $_GET['folder'] ?? 'INBOX';
+$currentFolder = trim((string)($_GET['folder'] ?? 'INBOX'));
+if (!isValidMailboxName($currentFolder)) {
+    $currentFolder = 'INBOX';
+}
 try {
     $imap    = $accountMgr->imapConnect($accountId);
     $folders = $imap->getFolders();
@@ -503,8 +541,8 @@ if ($action === 'switch_account') {
 
 // ── Folder management ─────────────────────────────────────────────────────────
 if ($action === 'create_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $name = trim($_POST['name'] ?? '');
-    if ($name === '') {
+    $name = trim((string)($_POST['name'] ?? ''));
+    if (!isValidMailboxName($name)) {
         flashSet('danger', 'Folder name cannot be empty.');
         redirect('?action=inbox');
     }
@@ -520,9 +558,9 @@ if ($action === 'create_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if ($action === 'rename_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $oldName = trim($_POST['old_name'] ?? '');
-    $newName = trim($_POST['new_name'] ?? '');
-    if ($oldName === '' || $newName === '') {
+    $oldName = trim((string)($_POST['old_name'] ?? ''));
+    $newName = trim((string)($_POST['new_name'] ?? ''));
+    if (!isValidMailboxName($oldName) || !isValidMailboxName($newName)) {
         flashSet('danger', 'Folder names cannot be empty.');
         redirect('?action=inbox');
     }
@@ -538,12 +576,12 @@ if ($action === 'rename_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if ($action === 'delete_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $name = trim($_POST['name'] ?? '');
+    $name = trim((string)($_POST['name'] ?? ''));
     if (strtoupper($name) === 'INBOX') {
         flashSet('danger', 'Cannot delete INBOX.');
         redirect('?action=inbox');
     }
-    if ($name === '') {
+    if (!isValidMailboxName($name)) {
         flashSet('danger', 'Folder name cannot be empty.');
         redirect('?action=inbox');
     }
@@ -559,7 +597,11 @@ if ($action === 'delete_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if ($action === 'empty_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $folder = $_POST['folder'] ?? $currentFolder;
+    $folder = trim((string)($_POST['folder'] ?? $currentFolder));
+    if (!isValidMailboxName($folder)) {
+        flashSet('danger', 'Invalid folder name.');
+        redirect('?action=inbox');
+    }
     try {
         $imap = $accountMgr->imapConnect($accountId);
         $imap->emptyFolder($folder);
@@ -703,7 +745,11 @@ if ($action === 'view') {
 // ── Email body (rendered in sandboxed iframe) ─────────────────────────────────
 if ($action === 'email_body') {
     $msgNo  = (int) ($_GET['msg']    ?? 0);
-    $folder = $_GET['folder'] ?? 'INBOX';
+    $folder = trim((string)($_GET['folder'] ?? 'INBOX'));
+    if (!isValidMailboxName($folder)) {
+        http_response_code(400);
+        exit('Invalid folder.');
+    }
     $showImages = !empty($_GET['images']) && $_GET['images'] === '1';
 
     try {
@@ -726,11 +772,13 @@ if ($action === 'email_body') {
     }
 
     $theme = $session['theme'] ?? ($_COOKIE['wm_theme'] ?? 'system');
-    $sanitized = sanitizeHtml($html, $showImages, $theme);
+    $emailStyleNonce = base64_encode(random_bytes(16));
+    $sanitized = sanitizeHtml($html, $showImages, $theme, $emailStyleNonce);
 
     header('Content-Type: text/html; charset=UTF-8');
     // Strict CSP for the iframe content
-    header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:; script-src 'none'; frame-ancestors 'self';");
+    $emailImgSrc = $showImages ? "img-src 'self' data: https:;" : "img-src 'self' data:;";
+    header("Content-Security-Policy: default-src 'none'; base-uri 'none'; form-action 'none'; script-src 'none'; style-src 'self' 'nonce-{$emailStyleNonce}'; style-src-elem 'self' 'nonce-{$emailStyleNonce}'; style-src-attr 'unsafe-inline'; {$emailImgSrc} frame-ancestors 'self';");
     echo $sanitized;
     exit;
 }
@@ -738,10 +786,13 @@ if ($action === 'email_body') {
 /**
  * Robust HTML sanitization for email bodies.
  */
-function sanitizeHtml(string $html, bool $showImages, string $theme): string
+function sanitizeHtml(string $html, bool $showImages, string $theme, string $styleNonce): string
 {
-    if (!class_exists('DOMDocument') || trim($html) === '') {
-        return $html;
+    if (!class_exists('DOMDocument')) {
+        return '<pre style="white-space:pre-wrap;word-break:break-word">' . htmlspecialchars(strip_tags($html), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</pre>';
+    }
+    if (trim($html) === '') {
+        return '';
     }
 
     try {
@@ -757,7 +808,7 @@ function sanitizeHtml(string $html, bool $showImages, string $theme): string
         libxml_clear_errors();
 
         if (!$success || !$doc->documentElement) {
-            return $html;
+            return '<pre style="white-space:pre-wrap;word-break:break-word">' . htmlspecialchars(strip_tags($html), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</pre>';
         }
 
         // Remove dangerous tags
@@ -1031,6 +1082,7 @@ function sanitizeHtml(string $html, bool $showImages, string $theme): string
             }
         ';
         $style = $doc->createElement('style');
+        $style->setAttribute('nonce', $styleNonce);
         $style->appendChild($doc->createTextNode($styleStr));
         $head->appendChild($style);
 
@@ -1039,16 +1091,24 @@ function sanitizeHtml(string $html, bool $showImages, string $theme): string
         return $doc->saveHTML() ?: $html;
     } catch (Throwable $e) {
         error_log('HTML Sanitization failed: ' . $e->getMessage());
-        return $html;
+        return '<pre style="white-space:pre-wrap;word-break:break-word">' . htmlspecialchars(strip_tags($html), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</pre>';
     }
 }
 
 // ── Import EML ──────────────────────────────────────────────────────────────
 if ($action === 'import_eml' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $folder = $_POST['folder'] ?? 'INBOX';
+    $folder = trim((string)($_POST['folder'] ?? 'INBOX'));
+    if (!isValidMailboxName($folder)) {
+        flashSet('danger', 'Invalid target folder.');
+        redirect('?action=inbox');
+    }
     $file = $_FILES['eml_file'] ?? null;
 
     if ($file && $file['error'] === UPLOAD_ERR_OK) {
+        if (($file['size'] ?? 0) > (25 * 1024 * 1024)) {
+            $_SESSION['flash'] = ['type' => 'danger', 'message' => 'The EML file is too large (max 25 MB).'];
+            redirect('?action=inbox&folder=' . urlencode($folder));
+        }
         $raw = file_get_contents($file['tmp_name']);
         try {
             $imap = $accountMgr->imapConnect($accountId);
@@ -1072,7 +1132,11 @@ if ($action === 'import_eml' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 // ── Delete message ────────────────────────────────────────────────────────────
 if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $msgNo  = (int) ($_GET['msg']    ?? 0);
-    $folder = $_GET['folder'] ?? 'INBOX';
+    $folder = trim((string)($_GET['folder'] ?? 'INBOX'));
+    if (!isValidMailboxName($folder)) {
+        flashSet('danger', 'Invalid folder name.');
+        redirect('?action=inbox');
+    }
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
@@ -1090,7 +1154,11 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 // ── Mark as spam ──────────────────────────────────────────────────────────────
 if ($action === 'spam' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $msgNo  = (int) ($_GET['msg']    ?? 0);
-    $folder = $_GET['folder'] ?? 'INBOX';
+    $folder = trim((string)($_GET['folder'] ?? 'INBOX'));
+    if (!isValidMailboxName($folder)) {
+        flashSet('danger', 'Invalid folder name.');
+        redirect('?action=inbox');
+    }
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
@@ -1107,7 +1175,10 @@ if ($action === 'spam' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 // ── Email headers (raw) ───────────────────────────────────────────────────────
 if ($action === 'email_headers' && isAjax()) {
     $msgNo  = (int) ($_GET['msg']    ?? 0);
-    $folder = $_GET['folder'] ?? 'INBOX';
+    $folder = trim((string)($_GET['folder'] ?? 'INBOX'));
+    if (!isValidMailboxName($folder)) {
+        jsonResponse(['ok' => false, 'error' => 'Invalid folder.']);
+    }
 
     try {
         $imap    = $accountMgr->imapConnect($accountId);
@@ -1153,9 +1224,16 @@ if ($action === 'check_unread' && isAjax()) {
 // ── Bulk actions ──────────────────────────────────────────────────────────────
 if ($action === 'bulk' && isAjax()) {
     $body   = json_decode(file_get_contents('php://input'), true) ?? [];
-    $folder = $body['folder'] ?? 'INBOX';
+    $folder = trim((string)($body['folder'] ?? 'INBOX'));
     $uids   = array_map('intval', $body['uids'] ?? []);
     $act    = $body['action'] ?? '';
+
+    if (!isValidMailboxName($folder)) {
+        jsonResponse(['ok' => false, 'error' => 'Invalid folder.']);
+    }
+    if (!in_array($act, ['delete', 'read', 'unread'], true)) {
+        jsonResponse(['ok' => false, 'error' => 'Invalid bulk action.']);
+    }
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
@@ -1184,7 +1262,11 @@ if ($action === 'bulk' && isAjax()) {
 // ── Attachment download ───────────────────────────────────────────────────────
 if ($action === 'attachment' || $action === 'download_all') {
     $msgNo   = (int) ($_GET['msg']     ?? 0);
-    $folder  = $_GET['folder']  ?? 'INBOX';
+    $folder  = trim((string)($_GET['folder']  ?? 'INBOX'));
+    if (!isValidMailboxName($folder)) {
+        http_response_code(400);
+        exit('Invalid folder.');
+    }
 
     if ($action === 'download_all') {
         if (!class_exists('ZipArchive')) {
@@ -1209,7 +1291,9 @@ if ($action === 'attachment' || $action === 'download_all') {
 
             foreach ($attachments as $att) {
                 $data = $imap->fetchAttachment($msgNo, $att['section']);
-                $zip->addFromString($att['filename'], $data);
+                $zipName = basename((string)$att['filename']);
+                $zipName = str_replace(["\r", "\n", "\\"], '_', $zipName);
+                $zip->addFromString($zipName, $data);
             }
             $zip->close();
             $imap->disconnect();
@@ -1235,7 +1319,11 @@ if ($action === 'attachment' || $action === 'download_all') {
         }
     }
 
-    $section = $_GET['section'] ?? '';
+    $section = (string)($_GET['section'] ?? '');
+    if (!preg_match('/^\d+(?:\.\d+)*$/', $section)) {
+        http_response_code(400);
+        exit('Invalid attachment section.');
+    }
     $name    = basename($_GET['name'] ?? 'attachment');
 
     // Disable errors for binary output to prevent corruption
@@ -1285,7 +1373,11 @@ if ($action === 'attachment' || $action === 'download_all') {
 // ── Email Export (EML / ZIP) ──────────────────────────────────────────────────
 if ($action === 'export_eml') {
     $msgNo   = (int) ($_GET['msg'] ?? 0);
-    $folder  = $_GET['folder'] ?? 'INBOX';
+    $folder  = trim((string)($_GET['folder'] ?? 'INBOX'));
+    if (!isValidMailboxName($folder)) {
+        http_response_code(400);
+        exit('Invalid folder.');
+    }
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
@@ -1306,7 +1398,11 @@ if ($action === 'export_eml') {
 
 if ($action === 'export_zip') {
     $uids   = array_map('intval', explode(',', $_GET['uids'] ?? ''));
-    $folder = $_GET['folder'] ?? 'INBOX';
+    $folder = trim((string)($_GET['folder'] ?? 'INBOX'));
+    if (!isValidMailboxName($folder)) {
+        http_response_code(400);
+        exit('Invalid folder.');
+    }
 
     if (empty($uids)) exit('No emails selected.');
     if (!class_exists('ZipArchive')) exit('Error: ZipArchive extension is not enabled.');
@@ -1958,7 +2054,8 @@ if ($action === 'view_recovery_codes' && $_SERVER['REQUEST_METHOD'] === 'POST') 
     $primary = Database::getInstance()->fetch('SELECT id FROM accounts WHERE user_id = ? AND is_primary = 1', [$userId]);
     if ($primary) {
         $acc = $accountMgr->get((int)$primary['id']);
-        if ($acc && $acc['password_plain'] === $password) {
+        $storedPassword = (string)($acc['password_plain'] ?? '');
+        if ($acc && $password !== '' && $storedPassword !== '' && hash_equals($storedPassword, $password)) {
             $user = Database::getInstance()->fetch('SELECT recovery_codes FROM users WHERE id = ?', [$userId]);
             $encrypted = json_decode($user['recovery_codes'] ?? '[]', true);
             $tf = new TwoFactor();

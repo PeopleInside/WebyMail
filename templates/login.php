@@ -197,7 +197,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
     </div>
 </div>
 
-<script>
+<script nonce="<?= htmlspecialchars(scriptNonce()) ?>">
 // Password show/hide toggle
 document.getElementById('pw-toggle')?.addEventListener('click', function() {
     var pw = document.getElementById('password');
@@ -243,4 +243,4 @@ document.getElementById('username')?.addEventListener('blur', function() {
     });
 })();
 </script>
-<script src="assets/js/pow.js"></script>
+<script nonce="<?= htmlspecialchars(scriptNonce()) ?>" src="assets/js/pow.js"></script>

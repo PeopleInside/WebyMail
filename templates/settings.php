@@ -112,7 +112,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             </div>
         </div>
 
-        <script>
+        <script nonce="<?= htmlspecialchars(scriptNonce()) ?>">
         (function() {
             var toolbar = document.getElementById('sig-toolbar');
             var editor  = document.getElementById('sig-editor');
@@ -418,7 +418,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             </div>
         </div>
 
-        <script>
+        <script nonce="<?= htmlspecialchars(scriptNonce()) ?>">
         (function() {
             var btn = document.getElementById('view-recovery-codes-btn');
             var modal = document.getElementById('recovery-codes-modal');
@@ -1021,7 +1021,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
 }
 </style>
 
-<script>
+<script nonce="<?= htmlspecialchars(scriptNonce()) ?>">
 function updateThemeCards() {
     var current = ThemeManager.current();
     document.querySelectorAll('.wm-theme-card').forEach(function(btn) {

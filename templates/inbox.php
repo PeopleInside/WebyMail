@@ -127,7 +127,7 @@ $folderDisplay = htmlspecialchars($folder ?? 'INBOX');
 </div>
 <?php endif; ?>
 
-<script>
+<script nonce="<?= htmlspecialchars(scriptNonce()) ?>">
 function bulkAction(action) {
     var uids = getSelectedUids();
     if (!uids.length) return;

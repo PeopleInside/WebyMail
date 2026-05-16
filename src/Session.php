@@ -16,7 +16,7 @@ class Session
     public function __construct()
     {
         $this->db       = Database::getInstance();
-        $this->lifetime = (int) Config::get('session_lifetime', 15552000); // 6 months default
+        $this->lifetime = (int) Config::get('session_lifetime', 2592000); // 30 days default
     }
 
     /**
@@ -25,6 +25,9 @@ class Session
     public function create(int $userId, int $accountId): string
     {
         $this->cleanup();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
 
         // Enforce 30-session limit
         $sessions = $this->db->fetchAll(
@@ -123,6 +126,15 @@ class Session
             return null;
         }
 
+        if ((bool) Config::get('session_ip_lock', true)) {
+            $storedIp = Config::decrypt((string)($row['ip_address'] ?? ''));
+            $currentIp = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+            if ($storedIp !== '' && $currentIp !== '' && !hash_equals($storedIp, $currentIp)) {
+                $this->destroy();
+                return null;
+            }
+        }
+
         // Refresh last_seen periodically (every 5 minutes) to avoid DB write on every request
         if (time() - (int)$row['last_seen'] > 300) {
             $this->db->query(
@@ -144,6 +156,9 @@ class Session
             $this->db->query('DELETE FROM sessions WHERE token = ?', [$token]);
         }
         $this->setCookie('', time() - 3600);
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
     }
 
     /**
@@ -153,6 +168,9 @@ class Session
     {
         $this->db->query('DELETE FROM sessions WHERE user_id = ?', [$userId]);
         $this->setCookie('', time() - 3600);
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
     }
 
     /**

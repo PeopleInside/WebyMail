@@ -40,6 +40,7 @@ class Account
 
     public function add(int $userId, array $data): int
     {
+        $this->assertValidAccountData($data);
         $status = 'valid';
         try {
             $this->validateCredentials($data);
@@ -75,6 +76,7 @@ class Account
 
     public function update(int $id, int $userId, array $data): bool
     {
+        $this->assertValidAccountData($data, true);
         $existing = $this->get($id);
         if (!$existing) return false;
 
@@ -133,6 +135,8 @@ class Account
 
     public function validateCredentials(array $data): void
     {
+        $this->assertValidAccountData($data, true);
+
         // IMAP check
         try {
             $imap = new ImapClient();
@@ -271,5 +275,47 @@ class Account
             'password'      => $account['password_plain'],
             'email'         => $account['email'],
         ];
+    }
+
+    private function assertValidAccountData(array $data, bool $allowMissingPassword = false): void
+    {
+        $requiredHosts = ['imap_host', 'smtp_host'];
+        foreach ($requiredHosts as $key) {
+            if (!isset($data[$key]) || !$this->isValidHost((string)$data[$key])) {
+                throw new InvalidArgumentException('Invalid mail server host.');
+            }
+        }
+
+        $requiredPorts = ['imap_port', 'smtp_port'];
+        foreach ($requiredPorts as $key) {
+            $port = (int)($data[$key] ?? 0);
+            if ($port < 1 || $port > 65535) {
+                throw new InvalidArgumentException('Invalid mail server port.');
+            }
+        }
+
+        $username = trim((string)($data['username'] ?? ''));
+        if ($username === '' || strlen($username) > 254) {
+            throw new InvalidArgumentException('Invalid username.');
+        }
+
+        $password = (string)($data['password'] ?? '');
+        if (!$allowMissingPassword && $password === '') {
+            throw new InvalidArgumentException('Password is required.');
+        }
+    }
+
+    private function isValidHost(string $host): bool
+    {
+        if ($host === '' || strlen($host) > 255) {
+            return false;
+        }
+        if (preg_match('/[\x00-\x1F\x7F\s]/', $host)) {
+            return false;
+        }
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            return true;
+        }
+        return (bool) preg_match('/^(?=.{1,255}$)([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/', $host);
     }
 }

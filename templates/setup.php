@@ -144,7 +144,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                 </form>
             </div>
         </div>
-        <script>
+        <script nonce="<?= htmlspecialchars(scriptNonce()) ?>">
             const ignoreCheck = document.querySelector('input[name="ignore_requirements"]');
             const submitBtn = document.getElementById('req-submit');
             if (ignoreCheck && submitBtn) {
@@ -410,7 +410,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
     </div>
 </div>
 
-<script>
+<script nonce="<?= htmlspecialchars(scriptNonce()) ?>">
 // SMTP Port auto-switching
 (function() {
     const sslCheck = document.querySelector('[data-smtp-ssl]');

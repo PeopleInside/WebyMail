@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '3.2';
+    public const VERSION = '3.3';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
@@ -344,7 +344,8 @@ class Config
             'app_secret'      => bin2hex(random_bytes(32)),
             'captcha_enabled'  => true,
             '2fa_enabled'      => true,
-            'session_lifetime' => 15552000, // 6 months in seconds
+            'session_lifetime' => 2592000, // 30 days in seconds
+            'session_ip_lock'  => true,
             'imap_host'       => '',
             'imap_port'       => 993,
             'imap_ssl'        => true,

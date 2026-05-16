@@ -212,7 +212,7 @@ $resumeSend = !empty($resumeSend);
     </form>
 </div>
 
-<script>
+<script nonce="<?= htmlspecialchars(scriptNonce()) ?>">
 (function() {
     var form       = document.getElementById('compose-form');
     var toolbar    = document.getElementById('quill-toolbar');
@@ -948,7 +948,7 @@ $resumeSend = !empty($resumeSend);
 </script>
 
 <?php if (!$isReply): ?>
-<script>
+<script nonce="<?= htmlspecialchars(scriptNonce()) ?>">
 // Show reply-to field toggle
 document.getElementById('show-replyto')?.addEventListener('click', function() {
     var row = document.getElementById('replyto-row');
