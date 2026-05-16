@@ -400,10 +400,12 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                 </p>
                 <div class="alert alert-info" style="font-size:.82rem">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    For security, <code>setup.php</code> has been renamed to <code>setup.php.bak</code>.
-                    To run setup again, rename it back and visit <code>setup.php?force=1</code>.
+                    Setup remains available for review. Use the button below to reopen the wizard and verify or confirm the existing values.
                 </div>
-                <a href="index.php" class="btn btn-primary w-100">Go to Login →</a>
+                <div style="display:flex;gap:.75rem;flex-direction:column">
+                    <a href="?force=1" class="btn btn-outline w-100">Review / Re-run Setup</a>
+                    <a href="index.php" class="btn btn-primary w-100">Go to Login →</a>
+                </div>
             </div>
         </div>
         <?php endif; ?>

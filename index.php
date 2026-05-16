@@ -777,7 +777,7 @@ if ($action === 'email_body') {
 
     header('Content-Type: text/html; charset=UTF-8');
     // Strict CSP for the iframe content
-    $emailImgSrc = $showImages ? "img-src 'self' data: https:;" : "img-src 'self' data:;";
+    $emailImgSrc = $showImages ? "img-src 'self' data: http: https:;" : "img-src 'self' data:;";
     header("Content-Security-Policy: default-src 'none'; base-uri 'none'; form-action 'none'; script-src 'none'; style-src 'self' 'nonce-{$emailStyleNonce}'; style-src-elem 'self' 'nonce-{$emailStyleNonce}'; style-src-attr 'unsafe-inline'; {$emailImgSrc} frame-ancestors 'self';");
     echo $sanitized;
     exit;

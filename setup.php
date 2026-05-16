@@ -43,11 +43,12 @@ function scriptNonce(): string
     return $cspNonce;
 }
 
-// In production, setup must not be re-runnable once completed.
-if (Config::get('setup_complete')) {
-    http_response_code(403);
-    echo 'Setup is locked because installation is already complete. Remove setup.php from production.';
-    exit;
+// Allow post-install review / re-run when explicitly requested.
+$forceSetup = !empty($_GET['force']) || !empty($_POST['force']);
+$setupCompleted = (bool) Config::get('setup_complete');
+
+if ($setupCompleted && !$forceSetup) {
+    $step = 'done';
 }
 
 $step  = 'welcome';
@@ -154,8 +155,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($step === 'finish') {
         $step = 'done';
-        // Auto-rename setup.php to prevent accidental re-runs
-        @rename(__FILE__, __FILE__ . '.bak');
     } elseif ($step === 'fix_permissions') {
         Config::fixPermissions();
         $step = 'security';
