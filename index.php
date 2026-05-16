@@ -31,7 +31,7 @@ session_set_cookie_params([
 session_start();
 
 // ── Security Headers ──────────────────────────────────────────────────────────
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; frame-src 'self';");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; frame-src 'self';");
 header("X-Content-Type-Options: nosniff");
 header("X-Frame-Options: SAMEORIGIN");
 header("X-XSS-Protection: 1; mode=block");
@@ -729,8 +729,9 @@ if ($action === 'email_body') {
     $sanitized = sanitizeHtml($html, $showImages, $theme);
 
     header('Content-Type: text/html; charset=UTF-8');
-    // Strict CSP for the iframe content
-    header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:; script-src 'none'; frame-ancestors 'self';");
+    // Strict CSP for the iframe content; restrict external images when they are not explicitly requested
+    $imgSrc = $showImages ? "'self' data: https:" : "'self' data:";
+    header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src {$imgSrc}; script-src 'none'; frame-ancestors 'self';");
     echo $sanitized;
     exit;
 }
@@ -1237,6 +1238,12 @@ if ($action === 'attachment' || $action === 'download_all') {
 
     $section = $_GET['section'] ?? '';
     $name    = basename($_GET['name'] ?? 'attachment');
+
+    // Validate section: must be a MIME part identifier (digits separated by dots)
+    if ($section === '' || !preg_match('/^[0-9]+(\.[0-9]+)*$/', $section)) {
+        http_response_code(400);
+        exit('Invalid attachment section.');
+    }
 
     // Disable errors for binary output to prevent corruption
     ini_set('display_errors', '0');

@@ -220,7 +220,8 @@ class SmtpClient
                 if (!preg_match('#^[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+$#', $type)) {
                     $type = 'application/octet-stream';
                 }
-                $name = addcslashes($att['name'] ?? 'attachment', "\"\\");
+                $rawName = str_replace(["\r", "\n", "\0"], '', $att['name'] ?? 'attachment') ?: 'attachment';
+                $name = addcslashes($rawName, "\"\\");
                 $body .= "--{$boundaryMixed}\r\n";
                 $body .= "Content-Type: {$type}; name=\"{$name}\"\r\n";
                 $body .= "Content-Transfer-Encoding: base64\r\n";
