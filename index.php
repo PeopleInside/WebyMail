@@ -1946,10 +1946,11 @@ if ($action === 'settings_save') {
 if ($action === 'fix_permissions' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (Config::fixPermissions()) {
         flashSet('success', 'Permissions have been updated.');
-        $_SESSION['hide_security_banner'] = true;
     } else {
         flashSet('warning', 'Some permissions could not be updated. Please check your server configuration.');
     }
+    // fixPermissions() already calls checkSystem() which refreshes the session
+    // cache, so the banner will reflect the current state on the next page load.
     redirect('?action=settings&tab=system');
 }
 
