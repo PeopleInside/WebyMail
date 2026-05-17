@@ -119,7 +119,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 Database::getInstance();
             } catch (Exception $e) {
-                $error = 'Database initialisation failed: ' . $e->getMessage();
+                error_log('Database initialisation failed during setup: ' . $e->getMessage());
+                $error = 'Database initialisation failed. Please confirm the data directory is writable and try again.';
                 $step  = 'server';
             }
 

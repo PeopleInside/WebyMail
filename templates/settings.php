@@ -491,6 +491,33 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
         </div>
         <?php endif; ?>
 
+        <div class="wm-card" style="margin-bottom:1.5rem">
+            <div class="wm-card-header">Diagnostic Mode</div>
+            <div class="wm-card-body">
+                <p style="font-size:.875rem;margin-top:0">
+                    Login failure messages are kept generic by default. Enable temporary diagnostic mode only when you need more detailed error information for troubleshooting.
+                </p>
+                <form method="post" action="?action=settings_save&tab=debug_errors">
+                    <?= csrfInput() ?>
+                    <div class="form-group" style="max-width:220px;">
+                        <label for="debug_errors_minutes">Enable detailed diagnostics for</label>
+                        <select id="debug_errors_minutes" name="debug_errors_minutes" class="form-control">
+                            <option value="5">5 minutes</option>
+                            <option value="10" selected>10 minutes</option>
+                            <option value="30">30 minutes</option>
+                            <option value="60">60 minutes</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary btn-sm">Enable diagnostics</button>
+                </form>
+                <?php if (!empty($_SESSION['detailed_errors_until']) && time() <= (int) $_SESSION['detailed_errors_until']): ?>
+                <div class="alert alert-warning" style="margin-top:1rem">
+                    Detailed diagnostics are enabled until <?= date('Y-m-d H:i:s', (int) $_SESSION['detailed_errors_until']) ?>.
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
         <!-- Active Sessions -->
         <div class="wm-card">
             <div class="wm-card-header">Active Sessions</div>

@@ -63,6 +63,13 @@
     </div>
 <?php endif; ?>
 
+<?php if (!isRequestSecure()): ?>
+    <div class="wm-https-banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;vertical-align:middle;margin-right:.4rem"><path d="M12 1.5C8.41 1.5 5.5 4.41 5.5 8v3.5H4l8 8 8-8h-1.5V8c0-3.59-2.91-6.5-6.5-6.5z"/><path d="M9 12.5v-1c0-1.66 1.34-3 3-3s3 1.34 3 3v1"/></svg>
+        WebyMail is loaded over HTTP. For your security, use HTTPS to protect login credentials and session data.
+    </div>
+<?php endif; ?>
+
 <?php if (!empty($shellLayout)): ?>
 <!-- App shell for authenticated pages -->
 <div class="wm-shell">
@@ -152,10 +159,13 @@
                     Settings
                 </a>
                 <div style="height:1px;background:var(--wm-border)"></div>
-                <a href="?action=logout" style="display:flex;align-items:center;gap:.6rem;padding:.6rem 1rem;font-size:.85rem;color:var(--wm-danger);text-decoration:none">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                    Sign out
-                </a>
+                <form id="logout-form" method="post" action="?action=logout" style="margin:0">
+                    <?= csrfInput() ?>
+                    <button type="submit" class="wm-link-button" style="display:flex;align-items:center;gap:.6rem;padding:.6rem 1rem;font-size:.85rem;color:var(--wm-danger);text-decoration:none;background:none;border:none;cursor:pointer">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                        Sign out
+                    </button>
+                </form>
             </div>
         </div>
     </header>

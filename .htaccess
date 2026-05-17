@@ -17,7 +17,7 @@ RewriteRule ^(.*)$ index.php [QSA,L]
 </IfModule>
 
 # Deny access to sensitive directories
-RedirectMatch 404 ^/data/.*$
-RedirectMatch 404 ^/config/.*$
-RedirectMatch 404 ^/src/.*$
-RedirectMatch 404 ^/templates/.*$
+RedirectMatch 404 ^/(?:config|data|src|templates)(?:/.*)?$
+RedirectMatch 404 ^/(?:setup\.php|composer\.(?:json|lock)|README\.md|LICENSE|SECURITY\.md|\.env)$
+RedirectMatch 404 ^/\.git(?:/.*)?$
+RedirectMatch 404 ^/.*\.bak$
