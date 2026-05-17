@@ -25,7 +25,7 @@ spl_autoload_register(function (string $class): void {
 require_once __DIR__ . '/src/Config.php';
 
 // If already set up, redirect to main app unless force setup is requested
-if (Config::get('setup_complete') && ($_GET['force'] ?? '') !== '1' && ($_GET['action'] ?? '') !== 'setup') {
+if (Config::get('setup_complete') && !isset($_GET['force']) && !isset($_GET['action'])) {
     header('Location: index.php');
     exit;
 }
