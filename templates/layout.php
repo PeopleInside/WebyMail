@@ -238,8 +238,8 @@
                 <span>
                     WebyMail v<?= Config::VERSION ?>
                     <?php if ($localAhead === true): ?>
-                    <span style="margin-left:.35rem;font-size:.68rem;color:var(--wm-warning);font-weight:600" title="This installed version is newer than the latest GitHub release.">
-                        newer than GitHub
+                    <span style="margin-left:.35rem;font-size:.66rem;color:var(--wm-warning);font-weight:700;border:1px solid rgba(var(--wm-warning-rgb),.35);border-radius:999px;padding:.1rem .4rem;display:inline-flex;align-items:center;gap:.2rem" title="Installed version (v<?= htmlspecialchars(Config::VERSION) ?>) is newer than the latest GitHub release. Version mismatch warning.">
+                        ⚠ version mismatch
                     </span>
                     <?php endif; ?>
                 </span>
