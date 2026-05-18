@@ -342,7 +342,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 <div class="wm-qr-box">
                     <div id="qrcode-canvas"></div>
                     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
-                            integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4KdqNwyTDYL6sMM2NZXAB+g=="
+                            integrity="sha256-3KxKreJH9M09PZkqVJn4N6XMlVnEBNDEy4e3ptPC82c="
                             crossorigin="anonymous" referrerpolicy="no-referrer"></script>
                     <script>
                     if (typeof QRCode !== 'undefined') {

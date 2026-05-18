@@ -292,7 +292,7 @@ class Config
             $cache = $_SESSION['github_version_check'] ?? null;
         }
 
-        if (!is_array($cache) || ($cache['expires'] ?? 0) <= time() || (($cache['repo_available'] ?? false) !== true)) {
+        if (!is_array($cache) || (($cache['repo_available'] ?? false) !== true)) {
             return null;
         }
 
