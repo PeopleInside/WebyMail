@@ -55,7 +55,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
         </button>
 
         <?php if (!empty($moveTargets)): ?>
-        <form method="post" action="?action=move&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" style="display:inline-flex;align-items:center;gap:.35rem">
+        <form method="post" action="<?= htmlspecialchars('?action=move&folder=' . $folderEnc . '&msg=' . urlencode((string) $msgNo)) ?>" style="display:inline-flex;align-items:center;gap:.35rem">
             <?= csrfInput() ?>
             <select name="destination" class="btn btn-outline btn-sm" style="max-width:180px">
                 <option value="">Move to…</option>

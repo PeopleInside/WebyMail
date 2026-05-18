@@ -1294,7 +1294,10 @@ if ($action === 'bulk' && isAjax()) {
             }
         }
         $imap->disconnect();
-        jsonResponse(['ok' => true, 'redirect' => $act === 'move' ? ('?action=inbox&folder=' . urlencode($destination)) : null]);
+        $redirectUrl = $act === 'move'
+            ? ('?action=inbox&folder=' . urlencode($destination))
+            : null;
+        jsonResponse(['ok' => true, 'redirect' => $redirectUrl]);
     } catch (RuntimeException $e) {
         error_log('Bulk action failed for user ' . $userId . ', account ' . $accountId . ', action ' . $act . ': ' . $e->getMessage());
         jsonResponse(['ok' => false, 'error' => 'Could not perform bulk action.']);

@@ -11,6 +11,7 @@ $page       = $mailData['page']     ?? 1;
 $pages      = $mailData['pages']    ?? 1;
 $folderEnc  = urlencode($folder ?? 'INBOX');
 $folderDisplay = htmlspecialchars($folder ?? 'INBOX');
+$folderJs = json_encode($folder ?? 'INBOX', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 $moveTargets = array_values(array_filter($folders ?? [], static function (array $item) use ($folder): bool {
     return ($item['name'] ?? '') !== ($folder ?? 'INBOX');
 }));
@@ -154,7 +155,7 @@ function bulkAction(action) {
     apiPost('?action=bulk', {
         action: action,
         uids:   uids,
-        folder: '<?= addslashes($folder ?? 'INBOX') ?>'
+        folder: <?= $folderJs ?>
     }).then(function(res) {
         if (res.ok) {
             if (res.redirect) window.location.href = res.redirect;
@@ -176,7 +177,7 @@ function bulkMove() {
     apiPost('?action=bulk', {
         action: 'move',
         uids: uids,
-        folder: '<?= addslashes($folder ?? 'INBOX') ?>',
+        folder: <?= $folderJs ?>,
         destination: destination.value
     }).then(function(res) {
         if (res.ok) {
@@ -190,6 +191,6 @@ function bulkMove() {
 function bulkExport() {
     var uids = getSelectedUids();
     if (!uids.length) return;
-    window.location.href = '?action=export_zip&folder=<?= addslashes($folder ?? 'INBOX') ?>&uids=' + uids.join(',');
+    window.location.href = '?action=export_zip&folder=<?= rawurlencode($folder ?? 'INBOX') ?>&uids=' + uids.join(',');
 }
 </script>
