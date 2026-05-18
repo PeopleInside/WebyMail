@@ -233,8 +233,16 @@
             </div>
         </form>
         <div style="padding:1.5rem .75rem 1rem;font-size:.78rem;color:var(--wm-text-muted);border-top:1px solid rgba(255,255,255,.1)">
+            <?php $localAhead = Config::isLocalVersionAheadOfGitHub(); ?>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
-                <span>WebyMail v<?= Config::VERSION ?></span>
+                <span>
+                    WebyMail v<?= Config::VERSION ?>
+                    <?php if ($localAhead === true): ?>
+                    <span style="margin-left:.35rem;font-size:.68rem;color:var(--wm-warning);font-weight:600" title="This installed version is newer than the latest GitHub release.">
+                        newer than GitHub
+                    </span>
+                    <?php endif; ?>
+                </span>
                 <?php 
                 $suggestions = Config::getSecuritySuggestions();
                 if (!empty($suggestions)): 

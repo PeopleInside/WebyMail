@@ -939,7 +939,19 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             <div class="wm-card-body" style="padding:0">
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
                     <span style="font-size:.85rem">WebyMail Version</span>
-                    <span style="font-size:.85rem;font-weight:600">v<?= Config::VERSION ?></span>
+                    <span style="font-size:.85rem;font-weight:600;display:flex;align-items:center;gap:.4rem">
+                        v<?= Config::VERSION ?>
+                        <?php
+                        $localAheadSys = Config::isLocalVersionAheadOfGitHub();
+                        $latestSys = Config::getLatestGitHubVersion();
+                        if ($localAheadSys === true):
+                        ?>
+                        <span style="font-size:.72rem;color:var(--wm-warning);font-weight:600"
+                              title="Installed version (v<?= htmlspecialchars(Config::VERSION) ?>) is newer than latest GitHub release (v<?= htmlspecialchars((string)$latestSys) ?>).">
+                            newer than GitHub
+                        </span>
+                        <?php endif; ?>
+                    </span>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
                     <span style="font-size:.85rem">Latest Releases</span>
