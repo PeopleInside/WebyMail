@@ -11,6 +11,9 @@ $page       = $mailData['page']     ?? 1;
 $pages      = $mailData['pages']    ?? 1;
 $folderEnc  = urlencode($folder ?? 'INBOX');
 $folderDisplay = htmlspecialchars($folder ?? 'INBOX');
+$moveTargets = array_values(array_filter($folders ?? [], static function (array $item) use ($folder): bool {
+    return ($item['name'] ?? '') !== ($folder ?? 'INBOX');
+}));
 ?>
 
 <div class="wm-toolbar">
@@ -21,6 +24,15 @@ $folderDisplay = htmlspecialchars($folder ?? 'INBOX');
         <button class="btn btn-outline btn-sm" onclick="bulkAction('read')">Mark read</button>
         <button class="btn btn-outline btn-sm" onclick="bulkAction('unread')">Mark unread</button>
         <button class="btn btn-outline btn-sm" onclick="bulkExport()">Export ZIP</button>
+        <?php if (!empty($moveTargets)): ?>
+        <select id="bulk-move-destination" class="btn btn-outline btn-sm" style="max-width:180px">
+            <option value="">Move to…</option>
+            <?php foreach ($moveTargets as $target): ?>
+            <option value="<?= htmlspecialchars($target['name']) ?>"><?= htmlspecialchars($target['display'] ?? $target['name']) ?></option>
+            <?php endforeach; ?>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="bulkMove()">Move</button>
+        <?php endif; ?>
         <button class="btn btn-danger btn-sm" onclick="bulkAction('delete')">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
             Delete
@@ -144,7 +156,27 @@ function bulkAction(action) {
         uids:   uids,
         folder: '<?= addslashes($folder ?? 'INBOX') ?>'
     }).then(function(res) {
-        if (res.ok) window.location.reload();
+        if (res.ok) window.location.href = res.redirect || window.location.href;
+        else alert(res.error || 'Action failed.');
+    });
+}
+
+function bulkMove() {
+    var uids = getSelectedUids();
+    var destination = document.getElementById('bulk-move-destination');
+    if (!uids.length) return;
+    if (!destination || !destination.value) {
+        alert('Select a destination folder.');
+        return;
+    }
+
+    apiPost('?action=bulk', {
+        action: 'move',
+        uids: uids,
+        folder: '<?= addslashes($folder ?? 'INBOX') ?>',
+        destination: destination.value
+    }).then(function(res) {
+        if (res.ok) window.location.href = res.redirect || window.location.href;
         else alert(res.error || 'Action failed.');
     });
 }
