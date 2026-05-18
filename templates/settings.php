@@ -336,27 +336,36 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             Save your recovery codes somewhere safe before continuing. You will not see them again.
         </div>
         <?php
-        $qrPayload  = (string)($qrUrl ?? '');
-        $qrImageUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&ecc=M&data=' . rawurlencode($qrPayload);
+        $qrPayload = (string)($qrUrl ?? '');
         ?>
 
         <div class="wm-card" style="margin-bottom:1.5rem">
             <div class="wm-card-header">Scan QR code with your authenticator app</div>
             <div class="wm-card-body">
                 <div class="wm-qr-box">
-                    <div id="qrcode-canvas" style="display:flex;align-items:center;justify-content:center;min-height:200px">
-                        <?php if ($qrPayload !== ''): ?>
-                        <img src="<?= htmlspecialchars($qrImageUrl) ?>"
-                             alt="TOTP QR code"
-                             width="200"
-                             height="200"
-                             loading="lazy"
-                             onerror="this.style.display='none'; var fallback = document.getElementById('qrcode-fallback'); if (fallback) fallback.style.display='block';">
-                        <?php endif; ?>
-                        <div id="qrcode-fallback" style="<?= $qrPayload !== '' ? 'display:none;' : '' ?>font-size:.82rem;color:var(--wm-text-muted);text-align:center;max-width:220px">
-                            QR code could not be rendered. Use the manual code below.
-                        </div>
-                    </div>
+                    <div id="qrcode-canvas"></div>
+                    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+                            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+                    <script>
+                    (function () {
+                        var target = document.getElementById('qrcode-canvas');
+                        var payload = <?= json_encode($qrPayload) ?>;
+                        if (!target) {
+                            return;
+                        }
+                        if (!payload) {
+                            target.textContent = 'QR code could not be rendered. Use the manual code below.';
+                            return;
+                        }
+                        if (typeof QRCode !== 'undefined') {
+                            try {
+                                new QRCode(target, { text: payload, width: 200, height: 200 });
+                                return;
+                            } catch (e) {}
+                        }
+                        target.textContent = 'QR code library failed to load. Use the manual code below.';
+                    })();
+                    </script>
                     <p style="font-size:.78rem;color:var(--wm-text-muted);margin:0">
                         Or enter manually: <code><?= htmlspecialchars($totpSecret) ?></code>
                     </p>
