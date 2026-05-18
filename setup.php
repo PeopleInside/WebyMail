@@ -37,7 +37,7 @@ if (($_GET['force'] ?? '') === '1') {
 $isForced = !empty($_SESSION['setup_force']);
 
 // If already set up, redirect to main app unless force setup is requested
-if (Config::get('setup_complete') && !isset($_GET['force']) && !isset($_GET['action'])) {
+if (Config::get('setup_complete') && !$isForced && ($_GET['action'] ?? '') !== 'setup') {
     header('Location: index.php');
     exit;
 }
