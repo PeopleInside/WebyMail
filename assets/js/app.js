@@ -452,7 +452,9 @@ window.updateFolderUnread = function(folderName, count) {
 function initUnreadChecker() {
     const CHECK_INTERVAL = 60000; // 1 minute
     const originalTitle = document.title;
-    let lastInboxUnread = null;
+    const inboxBadgeText = document.querySelector('.badge[data-folder-unread="INBOX"]')?.textContent;
+    const initialInboxUnread = parseInt(inboxBadgeText ?? '', 10);
+    let lastInboxUnread = Number.isFinite(initialInboxUnread) ? initialInboxUnread : null;
 
     function check() {
         fetch('?action=check_unread', {
