@@ -333,27 +333,95 @@ function initSmtpPortSync() {
 /* =============================================================
    Auto-refresh / New mail check
    ============================================================= */
+let inboxRefreshInFlight = false;
+
+function getCurrentAction() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('action') || 'inbox';
+}
+
+function getCurrentFolder() {
+    const params = new URLSearchParams(window.location.search);
+    return (params.get('folder') || 'INBOX').toUpperCase();
+}
+
+function isInboxListView() {
+    const action = getCurrentAction();
+    return action === 'inbox';
+}
+
+function isSafeToRefreshInboxView() {
+    if (document.hidden) return false;
+    const hasModal = document.querySelector('.wm-modal[style*="display: flex"]') ||
+        document.querySelector('.wm-modal[style*="display: block"]');
+    const activeEl = document.activeElement;
+    const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.contentEditable === 'true');
+    return !hasModal && !isInput;
+}
+
+async function refreshInboxViewPreservingState() {
+    if (inboxRefreshInFlight || !isInboxListView()) return false;
+
+    const currentContainer = document.getElementById('inbox-content');
+    const currentMailList = document.getElementById('mail-list');
+    if (!currentContainer || !currentMailList) return false;
+
+    const previousScrollTop = currentMailList.scrollTop;
+    const selectedUids = new Set(
+        Array.from(document.querySelectorAll('.mail-checkbox:checked'))
+            .map(cb => cb.dataset.uid)
+            .filter(Boolean)
+    );
+
+    inboxRefreshInFlight = true;
+    try {
+        const response = await fetch(window.location.href, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        if (!response.ok) return false;
+
+        const html = await response.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const nextContainer = doc.getElementById('inbox-content');
+        const nextTotal = doc.getElementById('inbox-total-count');
+        if (!nextContainer) return false;
+
+        currentContainer.innerHTML = nextContainer.innerHTML;
+
+        const currentTotal = document.getElementById('inbox-total-count');
+        if (currentTotal && nextTotal) {
+            currentTotal.textContent = nextTotal.textContent;
+        }
+
+        const newMailList = document.getElementById('mail-list');
+        if (newMailList) {
+            newMailList.scrollTop = previousScrollTop;
+        }
+
+        document.querySelectorAll('.mail-checkbox').forEach(cb => {
+            if (!selectedUids.has(cb.dataset.uid)) return;
+            cb.checked = true;
+            cb.closest('.wm-mail-row')?.classList.add('selected');
+        });
+
+        initMailList();
+        initMailRows();
+        updateBulkActions();
+        return true;
+    } catch (err) {
+        console.error('Inbox refresh failed:', err);
+        return false;
+    } finally {
+        inboxRefreshInFlight = false;
+    }
+}
+
 function initAutoRefresh() {
     const REFRESH_INTERVAL = 120000; // 2 minutes
-    let lastCheck = Date.now();
 
     setInterval(() => {
-        // Only refresh if we are on the inbox/folder list and not currently interacting
-        const isInbox = window.location.search.includes('action=inbox') || window.location.search === '';
-        const isCompose = window.location.search.includes('action=compose');
-        
-        if (isInbox && !isCompose && !document.hidden) {
-            // Check if we have any open modals or active inputs
-            const hasModal = document.querySelector('.wm-modal[style*="display: flex"]') || 
-                           document.querySelector('.wm-modal[style*="display: block"]');
-            const activeEl = document.activeElement;
-            const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.contentEditable === 'true');
-
-            if (!hasModal && !isInput) {
-                // Subtle refresh: just reload the page to get new mail
-                // In a more advanced version, we could fetch just the list via AJAX
-                window.location.reload();
-            }
+        if (isInboxListView() && isSafeToRefreshInboxView()) {
+            refreshInboxViewPreservingState();
         }
     }, REFRESH_INTERVAL);
 }
@@ -376,6 +444,7 @@ window.updateFolderUnread = function(folderName, count) {
 function initUnreadChecker() {
     const CHECK_INTERVAL = 60000; // 1 minute
     const originalTitle = document.title;
+    let lastInboxUnread = parseInt(document.querySelector('.badge[data-folder-unread="INBOX"]')?.textContent || '0', 10) || 0;
 
     function check() {
         fetch('?action=check_unread', {
@@ -394,6 +463,14 @@ function initUnreadChecker() {
                     document.title = `(${data.inbox_unread}) ${originalTitle}`;
                 } else {
                     document.title = originalTitle;
+                }
+
+                const currentInboxUnread = parseInt(data.inbox_unread, 10) || 0;
+                const hasNewInboxMail = currentInboxUnread > lastInboxUnread;
+                lastInboxUnread = currentInboxUnread;
+
+                if (hasNewInboxMail && getCurrentFolder() === 'INBOX' && isInboxListView() && isSafeToRefreshInboxView()) {
+                    refreshInboxViewPreservingState();
                 }
             }
         })
