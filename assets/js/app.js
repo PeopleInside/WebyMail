@@ -392,7 +392,7 @@ async function refreshInboxViewPreservingState() {
 
         const replacement = document.createDocumentFragment();
         Array.from(nextContainer.children).forEach(node => {
-            replacement.appendChild(node.cloneNode(true));
+            replacement.appendChild(node);
         });
         currentContainer.replaceChildren(replacement);
 
@@ -453,7 +453,7 @@ function initUnreadChecker() {
     const CHECK_INTERVAL = 60000; // 1 minute
     const originalTitle = document.title;
     const inboxBadgeText = document.querySelector('.badge[data-folder-unread="INBOX"]')?.textContent;
-    const parsedInitialInboxUnread = parseInt(inboxBadgeText ?? '', 10);
+    const parsedInitialInboxUnread = parseInt((inboxBadgeText ?? '').trim(), 10);
     let lastInboxUnread = Number.isFinite(parsedInitialInboxUnread) ? parsedInitialInboxUnread : null;
 
     function check() {
@@ -473,17 +473,15 @@ function initUnreadChecker() {
                     console.warn('Unread checker received invalid inbox_unread value:', data.inbox_unread);
                     return;
                 }
-                const currentInboxUnread = parsedInboxUnread;
-
                 // Update tab title
-                if (currentInboxUnread > 0) {
-                    document.title = `(${currentInboxUnread}) ${originalTitle}`;
+                if (parsedInboxUnread > 0) {
+                    document.title = `(${parsedInboxUnread}) ${originalTitle}`;
                 } else {
                     document.title = originalTitle;
                 }
 
-                const hasNewInboxMail = lastInboxUnread !== null && currentInboxUnread > lastInboxUnread;
-                lastInboxUnread = currentInboxUnread;
+                const hasNewInboxMail = lastInboxUnread !== null && parsedInboxUnread > lastInboxUnread;
+                lastInboxUnread = parsedInboxUnread;
 
                 if (hasNewInboxMail && getCurrentFolder() === 'INBOX' && isInboxListView() && isSafeToRefreshInboxView()) {
                     refreshInboxViewPreservingState();
