@@ -191,6 +191,6 @@ function bulkMove() {
 function bulkExport() {
     var uids = getSelectedUids();
     if (!uids.length) return;
-    window.location.href = '?action=export_zip&folder=<?= rawurlencode($folder ?? 'INBOX') ?>&uids=' + uids.join(',');
+    window.location.href = '?action=export_zip&folder=<?= urlencode($folder ?? 'INBOX') ?>&uids=' + uids.join(',');
 }
 </script>

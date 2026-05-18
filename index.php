@@ -1295,7 +1295,7 @@ if ($action === 'bulk' && isAjax()) {
         }
         $imap->disconnect();
         $redirectUrl = $act === 'move'
-            ? ('?action=inbox&folder=' . urlencode($destination))
+            ? '?action=inbox&folder=' . urlencode($destination)
             : null;
         jsonResponse(['ok' => true, 'redirect' => $redirectUrl]);
     } catch (RuntimeException $e) {
