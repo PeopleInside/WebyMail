@@ -375,7 +375,11 @@ async function refreshInboxViewPreservingState() {
 
     inboxRefreshInFlight = true;
     try {
-        const response = await fetch(window.location.href, {
+        const refreshUrl = new URL(window.location.href);
+        refreshUrl.searchParams.set('action', 'inbox');
+        refreshUrl.hash = '';
+
+        const response = await fetch(refreshUrl.pathname + refreshUrl.search, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
         if (!response.ok) return false;
@@ -386,7 +390,11 @@ async function refreshInboxViewPreservingState() {
         const nextTotal = doc.getElementById('inbox-total-count');
         if (!nextContainer) return false;
 
-        currentContainer.innerHTML = nextContainer.innerHTML;
+        const replacement = document.createDocumentFragment();
+        Array.from(nextContainer.children).forEach(node => {
+            replacement.appendChild(node.cloneNode(true));
+        });
+        currentContainer.replaceChildren(replacement);
 
         const currentTotal = document.getElementById('inbox-total-count');
         if (currentTotal && nextTotal) {
@@ -444,7 +452,7 @@ window.updateFolderUnread = function(folderName, count) {
 function initUnreadChecker() {
     const CHECK_INTERVAL = 60000; // 1 minute
     const originalTitle = document.title;
-    let lastInboxUnread = parseInt(document.querySelector('.badge[data-folder-unread="INBOX"]')?.textContent || '0', 10) || 0;
+    let lastInboxUnread = null;
 
     function check() {
         fetch('?action=check_unread', {
@@ -466,7 +474,7 @@ function initUnreadChecker() {
                 }
 
                 const currentInboxUnread = parseInt(data.inbox_unread, 10) || 0;
-                const hasNewInboxMail = currentInboxUnread > lastInboxUnread;
+                const hasNewInboxMail = lastInboxUnread !== null && currentInboxUnread > lastInboxUnread;
                 lastInboxUnread = currentInboxUnread;
 
                 if (hasNewInboxMail && getCurrentFolder() === 'INBOX' && isInboxListView() && isSafeToRefreshInboxView()) {
