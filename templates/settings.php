@@ -345,11 +345,19 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                             integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4KdqNwyTDYL6sMM2NZXAB+g=="
                             crossorigin="anonymous" referrerpolicy="no-referrer"></script>
                     <script>
-                    new QRCode(document.getElementById('qrcode-canvas'), {
-                        text: <?= json_encode($qrUrl ?? '') ?>,
-                        width: 200,
-                        height: 200
-                    });
+                    if (typeof QRCode !== 'undefined') {
+                        try {
+                            new QRCode(document.getElementById('qrcode-canvas'), {
+                                text: <?= json_encode($qrUrl ?? '') ?>,
+                                width: 200,
+                                height: 200
+                            });
+                        } catch (e) {
+                            document.getElementById('qrcode-canvas').textContent = 'QR code could not be rendered. Use the manual code below.';
+                        }
+                    } else {
+                        document.getElementById('qrcode-canvas').textContent = 'QR code library failed to load. Use the manual code below.';
+                    }
                     </script>
                     <p style="font-size:.78rem;color:var(--wm-text-muted);margin:0">
                         Or enter manually: <code><?= htmlspecialchars($totpSecret) ?></code>

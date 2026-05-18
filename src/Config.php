@@ -46,8 +46,15 @@ class Config
         }
         // Atomic write: write to a temp file then rename so readers never see a partial file.
         $tmpFile = self::$configFile . '.' . getmypid() . '.tmp';
-        file_put_contents($tmpFile, $content, LOCK_EX);
-        rename($tmpFile, self::$configFile);
+        if (file_put_contents($tmpFile, $content, LOCK_EX) === false) {
+            @unlink($tmpFile);
+            throw new \RuntimeException('Config::save() failed to write temporary file.');
+        }
+        @chmod($tmpFile, 0600);
+        if (!rename($tmpFile, self::$configFile)) {
+            @unlink($tmpFile);
+            throw new \RuntimeException('Config::save() failed to replace config file atomically.');
+        }
     }
 
     public static function isSetup(): bool
