@@ -1194,7 +1194,7 @@ if ($action === 'move' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $imap->moveMessage($folder, $msgNo, $destination);
         $imap->disconnect();
-        flashSet('success', 'Message moved to "' . htmlspecialchars($destination) . '".');
+        flashSet('success', 'Message moved to "' . $destination . '".');
         redirect('?action=inbox&folder=' . urlencode($destination));
     } catch (RuntimeException $e) {
         error_log('Move message failed for user ' . $userId . ', account ' . $accountId . ', msg ' . $msgNo . ': ' . $e->getMessage());
@@ -1268,14 +1268,18 @@ if ($action === 'bulk' && isAjax()) {
                 moveToTrashOrDelete($imap, $folder, $uid, $trash, $inTrash);
             }
         } elseif ($act === 'move') {
+            $moveError = null;
             if ($destination === '') {
-                throw new RuntimeException('No destination folder selected.');
+                $moveError = 'Select a destination folder.';
+            } elseif ($destination === $folder) {
+                $moveError = 'Selected messages are already in that folder.';
+            } elseif (!folderExists($imap->getFolders(), $destination)) {
+                $moveError = 'Selected folder is not available.';
             }
-            if ($destination === $folder) {
-                throw new RuntimeException('Messages are already in that folder.');
-            }
-            if (!folderExists($imap->getFolders(), $destination)) {
-                throw new RuntimeException('Selected folder is not available.');
+
+            if ($moveError !== null) {
+                $imap->disconnect();
+                jsonResponse(['ok' => false, 'error' => $moveError]);
             }
             foreach ($uids as $uid) {
                 $imap->moveMessage($folder, $uid, $destination);
@@ -1293,13 +1297,7 @@ if ($action === 'bulk' && isAjax()) {
         jsonResponse(['ok' => true, 'redirect' => $act === 'move' ? ('?action=inbox&folder=' . urlencode($destination)) : null]);
     } catch (RuntimeException $e) {
         error_log('Bulk action failed for user ' . $userId . ', account ' . $accountId . ', action ' . $act . ': ' . $e->getMessage());
-        $message = match ($e->getMessage()) {
-            'No destination folder selected.' => 'Select a destination folder.',
-            'Messages are already in that folder.' => 'Selected messages are already in that folder.',
-            'Selected folder is not available.' => 'Selected folder is not available.',
-            default => 'Could not perform bulk action.',
-        };
-        jsonResponse(['ok' => false, 'error' => $message]);
+        jsonResponse(['ok' => false, 'error' => 'Could not perform bulk action.']);
     }
 }
 
