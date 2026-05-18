@@ -361,7 +361,10 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                             try {
                                 new QRCode(target, { text: payload, width: 200, height: 200 });
                                 return;
-                            } catch (e) {}
+                            } catch (e) {
+                                target.textContent = 'QR code could not be rendered. Use the manual code below.';
+                                return;
+                            }
                         }
                         target.textContent = 'QR code library failed to load. Use the manual code below.';
                     })();
