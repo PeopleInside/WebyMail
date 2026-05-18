@@ -177,6 +177,9 @@ function bulkMove() {
         alert('Select a destination folder.');
         return;
     }
+    if (!confirm('Move the selected messages to "' + destination.options[destination.selectedIndex].text + '"? This action cannot be undone.')) {
+        return;
+    }
 
     apiPost('?action=bulk', {
         action: 'move',
@@ -195,6 +198,6 @@ function bulkMove() {
 function bulkExport() {
     var uids = getSelectedUids();
     if (!uids.length) return;
-    window.location.href = <?= $exportZipBaseUrl ?> + '&uids=' + uids.join(',');
+    window.location.href = <?= $exportZipBaseUrl ?> + '&uids=' + encodeURIComponent(uids.join(','));
 }
 </script>

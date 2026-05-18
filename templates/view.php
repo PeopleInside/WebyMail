@@ -10,6 +10,7 @@ $folderEnc = urlencode($folder);
 $msgNo     = (int) ($message['msg_no'] ?? 0);
 $hasHtml   = !empty($message['body_html']);
 $isInbox   = strtoupper($folder) === 'INBOX';
+$moveActionUrl = '?action=move&folder=' . rawurlencode($folder) . '&msg=' . rawurlencode((string) $msgNo);
 $moveTargets = array_values(array_filter($folders ?? [], static function (array $item) use ($folder): bool {
     return ($item['name'] ?? '') !== $folder;
 }));
@@ -55,7 +56,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
         </button>
 
         <?php if (!empty($moveTargets)): ?>
-        <form method="post" action="<?= htmlspecialchars('?action=move&folder=' . $folderEnc . '&msg=' . urlencode((string) $msgNo)) ?>" style="display:inline-flex;align-items:center;gap:.35rem">
+        <form method="post" action="<?= htmlspecialchars($moveActionUrl) ?>" style="display:inline-flex;align-items:center;gap:.35rem" onsubmit="return confirmSingleMove(this)">
             <?= csrfInput() ?>
             <select name="destination" class="btn btn-outline btn-sm" style="max-width:180px">
                 <option value="">Move to…</option>
@@ -206,6 +207,15 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
 </div>
 
 <script>
+function confirmSingleMove(form) {
+    var destination = form.querySelector('select[name="destination"]');
+    if (!destination || !destination.value) {
+        alert('Select a destination folder.');
+        return false;
+    }
+    return confirm('Move this message to "' + destination.options[destination.selectedIndex].text + '"? This action cannot be undone.');
+}
+
 (function() {
     // Headers modal logic
     var btn   = document.getElementById('show-headers-btn');
