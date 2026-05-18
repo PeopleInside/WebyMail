@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '3.4';
+    public const VERSION = '3.4.1';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
@@ -15,6 +15,15 @@ class Config
     public static function get(string $key, $default = null)
     {
         self::load();
+
+        if ($key === 'app_secret') {
+            if (empty(self::$data['app_secret'])) {
+                self::$data['app_secret'] = bin2hex(random_bytes(32));
+                self::save();
+            }
+            return self::$data['app_secret'];
+        }
+
         return self::$data[$key] ?? $default;
     }
 
@@ -57,6 +66,17 @@ class Config
             $ok = extension_loaded($ext);
             $results['requirements'][$ext] = $ok;
             if (!$ok) $results['all_ok'] = false;
+        }
+
+        $phpOk = version_compare(PHP_VERSION, '8.1.0', '>=');
+        $results['requirements']['php'] = $phpOk;
+        if (!$phpOk) {
+            $results['all_ok'] = false;
+            $results['security_suggestions'][] = [
+                'type' => 'php',
+                'message' => 'PHP ' . PHP_VERSION . ' is installed. Upgrade to PHP 8.1 or newer for improved security and support.',
+                'action_url' => '?action=settings&tab=security'
+            ];
         }
 
         // Security - Recursive scan

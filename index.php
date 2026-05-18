@@ -20,11 +20,25 @@ header('Expires: Sat, 26 Jul 1997 05:00:00 GMT');
 
 define('WEBYMAIL_ROOT', __DIR__);
 
+function isRequestSecure(): bool
+{
+    $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+    $forwardedSsl   = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? ''));
+    return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || str_contains($forwardedProto, 'https')
+        || $forwardedSsl === 'on';
+}
+
 // PHP native session is used only for the 2FA pending state
+$secure = isRequestSecure();
+if ($secure) {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
+}
+
 session_set_cookie_params([
     'lifetime' => 300,
     'path'     => '/',
-    'secure'   => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+    'secure'   => $secure,
     'httponly' => true,
     'samesite' => 'Strict',
 ]);
@@ -275,6 +289,16 @@ function csrfInput(): string
     return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars(csrfToken()) . '">';
 }
 
+function debugErrorsEnabled(): bool
+{
+    return isset($_SESSION['detailed_errors_until']) && time() <= (int) $_SESSION['detailed_errors_until'];
+}
+
+function debugErrorMessage(string $generic, string $detailed): string
+{
+    return debugErrorsEnabled() ? $detailed : $generic;
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 $action = $_GET['action'] ?? 'inbox';
@@ -361,9 +385,14 @@ if ($action === 'login') {
                 $host, $port, $ssl, $username, $password,
                 $smtpHost, $smtpPort, $smtpSsl, $smtpTls
             );
+            $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 
             if (!$result['ok']) {
-                $error = $result['error'];
+                $error = debugErrorMessage(
+                    'Login failed. Please verify your credentials and try again.',
+                    $result['error']
+                );
+                error_log(sprintf('WebyMail login failure from %s for %s: %s', $ip, $username, $result['error']));
                 sleep(1); // Deter brute force
             } elseif ($result['needs_2fa']) {
                 $needs2fa = true;
@@ -405,6 +434,17 @@ if ($action === 'login2fa') {
 
 // ── Logout ────────────────────────────────────────────────────────────────────
 if ($action === 'logout') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        redirect('?action=inbox');
+    }
+
+    $sessionObj = new Session();
+    $token = $_POST['csrf_token'] ?? '';
+    if ($token === '' || $token !== $sessionObj->getCsrfToken()) {
+        flashSet('danger', 'Security token mismatch. Please try again.');
+        redirect('?action=inbox');
+    }
+
     (new Auth())->logout();
     redirect('?action=login');
 }
@@ -462,10 +502,11 @@ try {
 } catch (RuntimeException $e) {
     // IMAP might be temporarily unavailable; non-fatal
     $errorMsg = $e->getMessage();
+    error_log('Folder list load failed for user ' . $userId . ', account ' . $accountId . ': ' . $errorMsg);
     if (str_contains(strtolower($errorMsg), 'auth') || str_contains(strtolower($errorMsg), 'login') || str_contains(strtolower($errorMsg), 'credential')) {
         $accountMgr->setValidationStatus($accountId, 'invalid');
         if (empty($flash)) {
-            $flash = ['type' => 'danger', 'message' => 'Authentication failed: ' . $errorMsg];
+            $flash = ['type' => 'danger', 'message' => 'Authentication failed for this account. Please check your settings.'];
         }
     }
 }
@@ -514,7 +555,8 @@ if ($action === 'create_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $imap->disconnect();
         flashSet('success', 'Folder "' . htmlspecialchars($name) . '" created.');
     } catch (RuntimeException $e) {
-        flashSet('danger', 'Could not create folder: ' . $e->getMessage());
+        error_log('Folder creation failed for user ' . $userId . ': ' . $e->getMessage());
+        flashSet('danger', 'Could not create folder. Please try again later.');
     }
     redirect('?action=inbox');
 }
@@ -532,7 +574,8 @@ if ($action === 'rename_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $imap->disconnect();
         flashSet('success', 'Folder renamed to "' . htmlspecialchars($newName) . '".');
     } catch (RuntimeException $e) {
-        flashSet('danger', 'Could not rename folder: ' . $e->getMessage());
+        error_log('Folder rename failed for user ' . $userId . ': ' . $e->getMessage());
+        flashSet('danger', 'Could not rename folder. Please try again later.');
     }
     redirect('?action=inbox');
 }
@@ -553,7 +596,8 @@ if ($action === 'delete_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $imap->disconnect();
         flashSet('success', 'Folder "' . htmlspecialchars($name) . '" deleted.');
     } catch (RuntimeException $e) {
-        flashSet('danger', 'Could not delete folder: ' . $e->getMessage());
+        error_log('Folder deletion failed for user ' . $userId . ': ' . $e->getMessage());
+        flashSet('danger', 'Could not delete folder. Please try again later.');
     }
     redirect('?action=inbox');
 }
@@ -566,7 +610,8 @@ if ($action === 'empty_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $imap->disconnect();
         flashSet('success', 'Folder "' . htmlspecialchars($folder) . '" emptied.');
     } catch (RuntimeException $e) {
-        flashSet('danger', 'Could not empty folder: ' . $e->getMessage());
+        error_log('Folder empty failed for user ' . $userId . ': ' . $e->getMessage());
+        flashSet('danger', 'Could not empty folder. Please try again later.');
     }
     redirect('?action=inbox&folder=' . urlencode($folder));
 }
@@ -647,10 +692,11 @@ if ($action === 'inbox' || $action === 'search') {
         $imap->disconnect();
     } catch (RuntimeException $e) {
         $errorMsg = $e->getMessage();
+        error_log('Inbox load failed for user ' . $userId . ', account ' . $accountId . ': ' . $errorMsg);
         if (str_contains(strtolower($errorMsg), 'auth') || str_contains(strtolower($errorMsg), 'login') || str_contains(strtolower($errorMsg), 'credential')) {
             $accountMgr->setValidationStatus($accountId, 'invalid');
         }
-        $flash = ['type' => 'danger', 'message' => 'IMAP error: ' . $errorMsg];
+        $flash = ['type' => 'danger', 'message' => 'Unable to load messages. Please check your account settings.'];
     }
 
     render('inbox', $layoutCommon + [
@@ -676,7 +722,8 @@ if ($action === 'view') {
         $isTrash = isTrashFolderEquivalent($currentFolder, $trash);
         $imap->disconnect();
     } catch (RuntimeException $e) {
-        flashSet('danger', 'Could not load message: ' . $e->getMessage());
+        error_log('Message load failed for user ' . $userId . ', account ' . $accountId . ', folder ' . $currentFolder . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        flashSet('danger', 'Unable to load the selected message. Please try again later.');
         redirect('?action=inbox&folder=' . urlencode($currentFolder));
     }
 
@@ -711,8 +758,9 @@ if ($action === 'email_body') {
         $message = $imap->getMessage($folder, $msgNo);
         $imap->disconnect();
     } catch (Throwable $e) {
+        error_log('Email body load failed for user ' . $userId . ', account ' . $accountId . ', folder ' . $folder . ', msg ' . $msgNo . ': ' . $e->getMessage());
         http_response_code(500);
-        exit('Error loading email: ' . htmlspecialchars($e->getMessage()));
+        exit('Error loading email content.');
     }
 
     if (!$message || !is_array($message)) {
@@ -1060,7 +1108,8 @@ if ($action === 'import_eml' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $imap->disconnect();
         } catch (Exception $e) {
-            $flash = ['type' => 'danger', 'message' => 'Error: ' . $e->getMessage()];
+            error_log('EML import failed for user ' . $userId . ', account ' . $accountId . ': ' . $e->getMessage());
+            $flash = ['type' => 'danger', 'message' => 'Failed to import email.'];
         }
     } else {
         $flash = ['type' => 'danger', 'message' => 'No file uploaded or upload error.'];
@@ -1083,7 +1132,8 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $imap->disconnect();
         flashSet('success', $inTrash ? 'Message deleted.' : 'Message moved to Trash.');
     } catch (RuntimeException $e) {
-        flashSet('danger', 'Delete failed: ' . $e->getMessage());
+        error_log('Delete message failed for user ' . $userId . ', account ' . $accountId . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        flashSet('danger', 'Could not delete message. Please try again later.');
     }
     redirect('?action=inbox&folder=' . urlencode($folder));
 }
@@ -1100,7 +1150,8 @@ if ($action === 'spam' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $imap->disconnect();
         flashSet('success', 'Message moved to Spam.');
     } catch (RuntimeException $e) {
-        flashSet('danger', 'Could not move to Spam: ' . $e->getMessage());
+        error_log('Spam move failed for user ' . $userId . ', account ' . $accountId . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        flashSet('danger', 'Could not move message to Spam. Please try again later.');
     }
     redirect('?action=inbox&folder=' . urlencode($folder));
 }
@@ -1116,7 +1167,8 @@ if ($action === 'email_headers' && isAjax()) {
         $imap->disconnect();
         jsonResponse(['ok' => true, 'headers' => $headers]);
     } catch (RuntimeException $e) {
-        jsonResponse(['ok' => false, 'error' => $e->getMessage()]);
+        error_log('Raw headers request failed for user ' . $userId . ', account ' . $accountId . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        jsonResponse(['ok' => false, 'error' => 'Could not load headers.']);
     }
 }
 
@@ -1147,7 +1199,8 @@ if ($action === 'check_unread' && isAjax()) {
             'inbox_unread' => $inboxUnread
         ]);
     } catch (Throwable $e) {
-        jsonResponse(['status' => 'error', 'message' => $e->getMessage()]);
+        error_log('Unread count request failed for user ' . $userId . ', account ' . $accountId . ': ' . $e->getMessage());
+        jsonResponse(['status' => 'error', 'message' => 'Could not retrieve unread counts.']);
     }
 }
 
@@ -1178,7 +1231,8 @@ if ($action === 'bulk' && isAjax()) {
         $imap->disconnect();
         jsonResponse(['ok' => true]);
     } catch (RuntimeException $e) {
-        jsonResponse(['ok' => false, 'error' => $e->getMessage()]);
+        error_log('Bulk action failed for user ' . $userId . ', account ' . $accountId . ', action ' . $act . ': ' . $e->getMessage());
+        jsonResponse(['ok' => false, 'error' => 'Could not perform bulk action.']);
     }
 }
 
@@ -1229,10 +1283,11 @@ if ($action === 'attachment' || $action === 'download_all') {
             unlink($zipFile);
             exit;
         } catch (Throwable $e) {
+            error_log('Download all attachments failed for user ' . $userId . ', account ' . $accountId . ', folder ' . $folder . ', msg ' . $msgNo . ': ' . $e->getMessage());
             if (ob_get_level()) ob_clean();
             http_response_code(500);
             header('Content-Type: text/plain; charset=utf-8');
-            exit('Error: ' . $e->getMessage());
+            exit('Error downloading attachments.');
         }
     }
 
@@ -1261,11 +1316,12 @@ if ($action === 'attachment' || $action === 'download_all') {
             throw new Exception("Attachment data is empty or could not be retrieved.");
         }
     } catch (Throwable $e) {
+        error_log('Attachment download failed for user ' . $userId . ', account ' . $accountId . ', folder ' . $folder . ', msg ' . $msgNo . ', section ' . $section . ': ' . $e->getMessage());
         if (ob_get_level()) ob_clean();
         http_response_code(500);
         header('Content-Type: text/plain; charset=utf-8');
         header('Content-Disposition: inline');
-        exit('Error downloading attachment: ' . $e->getMessage());
+        exit('Error downloading attachment.');
     }
 
     if (ob_get_level()) ob_clean();
@@ -1306,8 +1362,9 @@ if ($action === 'export_eml') {
         echo $raw;
         exit;
     } catch (RuntimeException $e) {
+        error_log('EML export failed for user ' . $userId . ', account ' . $accountId . ', folder ' . $folder . ', msg ' . $msgNo . ': ' . $e->getMessage());
         http_response_code(500);
-        exit('Error: ' . htmlspecialchars($e->getMessage()));
+        exit('Error exporting message.');
     }
 }
 
@@ -1341,8 +1398,9 @@ if ($action === 'export_zip') {
         unlink($zipFile);
         exit;
     } catch (RuntimeException $e) {
+        error_log('ZIP export failed for user ' . $userId . ', account ' . $accountId . ', folder ' . $folder . ', uids ' . implode(',', $uids) . ': ' . $e->getMessage());
         http_response_code(500);
-        exit('Error: ' . htmlspecialchars($e->getMessage()));
+        exit('Error exporting messages.');
     }
 }
 
@@ -1408,7 +1466,8 @@ if ($action === 'compose') {
             }
             $replyMsg = $origNo;
         } catch (RuntimeException $e) {
-            flashSet('danger', 'Could not load original: ' . $e->getMessage());
+            error_log('Compose reply/forward load failed for user ' . $userId . ', account ' . $accountId . ', orig ' . $origNo . ': ' . $e->getMessage());
+            flashSet('danger', 'Could not load original message. Please try again later.');
         }
     }
 
@@ -1618,12 +1677,13 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             flashSet('success', 'Draft saved.');
         } catch (RuntimeException $e) {
+            error_log('Draft save failed for user ' . $userId . ', account ' . $fromAccountId . ': ' . $e->getMessage());
             if ($isAjax) {
                 header('Content-Type: application/json');
-                echo json_encode(['status' => 'error', 'message' => 'Could not save draft: ' . $e->getMessage()]);
+                echo json_encode(['status' => 'error', 'message' => 'Could not save draft.']);
                 exit;
             }
-            flashSet('danger', 'Could not save draft: ' . $e->getMessage());
+            flashSet('danger', 'Could not save draft.');
         }
         redirect('?action=inbox&folder=' . urlencode($draftsFolder));
     }
@@ -1671,16 +1731,14 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($draftSaved && $newDraftUid > 0) {
-            flashSet('danger', 'Failed to send: ' . $smtp->getLog() . ' Your message was saved to Drafts.');
+            error_log('Send failed after SMTP accept for user ' . $userId . ', account ' . $fromAccountId . ': ' . $smtp->getLog() . ' Draft error: ' . ($draftError ?? 'none'));
+            flashSet('danger', 'Failed to send message. Your message was saved to Drafts.');
             redirect('?action=compose&edit_draft=' . (int)$newDraftUid . '&folder=' . urlencode($draftsFolder));
         }
 
+        error_log('Send failed for user ' . $userId . ', account ' . $fromAccountId . ': ' . $smtp->getLog() . ($draftError ? ' Draft error: ' . $draftError : ''));
         $_SESSION['compose_prefill'] = $composePrefill;
-        $errorMsg = 'Failed to send: ' . $smtp->getLog();
-        if ($draftError) {
-            $errorMsg .= ' (Could not save draft: ' . $draftError . ')';
-        }
-        flashSet('danger', $errorMsg);
+        flashSet('danger', 'Failed to send message. Please check your settings and try again.');
         redirect('?action=compose');
     }
 }
@@ -1792,6 +1850,15 @@ if ($action === 'settings_save') {
             flashSet('success', 'Two-factor authentication has been disabled.');
             redirect('?action=settings&tab=security');
 
+        case 'debug_errors':
+            $duration = (int) ($_POST['debug_errors_minutes'] ?? 10);
+            if ($duration < 1 || $duration > 240) {
+                $duration = 10;
+            }
+            $_SESSION['detailed_errors_until'] = time() + ($duration * 60);
+            flashSet('success', 'Temporary diagnostic mode enabled for ' . $duration . ' minutes.');
+            redirect('?action=settings&tab=security');
+
         case 'revoke_sessions':
             (new Session())->destroyAll($userId);
             redirect('?action=login');
@@ -1849,10 +1916,15 @@ if ($action === 'settings_save') {
                     flashSet('warning', 'Account added, but IMAP/SMTP connection failed. Please check your settings.');
                 }
             } catch (Exception $e) {
+                $errorMessage = debugErrorMessage(
+                    'Failed to add account. Please check your settings.',
+                    'Failed to add account: ' . $e->getMessage()
+                );
+                error_log(sprintf('Account add failed for user %d: %s', $userId, $e->getMessage()));
                 if (isAjax()) {
-                    jsonResponse(['ok' => false, 'error' => $e->getMessage()]);
+                    jsonResponse(['ok' => false, 'error' => $errorMessage]);
                 }
-                flashSet('danger', 'Failed to add account: ' . $e->getMessage());
+                flashSet('danger', $errorMessage);
             }
             redirect('?action=settings&tab=accounts');
 
@@ -1906,10 +1978,15 @@ if ($action === 'settings_save') {
                     flashSet('warning', 'Account updated, but IMAP/SMTP connection failed. Please check your settings.');
                 }
             } catch (Exception $e) {
+                $errorMessage = debugErrorMessage(
+                    'Failed to update account. Please check your settings.',
+                    'Failed to update account: ' . $e->getMessage()
+                );
+                error_log(sprintf('Account update failed for user %d, account %d: %s', $userId, $editId, $e->getMessage()));
                 if (isAjax()) {
-                    jsonResponse(['ok' => false, 'error' => $e->getMessage()]);
+                    jsonResponse(['ok' => false, 'error' => $errorMessage]);
                 }
-                flashSet('danger', 'Failed to update account: ' . $e->getMessage());
+                flashSet('danger', $errorMessage);
             }
             redirect('?action=settings&tab=accounts');
 
@@ -2013,7 +2090,12 @@ if ($action === 'test_credentials' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
         jsonResponse(['ok' => true, 'message' => 'Connection successful!']);
     } catch (Exception $e) {
-        jsonResponse(['ok' => false, 'error' => $e->getMessage()]);
+        $errorMessage = debugErrorMessage(
+            'Connection test failed. Please verify your settings.',
+            $e->getMessage()
+        );
+        error_log('Credential test failed: ' . $e->getMessage());
+        jsonResponse(['ok' => false, 'error' => $errorMessage]);
     }
 }
 

@@ -37,6 +37,9 @@ https://github.com/PeopleInside/WebyMail/releases
 ## Security
 - A self-hosted proof-of-work captcha is enabled by default on login. To disable it, set `'captcha_enabled' => false` in `config/config.php`.
 - Two factor can be disabled in case of login issue also on `config/config.php`
+- The application uses a per-installation `app_secret` for encryption of stored emails, contacts, account passwords, and recovery data. This value is generated automatically by setup and saved in `config/config.php`.
+- When upgrading, preserve your existing `config/config.php`. Overwriting or replacing it can break decryption of stored encrypted data.
+- Existing installations do not require manual changes to `app_secret` when updating, as long as `config/config.php` is retained.
 
 **Light mode** 
 ![Light](https://github.com/user-attachments/assets/b93bbbd8-2350-494b-8125-9b5066266d83)

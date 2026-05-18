@@ -65,6 +65,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                 </ul>
                 <form method="post" action="?action=setup">
                     <input type="hidden" name="step" value="requirements">
+                    <input type="hidden" name="setup_csrf" value="<?= htmlspecialchars($setupCsrfToken) ?>">
                     
                     <div style="margin: 1.5rem 0; padding: 1rem; background: var(--wm-bg-subtle); border: 1px solid var(--wm-border); border-radius: 8px;">
                         <p style="font-size: .85rem; margin-top: 0; color: var(--wm-text);">
@@ -130,6 +131,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
 
                 <form method="post" action="?action=setup">
                     <input type="hidden" name="step" value="requirements">
+                    <input type="hidden" name="setup_csrf" value="<?= htmlspecialchars($setupCsrfToken) ?>">
                     <?php if (!$allOk): ?>
                     <label style="display:flex;align-items:center;gap:.5rem;margin-bottom:1rem;font-size:.82rem;cursor:pointer">
                         <input type="checkbox" name="ignore_requirements" value="1"> I understand the risks and want to continue anyway
@@ -164,6 +166,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
             <div class="wm-card-body">
                 <form method="post" action="?action=setup" enctype="multipart/form-data">
                     <input type="hidden" name="step" value="save">
+                    <input type="hidden" name="setup_csrf" value="<?= htmlspecialchars($setupCsrfToken) ?>">
 
                     <p style="font-size:.82rem;color:var(--wm-text-muted);margin-top:0">
                         These are your <strong>default</strong> server settings. Users can override
@@ -311,6 +314,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                 </div>
                 <form method="post" action="?action=setup">
                     <input type="hidden" name="step" value="fix_permissions">
+                    <input type="hidden" name="setup_csrf" value="<?= htmlspecialchars($setupCsrfToken) ?>">
                     <button type="submit" class="btn btn-outline btn-xs" <?= $allSecurityOk ? 'disabled style="cursor:not-allowed;opacity:0.6"' : '' ?>>Fix Permissions</button>
                 </form>
             </div>
@@ -380,6 +384,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
 
                 <form method="post" action="?action=setup">
                     <input type="hidden" name="step" value="finish">
+                    <input type="hidden" name="setup_csrf" value="<?= htmlspecialchars($setupCsrfToken) ?>">
                     <button type="submit" class="btn btn-primary w-100">
                         Finalize Setup →
                     </button>

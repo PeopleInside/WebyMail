@@ -189,9 +189,28 @@ class Session
         $this->db->query('DELETE FROM sessions WHERE expires_at <= ?', [time()]);
     }
 
+    private function isSecure(): bool
+    {
+        if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+            return true;
+        }
+
+        $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+        if (str_contains($forwardedProto, 'https')) {
+            return true;
+        }
+
+        $forwardedSsl = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? ''));
+        if ($forwardedSsl === 'on') {
+            return true;
+        }
+
+        return false;
+    }
+
     private function setCookie(string $value, int $expires): void
     {
-        $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+        $secure = $this->isSecure();
         setcookie(self::COOKIE_NAME, $value, [
             'expires'  => $expires,
             'path'     => '/',
