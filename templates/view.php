@@ -208,7 +208,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
 
 <script>
 function confirmSingleMove(form) {
-    var destination = form.querySelector('select[name="destination"]');
+    const destination = form.querySelector('select[name="destination"]');
     if (!destination || !destination.value) {
         alert('Select a destination folder.');
         return false;

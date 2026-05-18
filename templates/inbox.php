@@ -170,8 +170,8 @@ function bulkAction(action) {
 }
 
 function bulkMove() {
-    var uids = getSelectedUids();
-    var destination = document.getElementById('bulk-move-destination');
+    const uids = getSelectedUids();
+    const destination = document.getElementById('bulk-move-destination');
     if (!uids.length) return;
     if (!destination || !destination.value) {
         alert('Select a destination folder.');
@@ -196,7 +196,7 @@ function bulkMove() {
 }
 
 function bulkExport() {
-    var uids = getSelectedUids();
+    const uids = getSelectedUids();
     if (!uids.length) return;
     window.location.href = <?= $exportZipBaseUrl ?> + '&uids=' + encodeURIComponent(uids.join(','));
 }
