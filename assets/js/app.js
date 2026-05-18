@@ -453,8 +453,8 @@ function initUnreadChecker() {
     const CHECK_INTERVAL = 60000; // 1 minute
     const originalTitle = document.title;
     const inboxBadgeText = document.querySelector('.badge[data-folder-unread="INBOX"]')?.textContent;
-    const initialInboxUnread = inboxBadgeText ? parseInt(inboxBadgeText, 10) : NaN;
-    let lastInboxUnread = Number.isFinite(initialInboxUnread) ? initialInboxUnread : null;
+    const parsedInitialInboxUnread = parseInt(inboxBadgeText ?? '', 10);
+    let lastInboxUnread = Number.isFinite(parsedInitialInboxUnread) ? parsedInitialInboxUnread : null;
 
     function check() {
         fetch('?action=check_unread', {
@@ -468,15 +468,20 @@ function initUnreadChecker() {
                     window.updateFolderUnread(folder, count);
                 }
 
+                const parsedInboxUnread = parseInt(data.inbox_unread, 10);
+                if (!Number.isFinite(parsedInboxUnread)) {
+                    console.warn('Unread checker received invalid inbox_unread value:', data.inbox_unread);
+                    return;
+                }
+                const currentInboxUnread = parsedInboxUnread;
+
                 // Update tab title
-                if (data.inbox_unread > 0) {
-                    document.title = `(${data.inbox_unread}) ${originalTitle}`;
+                if (currentInboxUnread > 0) {
+                    document.title = `(${currentInboxUnread}) ${originalTitle}`;
                 } else {
                     document.title = originalTitle;
                 }
 
-                const parsedInboxUnread = parseInt(data.inbox_unread, 10);
-                const currentInboxUnread = Number.isFinite(parsedInboxUnread) ? parsedInboxUnread : 0;
                 const hasNewInboxMail = lastInboxUnread !== null && currentInboxUnread > lastInboxUnread;
                 lastInboxUnread = currentInboxUnread;
 
