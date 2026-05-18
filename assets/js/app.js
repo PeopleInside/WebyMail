@@ -453,7 +453,7 @@ function initUnreadChecker() {
     const CHECK_INTERVAL = 60000; // 1 minute
     const originalTitle = document.title;
     const inboxBadgeText = document.querySelector('.badge[data-folder-unread="INBOX"]')?.textContent;
-    const initialInboxUnread = parseInt(inboxBadgeText ?? '', 10);
+    const initialInboxUnread = inboxBadgeText ? parseInt(inboxBadgeText, 10) : NaN;
     let lastInboxUnread = Number.isFinite(initialInboxUnread) ? initialInboxUnread : null;
 
     function check() {
@@ -475,7 +475,8 @@ function initUnreadChecker() {
                     document.title = originalTitle;
                 }
 
-                const currentInboxUnread = parseInt(data.inbox_unread, 10) || 0;
+                const parsedInboxUnread = parseInt(data.inbox_unread, 10);
+                const currentInboxUnread = Number.isFinite(parsedInboxUnread) ? parsedInboxUnread : 0;
                 const hasNewInboxMail = lastInboxUnread !== null && currentInboxUnread > lastInboxUnread;
                 lastInboxUnread = currentInboxUnread;
 
