@@ -18,6 +18,10 @@ RewriteRule ^(.*)$ index.php [QSA,L]
 
 # Deny access to sensitive directories
 RedirectMatch 404 ^/(?:config|data|src|templates)(?:/.*)?$
-RedirectMatch 404 ^/(?:setup\.php|composer\.(?:json|lock)|README\.md|LICENSE|SECURITY\.md|\.env)$
+# NOTE: setup.php is intentionally NOT blocked here.
+# The PHP code in setup.php handles its own access control:
+# it redirects to index.php if setup is already complete and ?force=1 is absent.
+# Blocking it here would prevent the update wizard (setup.php?force=1) from running.
+RedirectMatch 404 ^/(?:composer\.(?:json|lock)|README\.md|LICENSE|SECURITY\.md|\.env)$
 RedirectMatch 404 ^/\.git(?:/.*)?$
 RedirectMatch 404 ^/.*\.bak$

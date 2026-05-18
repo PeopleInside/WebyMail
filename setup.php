@@ -1,6 +1,11 @@
 <?php
 declare(strict_types=1);
 
+// Session must be started before any header() calls.
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 // Prevent caching
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Cache-Control: post-check=0, pre-check=0', false);
@@ -24,10 +29,32 @@ spl_autoload_register(function (string $class): void {
 
 require_once __DIR__ . '/src/Config.php';
 
+// Persist ?force=1 into the session so it survives POST redirects
+// (form actions use ?action=setup which drops the force query param).
+if (($_GET['force'] ?? '') === '1') {
+    $_SESSION['setup_force'] = true;
+}
+$isForced = !empty($_SESSION['setup_force']);
+
 // If already set up, redirect to main app unless force setup is requested
-if (Config::get('setup_complete') && ($_GET['force'] ?? '') !== '1' && ($_GET['action'] ?? '') !== 'setup') {
+if (Config::get('setup_complete') && !$isForced && ($_GET['action'] ?? '') !== 'setup') {
     header('Location: index.php');
     exit;
+}
+
+// Simple CSRF token for setup forms (session-bound, single token for the whole wizard)
+if (empty($_SESSION['setup_csrf'])) {
+    $_SESSION['setup_csrf'] = bin2hex(random_bytes(32));
+}
+$setupCsrfToken = $_SESSION['setup_csrf'];
+
+// Validate CSRF on every POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $submittedCsrf = $_POST['setup_csrf'] ?? '';
+    if (!hash_equals($setupCsrfToken, $submittedCsrf)) {
+        http_response_code(403);
+        die('Security token mismatch. Please go back and try again.');
+    }
 }
 
 $step  = 'welcome';
@@ -132,6 +159,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($step === 'finish') {
         $step = 'done';
+        // Clear the force flag so the wizard cannot be re-entered without ?force=1
+        unset($_SESSION['setup_force'], $_SESSION['setup_csrf']);
         // Auto-rename setup.php to prevent accidental re-runs
         @rename(__FILE__, __FILE__ . '.bak');
     } elseif ($step === 'fix_permissions') {

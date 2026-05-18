@@ -4,6 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <?php
+    // isRequestSecure() is defined in index.php. When layout.php is included
+    // from setup.php the function does not exist yet, so we define a fallback.
+    if (!function_exists('isRequestSecure')) {
+        function isRequestSecure(): bool {
+            $proto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+            $ssl   = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL']   ?? ''));
+            return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+                || str_contains($proto, 'https')
+                || $ssl === 'on';
+        }
+    }
     $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'WebyMail');
     $activeAccount = null;
     if (!empty($accounts ?? []) && isset($session['account_id'])) {
