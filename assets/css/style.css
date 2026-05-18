@@ -510,6 +510,14 @@ input:autofill {
     text-align: center;
     z-index: 1000;
 }
+.wm-https-banner {
+    background: var(--wm-danger);
+    color: #fff;
+    padding: .6rem 1rem;
+    font-size: .85rem;
+    text-align: center;
+    z-index: 1000;
+}
 .wm-setup-banner a {
     color: #fff;
     text-decoration: underline;
