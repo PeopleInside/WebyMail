@@ -340,7 +340,17 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             <div class="wm-card-header">Scan QR code with your authenticator app</div>
             <div class="wm-card-body">
                 <div class="wm-qr-box">
-                    <img src="<?= htmlspecialchars($qrUrl ?? '') ?>" width="200" height="200" alt="QR Code">
+                    <div id="qrcode-canvas"></div>
+                    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+                            integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4KdqNwyTDYL6sMM2NZXAB+g=="
+                            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+                    <script>
+                    new QRCode(document.getElementById('qrcode-canvas'), {
+                        text: <?= json_encode($qrUrl ?? '') ?>,
+                        width: 200,
+                        height: 200
+                    });
+                    </script>
                     <p style="font-size:.78rem;color:var(--wm-text-muted);margin:0">
                         Or enter manually: <code><?= htmlspecialchars($totpSecret) ?></code>
                     </p>

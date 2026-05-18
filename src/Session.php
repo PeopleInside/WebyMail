@@ -24,6 +24,11 @@ class Session
      */
     public function create(int $userId, int $accountId): string
     {
+        // Regenerate the PHP native session ID to prevent session fixation attacks.
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
+
         $this->cleanup();
 
         // Enforce 30-session limit

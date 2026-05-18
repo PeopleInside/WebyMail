@@ -44,7 +44,10 @@ class Config
         if (!is_dir(dirname(self::$configFile))) {
             mkdir(dirname(self::$configFile), 0750, true);
         }
-        file_put_contents(self::$configFile, $content);
+        // Atomic write: write to a temp file then rename so readers never see a partial file.
+        $tmpFile = self::$configFile . '.' . getmypid() . '.tmp';
+        file_put_contents($tmpFile, $content, LOCK_EX);
+        rename($tmpFile, self::$configFile);
     }
 
     public static function isSetup(): bool

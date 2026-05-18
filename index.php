@@ -45,10 +45,11 @@ session_set_cookie_params([
 session_start();
 
 // ── Security Headers ──────────────────────────────────────────────────────────
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; frame-src 'self';");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; frame-src 'self';");
 header("X-Content-Type-Options: nosniff");
 header("X-Frame-Options: SAMEORIGIN");
 header("X-XSS-Protection: 1; mode=block");
+header("Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()");
 
 spl_autoload_register(function (string $class): void {
     $file = __DIR__ . '/src/' . $class . '.php';
@@ -272,7 +273,7 @@ function requireAuth(): array
                 jsonResponse(['ok' => false, 'error' => 'Security token mismatch. Please refresh the page.']);
             }
             flashSet('danger', 'Security token mismatch. Please try again.');
-            redirect($_SERVER['HTTP_REFERER'] ?? '?action=inbox');
+            redirect('?action=inbox');
         }
     }
 
@@ -1337,7 +1338,7 @@ if ($action === 'attachment' || $action === 'download_all') {
     header('Expires: Sat, 26 Jul 1997 05:00:00 GMT');
 
     // Robust filename handling
-    $safeName = str_replace(['"', "\r", "\n"], '', $name);
+    $safeName = str_replace(['"', "\r", "\n", "\0"], '', $name);
     header('Content-Disposition: attachment; filename="' . $safeName . '"; filename*=UTF-8\'\'' . rawurlencode($name));
     header('Content-Type: ' . $ctype . '; name="' . $safeName . '"');
     header('Content-Length: ' . strlen($data));
@@ -1758,7 +1759,7 @@ if ($action === 'settings') {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['start_2fa'])) {
         $totpSecret    = $tf->generateSecret();
         $recoveryCodes = $tf->generateRecoveryCodes();
-        $qrUrl         = $tf->getQRCodeUrl($totpSecret, $user['email']);
+        $qrUrl         = $tf->getOtpauthUrl($totpSecret, $user['email']);
         $tab           = 'security';
         // Stash in session so we can retrieve after verification
         $_SESSION['2fa_enroll'] = [
