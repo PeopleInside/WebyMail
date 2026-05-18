@@ -335,30 +335,28 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
         <div class="alert alert-warning">
             Save your recovery codes somewhere safe before continuing. You will not see them again.
         </div>
+        <?php
+        $qrPayload  = (string)($qrUrl ?? '');
+        $qrImageUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&ecc=M&data=' . rawurlencode($qrPayload);
+        ?>
 
         <div class="wm-card" style="margin-bottom:1.5rem">
             <div class="wm-card-header">Scan QR code with your authenticator app</div>
             <div class="wm-card-body">
                 <div class="wm-qr-box">
-                    <div id="qrcode-canvas"></div>
-                    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
-                            integrity="sha256-3KxKreJH9M09PZkqVJn4N6XMlVnEBNDEy4e3ptPC82c="
-                            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-                    <script>
-                    if (typeof QRCode !== 'undefined') {
-                        try {
-                            new QRCode(document.getElementById('qrcode-canvas'), {
-                                text: <?= json_encode($qrUrl ?? '') ?>,
-                                width: 200,
-                                height: 200
-                            });
-                        } catch (e) {
-                            document.getElementById('qrcode-canvas').textContent = 'QR code could not be rendered. Use the manual code below.';
-                        }
-                    } else {
-                        document.getElementById('qrcode-canvas').textContent = 'QR code library failed to load. Use the manual code below.';
-                    }
-                    </script>
+                    <div id="qrcode-canvas" style="display:flex;align-items:center;justify-content:center;min-height:200px">
+                        <?php if ($qrPayload !== ''): ?>
+                        <img src="<?= htmlspecialchars($qrImageUrl) ?>"
+                             alt="TOTP QR code"
+                             width="200"
+                             height="200"
+                             loading="lazy"
+                             onerror="this.style.display='none'; var fallback = document.getElementById('qrcode-fallback'); if (fallback) fallback.style.display='block';">
+                        <?php endif; ?>
+                        <div id="qrcode-fallback" style="<?= $qrPayload !== '' ? 'display:none;' : '' ?>font-size:.82rem;color:var(--wm-text-muted);text-align:center;max-width:220px">
+                            QR code could not be rendered. Use the manual code below.
+                        </div>
+                    </div>
                     <p style="font-size:.78rem;color:var(--wm-text-muted);margin:0">
                         Or enter manually: <code><?= htmlspecialchars($totpSecret) ?></code>
                     </p>
@@ -379,6 +377,10 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                     <?= csrfInput() ?>
                     <input type="hidden" name="totp_secret" value="<?= htmlspecialchars($totpSecret) ?>">
                     <input type="hidden" name="recovery_codes" value="<?= htmlspecialchars(json_encode($recoveryCodes)) ?>">
+                    <div class="alert alert-warning" style="margin-bottom:1rem;display:flex;align-items:flex-start;gap:.5rem;font-size:.82rem">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-top:.1rem;flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <span>After enabling 2FA, you will be logged out immediately and must sign in again. This is a required security measure.</span>
+                    </div>
                     <div class="form-group">
                         <label for="verify_code">Enter the 6-digit code from your app to confirm</label>
                         <input type="text" id="verify_code" name="verify_code" class="form-control"
@@ -946,9 +948,9 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                         $latestSys = Config::getLatestGitHubVersion();
                         if ($localAheadSys === true):
                         ?>
-                        <span style="font-size:.72rem;color:var(--wm-warning);font-weight:600"
-                              title="Installed version (v<?= htmlspecialchars(Config::VERSION) ?>) is newer than latest GitHub release (v<?= htmlspecialchars((string)$latestSys) ?>).">
-                            newer than GitHub
+                        <span style="font-size:.68rem;color:var(--wm-warning);font-weight:700;border:1px solid rgba(var(--wm-warning-rgb),.35);border-radius:999px;padding:.1rem .45rem;display:inline-flex;align-items:center;gap:.2rem"
+                              title="Installed version (v<?= htmlspecialchars(Config::VERSION) ?>) is newer than latest GitHub release (v<?= htmlspecialchars((string)$latestSys) ?>). Version mismatch warning.">
+                            ⚠ version mismatch
                         </span>
                         <?php endif; ?>
                     </span>
