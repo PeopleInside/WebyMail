@@ -226,9 +226,9 @@ class Config
     public static function getNewerVersion(): ?string
     {
         // Simple GitHub API check (cached for 24h in session to avoid rate limits)
-        if (isset($_SESSION['github_version_check']) && $_SESSION['github_version_check']['expires'] > time()
-            && array_key_exists('latest_version', $_SESSION['github_version_check'])) {
-            return $_SESSION['github_version_check']['version'];
+        $cache = $_SESSION['github_version_check'] ?? null;
+        if (is_array($cache) && ($cache['expires'] ?? 0) > time() && array_key_exists('latest_version', $cache)) {
+            return $cache['version'] ?? null;
         }
 
         $newerVersion = null;
@@ -286,16 +286,13 @@ class Config
 
     public static function getLatestGitHubVersion(): ?string
     {
-        if (!isset($_SESSION['github_version_check']) || (($_SESSION['github_version_check']['expires'] ?? 0) <= time())) {
+        $cache = $_SESSION['github_version_check'] ?? null;
+        if (!is_array($cache) || ($cache['expires'] ?? 0) <= time()) {
             self::getNewerVersion();
+            $cache = $_SESSION['github_version_check'] ?? null;
         }
 
-        if (!isset($_SESSION['github_version_check']) || !is_array($_SESSION['github_version_check'])) {
-            return null;
-        }
-
-        $cache = $_SESSION['github_version_check'];
-        if (($cache['expires'] ?? 0) <= time() || (($cache['repo_available'] ?? false) !== true)) {
+        if (!is_array($cache) || ($cache['expires'] ?? 0) <= time() || (($cache['repo_available'] ?? false) !== true)) {
             return null;
         }
 
