@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '3.4.1';
+    public const VERSION = '3.4.2';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
@@ -44,7 +44,17 @@ class Config
         if (!is_dir(dirname(self::$configFile))) {
             mkdir(dirname(self::$configFile), 0750, true);
         }
-        file_put_contents(self::$configFile, $content);
+        // Atomic write: write to a temp file then rename so readers never see a partial file.
+        $tmpFile = self::$configFile . '.' . getmypid() . '.tmp';
+        if (file_put_contents($tmpFile, $content, LOCK_EX) === false) {
+            @unlink($tmpFile);
+            throw new \RuntimeException('Config::save() failed to write temporary file.');
+        }
+        @chmod($tmpFile, 0600);
+        if (!rename($tmpFile, self::$configFile)) {
+            @unlink($tmpFile);
+            throw new \RuntimeException('Config::save() failed to replace config file atomically.');
+        }
     }
 
     public static function isSetup(): bool
@@ -216,11 +226,13 @@ class Config
     public static function getNewerVersion(): ?string
     {
         // Simple GitHub API check (cached for 24h in session to avoid rate limits)
-        if (isset($_SESSION['github_version_check']) && $_SESSION['github_version_check']['expires'] > time()) {
-            return $_SESSION['github_version_check']['version'];
+        $cache = $_SESSION['github_version_check'] ?? null;
+        if (is_array($cache) && ($cache['expires'] ?? 0) > time() && array_key_exists('latest_version', $cache)) {
+            return $cache['version'] ?? null;
         }
 
         $newerVersion = null;
+        $latestVersion = null;
         $repoAvailable = false;
         try {
             $opts = [
@@ -251,9 +263,9 @@ class Config
                 $data = json_decode($apiResponse, true);
                 $latestTag = $data['tag_name'] ?? '';
                 // Strip 'v' prefix if present
-                $latestVersion = ltrim($latestTag, 'v');
+                $latestVersion = ltrim($latestTag, 'v') ?: null;
 
-                if (version_compare($latestVersion, self::VERSION, '>')) {
+                if ($latestVersion !== null && version_compare($latestVersion, self::VERSION, '>')) {
                     $newerVersion = $latestVersion;
                 }
             }
@@ -264,11 +276,37 @@ class Config
 
         $_SESSION['github_version_check'] = [
             'version'        => $newerVersion,
+            'latest_version' => $latestVersion,
             'repo_available' => $repoAvailable,
             'expires'        => time() + 86400 // 24 hours
         ];
 
         return $newerVersion;
+    }
+
+    public static function getLatestGitHubVersion(): ?string
+    {
+        $cache = $_SESSION['github_version_check'] ?? null;
+        if (!is_array($cache) || ($cache['expires'] ?? 0) <= time()) {
+            self::getNewerVersion();
+            $cache = $_SESSION['github_version_check'] ?? null;
+        }
+
+        if (!is_array($cache) || (($cache['repo_available'] ?? false) !== true)) {
+            return null;
+        }
+
+        $latest = $cache['latest_version'] ?? null;
+        return (is_string($latest) && $latest !== '') ? $latest : null;
+    }
+
+    public static function isLocalVersionAheadOfGitHub(): ?bool
+    {
+        $latest = self::getLatestGitHubVersion();
+        if ($latest === null) {
+            return null;
+        }
+        return version_compare(self::VERSION, $latest, '>');
     }
 
     /**

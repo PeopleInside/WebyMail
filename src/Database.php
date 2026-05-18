@@ -204,30 +204,6 @@ class Database
     }
 
     /**
-     * @deprecated Use ensureColumnExists instead
-     */
-    private function ensureContactsColumnExists(string $column, string $alterSql): void
-    {
-        $this->ensureColumnExists('contacts', $column, $alterSql);
-    }
-
-    /**
-     * @deprecated Use ensureColumnExists instead
-     */
-    private function ensureUsersColumnExists(string $column, string $alterSql): void
-    {
-        $this->ensureColumnExists('users', $column, $alterSql);
-    }
-
-    /**
-     * @deprecated Use ensureColumnExists instead
-     */
-    private function ensureAccountsColumnExists(string $column, string $alterSql): void
-    {
-        $this->ensureColumnExists('accounts', $column, $alterSql);
-    }
-
-    /**
      * Best-effort filesystem hardening for the SQLite database file.
      */
     private function secureDatabaseFile(string $path): void

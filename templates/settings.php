@@ -340,7 +340,25 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             <div class="wm-card-header">Scan QR code with your authenticator app</div>
             <div class="wm-card-body">
                 <div class="wm-qr-box">
-                    <img src="<?= htmlspecialchars($qrUrl ?? '') ?>" width="200" height="200" alt="QR Code">
+                    <div id="qrcode-canvas"></div>
+                    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+                            integrity="sha256-3KxKreJH9M09PZkqVJn4N6XMlVnEBNDEy4e3ptPC82c="
+                            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+                    <script>
+                    if (typeof QRCode !== 'undefined') {
+                        try {
+                            new QRCode(document.getElementById('qrcode-canvas'), {
+                                text: <?= json_encode($qrUrl ?? '') ?>,
+                                width: 200,
+                                height: 200
+                            });
+                        } catch (e) {
+                            document.getElementById('qrcode-canvas').textContent = 'QR code could not be rendered. Use the manual code below.';
+                        }
+                    } else {
+                        document.getElementById('qrcode-canvas').textContent = 'QR code library failed to load. Use the manual code below.';
+                    }
+                    </script>
                     <p style="font-size:.78rem;color:var(--wm-text-muted);margin:0">
                         Or enter manually: <code><?= htmlspecialchars($totpSecret) ?></code>
                     </p>
@@ -921,7 +939,19 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             <div class="wm-card-body" style="padding:0">
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
                     <span style="font-size:.85rem">WebyMail Version</span>
-                    <span style="font-size:.85rem;font-weight:600">v<?= Config::VERSION ?></span>
+                    <span style="font-size:.85rem;font-weight:600;display:flex;align-items:center;gap:.4rem">
+                        v<?= Config::VERSION ?>
+                        <?php
+                        $localAheadSys = Config::isLocalVersionAheadOfGitHub();
+                        $latestSys = Config::getLatestGitHubVersion();
+                        if ($localAheadSys === true):
+                        ?>
+                        <span style="font-size:.72rem;color:var(--wm-warning);font-weight:600"
+                              title="Installed version (v<?= htmlspecialchars(Config::VERSION) ?>) is newer than latest GitHub release (v<?= htmlspecialchars((string)$latestSys) ?>).">
+                            newer than GitHub
+                        </span>
+                        <?php endif; ?>
+                    </span>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
                     <span style="font-size:.85rem">Latest Releases</span>
