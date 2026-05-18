@@ -27,7 +27,7 @@ $folderDisplay = htmlspecialchars($folder ?? 'INBOX');
         </button>
     </div>
 
-    <span style="font-size:.78rem;color:var(--wm-text-muted);margin-left:auto"><?= $total ?> message<?= $total !== 1 ? 's' : '' ?></span>
+    <span id="inbox-total-count" style="font-size:.78rem;color:var(--wm-text-muted);margin-left:auto"><?= $total ?> message<?= $total !== 1 ? 's' : '' ?></span>
 
     <button class="btn btn-ghost btn-icon" title="Refresh" onclick="window.location.reload()">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
@@ -55,6 +55,7 @@ $folderDisplay = htmlspecialchars($folder ?? 'INBOX');
     </button>
 </div>
 
+<div id="inbox-content">
 <div class="wm-mail-list" id="mail-list">
     <?php if (empty($messages)): ?>
     <div style="text-align:center;padding:4rem 2rem;color:var(--wm-text-muted)">
@@ -126,6 +127,7 @@ $folderDisplay = htmlspecialchars($folder ?? 'INBOX');
     <?php endif; ?>
 </div>
 <?php endif; ?>
+</div>
 
 <script>
 function bulkAction(action) {

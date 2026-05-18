@@ -84,12 +84,10 @@ $isInbox   = strtoupper($folder) === 'INBOX';
 
 <!-- Read receipt request alert -->
 <?php if (!empty($message['read_receipt_to'])): ?>
-<div class="alert alert-info" style="margin:1rem;border-radius:8px;display:flex;align-items:center;gap:.75rem">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-    <div style="flex:1">
-        The sender has requested a read receipt.
-    </div>
-    <a href="?action=compose&reply=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-primary btn-sm">Send a reply</a>
+<div class="wm-img-banner wm-read-receipt-banner">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <span>The sender has requested a read receipt.</span>
+    <a href="?action=compose&reply=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-primary btn-sm" style="margin-left:auto">Send a reply</a>
 </div>
 <?php endif; ?>
 

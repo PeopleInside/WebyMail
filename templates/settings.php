@@ -332,9 +332,6 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
 
         <?php if (!empty($totpSecret)): ?>
         <!-- Enroll 2FA -->
-        <div class="alert alert-warning">
-            Save your recovery codes somewhere safe before continuing. You will not see them again.
-        </div>
         <?php
         $qrPayload = (string)($qrUrl ?? '');
         ?>
@@ -389,6 +386,9 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                     <?= csrfInput() ?>
                     <input type="hidden" name="totp_secret" value="<?= htmlspecialchars($totpSecret) ?>">
                     <input type="hidden" name="recovery_codes" value="<?= htmlspecialchars(json_encode($recoveryCodes)) ?>">
+                    <div class="alert alert-warning" style="margin-bottom:.5rem">
+                        Save your recovery codes somewhere safe before continuing. You will not see them again.
+                    </div>
                     <div class="alert alert-warning" style="margin-bottom:1rem;display:flex;align-items:flex-start;gap:.5rem;font-size:.82rem">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-top:.1rem;flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                         <span>After enabling 2FA, you will be logged out immediately and must sign in again. This is a required security measure.</span>
