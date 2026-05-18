@@ -54,16 +54,6 @@ class TwoFactor
     }
 
     /**
-     * Return a Google Charts QR code image URL for the otpauth URL.
-     * Used for setup only; no external call is made at verification time.
-     */
-    public function getQRCodeUrl(string $secret, string $email, string $issuer = 'WebyMail'): string
-    {
-        $data = $this->getOtpauthUrl($secret, $email, $issuer);
-        return 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' . rawurlencode($data);
-    }
-
-    /**
      * Verify a 6-digit TOTP code against the secret.
      * Allows WINDOW steps of clock skew.
      */
