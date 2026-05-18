@@ -839,9 +839,9 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
         $sys = Config::checkSystem(); 
         $ignoreBanner = Config::get('ignore_security_banner', false);
         $ignoreUpdate = Config::get('ignore_update_banner', false);
-        // Populate the GitHub version-check session cache so isGitHubRepoAvailable()
-        // has fresh data when the System Information card is rendered below.
-        Config::getNewerVersion();
+        // Refresh version information together with the regular system check so
+        // stale update or mismatch alerts clear as soon as the release state changes.
+        $availableUpdateVersion = Config::getNewerVersion(true);
         ?>
 
         <div class="wm-card" style="margin-bottom:1.5rem">
@@ -984,6 +984,18 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                     </a>
                     <?php endif; ?>
                 </div>
+                <?php if ($availableUpdateVersion): ?>
+                <div style="padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border);background:rgba(var(--wm-primary-rgb),.08)">
+                    <div style="display:flex;align-items:flex-start;gap:.6rem;font-size:.82rem;color:var(--wm-primary)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:.1rem"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/><path d="M5 3h14"/></svg>
+                        <div>
+                            <strong>Update available.</strong>
+                            Version v<?= htmlspecialchars($availableUpdateVersion) ?> is available on GitHub Releases.
+                            <a href="<?= Config::UPDATE_URL ?>" target="_blank" style="color:inherit;font-weight:600">Open release page</a>.
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
                 <?php if ($repoAvailSys === false): ?>
                 <div style="padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border);background:rgba(var(--wm-warning-rgb),.06)">
                     <div style="display:flex;align-items:flex-start;gap:.6rem;font-size:.82rem;color:var(--wm-warning)">

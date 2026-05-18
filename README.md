@@ -34,6 +34,11 @@ https://github.com/PeopleInside/WebyMail/releases
 4. After setup, `setup.php` is automatically renamed to `setup.php.bak` for security.
    - To re-run setup, rename it back to `setup.php` and visit `setup.php?force=1`.
 
+## Update existing installation
+1. Make a backup before updating.
+2. Replace all WebyMail files by FTP with the new release files.
+3. Keep your existing `config/config.php` file.
+
 ## Security
 - A self-hosted proof-of-work captcha is enabled by default on login. To disable it, set `'captcha_enabled' => false` in `config/config.php`.
 - Two factor can be disabled in case of login issue also on `config/config.php`
@@ -48,4 +53,3 @@ https://github.com/PeopleInside/WebyMail/releases
 **Dark mode**
 ![Dark](https://github.com/user-attachments/assets/2b7010aa-0f26-444d-b681-95d2a447bb88)
 <img width="1919" height="952" alt="Screenshot 2026-03-01 173614" src="https://github.com/user-attachments/assets/da00ceb7-175f-4dbd-ae09-28b91d01e63a" />
-

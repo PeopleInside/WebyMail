@@ -160,6 +160,16 @@ function isTrashFolderEquivalent(string $folder, string $trash): bool
     return $normalizeFolderName($folder) === $normalizeFolderName($trash);
 }
 
+function folderExists(array $folders, string $folderName): bool
+{
+    foreach ($folders as $folder) {
+        if (($folder['name'] ?? null) === $folderName) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function moveToTrashOrDelete(ImapClient $imap, string $folder, int $msgNo, string $trash, bool $isTrashFolder): void
 {
     // Case-insensitive folder name comparison using the last path segment.
@@ -1157,6 +1167,42 @@ if ($action === 'spam' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('?action=inbox&folder=' . urlencode($folder));
 }
 
+// ── Move message ─────────────────────────────────────────────────────────────────
+if ($action === 'move' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $msgNo       = (int) ($_GET['msg'] ?? 0);
+    $folder      = $_GET['folder'] ?? 'INBOX';
+    $destination = trim((string) ($_POST['destination'] ?? ''));
+
+    if ($msgNo <= 0 || $destination === '') {
+        flashSet('danger', 'Select a destination folder.');
+        redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
+    }
+
+    if ($destination === $folder) {
+        flashSet('warning', 'The message is already in that folder.');
+        redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
+    }
+
+    try {
+        $imap = $accountMgr->imapConnect($accountId);
+        $folders = $imap->getFolders();
+        if (!folderExists($folders, $destination)) {
+            $imap->disconnect();
+            flashSet('danger', 'Selected folder is not available.');
+            redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
+        }
+
+        $imap->moveMessage($folder, $msgNo, $destination);
+        $imap->disconnect();
+        flashSet('success', 'Message moved to "' . $destination . '".');
+        redirect('?action=inbox&folder=' . urlencode($destination));
+    } catch (RuntimeException $e) {
+        error_log('Move message failed for user ' . $userId . ', account ' . $accountId . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        flashSet('danger', 'Could not move the message. Please try again later.');
+    }
+    redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
+}
+
 // ── Email headers (raw) ───────────────────────────────────────────────────────
 if ($action === 'email_headers' && isAjax()) {
     $msgNo  = (int) ($_GET['msg']    ?? 0);
@@ -1211,6 +1257,7 @@ if ($action === 'bulk' && isAjax()) {
     $folder = $body['folder'] ?? 'INBOX';
     $uids   = array_map('intval', $body['uids'] ?? []);
     $act    = $body['action'] ?? '';
+    $destination = trim((string) ($body['destination'] ?? ''));
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
@@ -1219,6 +1266,23 @@ if ($action === 'bulk' && isAjax()) {
             $inTrash = isTrashFolderEquivalent($folder, $trash);
             foreach ($uids as $uid) {
                 moveToTrashOrDelete($imap, $folder, $uid, $trash, $inTrash);
+            }
+        } elseif ($act === 'move') {
+            $moveError = null;
+            if ($destination === '') {
+                $moveError = 'Select a destination folder.';
+            } elseif ($destination === $folder) {
+                $moveError = 'Selected messages are already in that folder.';
+            } elseif (!folderExists($imap->getFolders(), $destination)) {
+                $moveError = 'Selected folder is not available.';
+            }
+
+            if ($moveError !== null) {
+                $imap->disconnect();
+                jsonResponse(['ok' => false, 'error' => $moveError]);
+            }
+            foreach ($uids as $uid) {
+                $imap->moveMessage($folder, $uid, $destination);
             }
         } else {
             foreach ($uids as $uid) {
@@ -1230,7 +1294,10 @@ if ($action === 'bulk' && isAjax()) {
             }
         }
         $imap->disconnect();
-        jsonResponse(['ok' => true]);
+        $redirectUrl = $act === 'move'
+            ? '?action=inbox&folder=' . urlencode($destination)
+            : null;
+        jsonResponse(['ok' => true, 'redirect' => $redirectUrl]);
     } catch (RuntimeException $e) {
         error_log('Bulk action failed for user ' . $userId . ', account ' . $accountId . ', action ' . $act . ': ' . $e->getMessage());
         jsonResponse(['ok' => false, 'error' => 'Could not perform bulk action.']);

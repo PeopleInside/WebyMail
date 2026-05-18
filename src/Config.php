@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '3.4.4';
+    public const VERSION = '3.4.5';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
@@ -223,11 +223,16 @@ class Config
         return !$check['all_ok'];
     }
 
-    public static function getNewerVersion(): ?string
+    public static function getNewerVersion(bool $forceRefresh = false): ?string
     {
         // Simple GitHub API check (cached for 24h in session to avoid rate limits)
         $cache = $_SESSION['github_version_check'] ?? null;
-        if (is_array($cache) && ($cache['expires'] ?? 0) > time() && array_key_exists('latest_version', $cache)) {
+        if (
+            !$forceRefresh
+            && is_array($cache)
+            && ($cache['expires'] ?? 0) > time()
+            && array_key_exists('latest_version', $cache)
+        ) {
             return $cache['version'] ?? null;
         }
 
@@ -284,11 +289,11 @@ class Config
         return $newerVersion;
     }
 
-    public static function getLatestGitHubVersion(): ?string
+    public static function getLatestGitHubVersion(bool $forceRefresh = false): ?string
     {
         $cache = $_SESSION['github_version_check'] ?? null;
-        if (!is_array($cache) || ($cache['expires'] ?? 0) <= time()) {
-            self::getNewerVersion();
+        if ($forceRefresh || !is_array($cache) || ($cache['expires'] ?? 0) <= time()) {
+            self::getNewerVersion($forceRefresh);
             $cache = $_SESSION['github_version_check'] ?? null;
         }
 
@@ -300,9 +305,9 @@ class Config
         return (is_string($latest) && $latest !== '') ? $latest : null;
     }
 
-    public static function isLocalVersionAheadOfGitHub(): ?bool
+    public static function isLocalVersionAheadOfGitHub(bool $forceRefresh = false): ?bool
     {
-        $latest = self::getLatestGitHubVersion();
+        $latest = self::getLatestGitHubVersion($forceRefresh);
         if ($latest === null) {
             return null;
         }
