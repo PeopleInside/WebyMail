@@ -156,7 +156,10 @@ function bulkAction(action) {
         uids:   uids,
         folder: '<?= addslashes($folder ?? 'INBOX') ?>'
     }).then(function(res) {
-        if (res.ok) window.location.href = res.redirect || window.location.href;
+        if (res.ok) {
+            if (res.redirect) window.location.href = res.redirect;
+            else window.location.reload();
+        }
         else alert(res.error || 'Action failed.');
     });
 }
@@ -176,7 +179,10 @@ function bulkMove() {
         folder: '<?= addslashes($folder ?? 'INBOX') ?>',
         destination: destination.value
     }).then(function(res) {
-        if (res.ok) window.location.href = res.redirect || window.location.href;
+        if (res.ok) {
+            if (res.redirect) window.location.href = res.redirect;
+            else window.location.reload();
+        }
         else alert(res.error || 'Action failed.');
     });
 }
