@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '3.4.8';
+    public const VERSION = '3.4.9';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
@@ -552,6 +552,40 @@ class Config
                     if (str_ends_with($file, '.db.bak')) {
                         @unlink($dbDir . DIRECTORY_SEPARATOR . $file);
                     }
+                }
+            }
+            // Rotate setup backups
+            self::rotateBackups($dbDir);
+        }
+    }
+
+    /**
+     * Maintain only the most recent N backups in the given directory.
+     */
+    public static function rotateBackups(string $dir, int $keep = 5): void
+    {
+        if (!is_dir($dir) || !is_writable($dir)) {
+            return;
+        }
+
+        $pattern = $dir . DIRECTORY_SEPARATOR . 'webymail_backup_*.db';
+        $backups = glob($pattern);
+        
+        if ($backups === false || count($backups) <= $keep) {
+            return;
+        }
+
+        // Sort by modification time, descending (newest first)
+        usort($backups, fn($a, $b) => filemtime($b) <=> filemtime($a));
+
+        // Remove files beyond the limit
+        $toDelete = array_slice($backups, $keep);
+        foreach ($toDelete as $file) {
+            @unlink($file);
+            // Also cleanup WAL/SHM sidecars if they exist for the backup
+            foreach (['-wal', '-shm', '-journal'] as $suffix) {
+                if (is_file($file . $suffix)) {
+                    @unlink($file . $suffix);
                 }
             }
         }

@@ -32,7 +32,7 @@ class Account
         return $this->db->fetchAll(
             'SELECT id, user_id, label, sender_name, signature, email, imap_host, imap_port, imap_ssl,
                     smtp_host, smtp_port, smtp_ssl, smtp_starttls, username, is_primary, created_at,
-                    validation_status
+                    validation_status, allow_insecure_imap, allow_insecure_smtp
               FROM accounts WHERE user_id = ? ORDER BY is_primary DESC, id ASC',
             [$userId]
         );
@@ -50,8 +50,9 @@ class Account
         $this->db->query(
             'INSERT INTO accounts
                 (user_id, label, sender_name, signature, email, imap_host, imap_port, imap_ssl,
-                 smtp_host, smtp_port, smtp_ssl, smtp_starttls, username, password, is_primary, validation_status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)',
+                 smtp_host, smtp_port, smtp_ssl, smtp_starttls, username, password, is_primary, validation_status,
+                 allow_insecure_imap, allow_insecure_smtp)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)',
             [
                 $userId,
                 $data['label'],
@@ -67,7 +68,9 @@ class Account
                 (int) $data['smtp_starttls'],
                 $data['username'],
                 $this->auth->encryptPassword($data['password']),
-                $status
+                $status,
+                (int) ($data['allow_insecure_imap'] ?? 0),
+                (int) ($data['allow_insecure_smtp'] ?? 0)
             ]
         );
         return $this->db->lastInsertId();
@@ -87,6 +90,8 @@ class Account
                          (int)$data['smtp_port'] !== (int)$existing['smtp_port'] ||
                          (int)$data['smtp_ssl'] !== (int)$existing['smtp_ssl'] ||
                          (int)$data['smtp_starttls'] !== (int)$existing['smtp_starttls'] ||
+                         (int)($data['allow_insecure_imap'] ?? 0) !== (int)($existing['allow_insecure_imap'] ?? 0) ||
+                         (int)($data['allow_insecure_smtp'] ?? 0) !== (int)($existing['allow_insecure_smtp'] ?? 0) ||
                          !empty($data['password']));
         
         $status = $existing['validation_status'];
@@ -108,9 +113,10 @@ class Account
         $data['sender_name'] = $data['sender_name'] ?? '';
         $data['signature'] = $data['signature'] ?? '';
         $fields = ['label', 'sender_name', 'signature', 'email', 'imap_host', 'imap_port', 'imap_ssl',
-                   'smtp_host', 'smtp_port', 'smtp_ssl', 'smtp_starttls', 'username'];
+                   'smtp_host', 'smtp_port', 'smtp_ssl', 'smtp_starttls', 'username',
+                   'allow_insecure_imap', 'allow_insecure_smtp'];
         $set    = implode(', ', array_map(fn($f) => "{$f} = ?", $fields));
-        $values = array_map(fn($f) => $data[$f], $fields);
+        $values = array_map(fn($f) => $data[$f] ?? $existing[$f], $fields);
 
         if (!empty($data['password'])) {
             $set      .= ', password = ?';
@@ -141,7 +147,8 @@ class Account
                 (int)$data['imap_port'],
                 (bool)$data['imap_ssl'],
                 $data['username'],
-                $data['password']
+                $data['password'],
+                (bool)($data['allow_insecure_imap'] ?? false)
             );
             $imap->disconnect();
         } catch (Exception $e) {
@@ -155,7 +162,8 @@ class Account
                 $data['smtp_host'],
                 (int)$data['smtp_port'],
                 (bool)$data['smtp_ssl'],
-                (bool)$data['smtp_starttls']
+                (bool)$data['smtp_starttls'],
+                (bool)($data['allow_insecure_smtp'] ?? false)
             );
             $smtp->authenticate($data['username'], $data['password']);
             $smtp->quit();
@@ -248,7 +256,8 @@ class Account
             (int) $account['imap_port'],
             (bool) $account['imap_ssl'],
             $account['username'],
-            $account['password_plain']
+            $account['password_plain'],
+            (bool) ($account['allow_insecure_imap'] ?? false)
         );
         return $imap;
     }
@@ -270,6 +279,7 @@ class Account
             'username'      => $account['username'],
             'password'      => $account['password_plain'],
             'email'         => $account['email'],
+            'allow_insecure' => (bool) ($account['allow_insecure_smtp'] ?? false),
         ];
     }
 }

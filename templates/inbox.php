@@ -31,12 +31,13 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
         <button class="btn btn-outline btn-sm" id="bulk-export">Export ZIP</button>
         <?php if (!empty($moveTargets)): ?>
         <select id="bulk-move-destination" class="btn btn-outline btn-sm" style="max-width:180px">
-            <option value="">Move to…</option>
+            <option value="">Folder…</option>
             <?php foreach ($moveTargets as $target): ?>
             <option value="<?= htmlspecialchars($target['name']) ?>"><?= htmlspecialchars($target['display'] ?? $target['name']) ?></option>
             <?php endforeach; ?>
         </select>
         <button class="btn btn-outline btn-sm" id="bulk-move">Move</button>
+        <button class="btn btn-outline btn-sm" id="bulk-copy">Copy</button>
         <?php endif; ?>
         <button class="btn btn-danger btn-sm" id="bulk-delete">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
@@ -181,7 +182,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
             alert('Select a destination folder.');
             return;
         }
-        if (!confirm('Move the selected messages to "' + destination.options[destination.selectedIndex].text + '"? This action cannot be undone.')) {
+        if (!confirm('Move the selected messages to "' + destination.options[destination.selectedIndex].text + '"?')) {
             return;
         }
 
@@ -194,6 +195,31 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
             if (res.ok) {
                 if (res.redirect) window.location.href = res.redirect;
                 else window.location.reload();
+            }
+            else alert(res.error || 'Action failed.');
+        });
+    }
+
+    function bulkCopy() {
+        const uids = getSelectedUids();
+        const destination = document.getElementById('bulk-move-destination');
+        if (!uids.length) return;
+        if (!destination || !destination.value) {
+            alert('Select a destination folder.');
+            return;
+        }
+        if (!confirm('Copy the selected messages to "' + destination.options[destination.selectedIndex].text + '"?')) {
+            return;
+        }
+
+        apiPost('?action=bulk', {
+            action: 'copy',
+            uids: uids,
+            folder: <?= $folderJs ?>,
+            destination: destination.value
+        }).then(function(res) {
+            if (res.ok) {
+                window.location.reload();
             }
             else alert(res.error || 'Action failed.');
         });
@@ -217,6 +243,9 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
     
     const bMove = document.getElementById('bulk-move');
     if (bMove) bMove.addEventListener('click', bulkMove);
+
+    const bCopy = document.getElementById('bulk-copy');
+    if (bCopy) bCopy.addEventListener('click', bulkCopy);
     
     const bDelete = document.getElementById('bulk-delete');
     if (bDelete) bDelete.addEventListener('click', () => bulkAction('delete'));
@@ -237,7 +266,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
     const emptyForm = document.getElementById('empty-folder-form');
     if (emptyForm) {
         emptyForm.addEventListener('submit', function(e) {
-            if (!confirm('Sei sicuro di voler svuotare definitivamente questa cartella? Tutte le email verranno eliminate e l\'operazione non può essere annullata.')) {
+            if (!confirm('Are you sure you want to permanently empty this folder? All emails will be deleted and this action cannot be undone.')) {
                 e.preventDefault();
             }
         });

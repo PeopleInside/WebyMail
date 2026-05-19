@@ -517,7 +517,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
     const moveDbBtn = document.getElementById('move-db-setup-btn');
     if (moveDbBtn) {
         moveDbBtn.addEventListener('click', function(e) {
-            if (!confirm('Spostare il database in questo percorso? Il file attuale verrà eliminato permanentemente dalla root. ATTENZIONE: Se hai già effettuato l\'accesso, la tua sessione potrebbe andare persa e dovrai rientrare.')) {
+            if (!confirm('Move the database to this path? The current file will be permanently deleted from the root. WARNING: If you are already logged in, your session may be lost and you will need to log in again.')) {
                 e.preventDefault();
             }
         });

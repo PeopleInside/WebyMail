@@ -76,6 +76,7 @@ header("X-Content-Type-Options: nosniff");
 header("X-Frame-Options: SAMEORIGIN");
 header("X-XSS-Protection: 1; mode=block");
 header("Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()");
+header("Referrer-Policy: strict-origin-when-cross-origin");
 
 spl_autoload_register(function (string $class): void {
     $file = __DIR__ . '/src/' . $class . '.php';
@@ -216,6 +217,21 @@ function folderExists(array $folders, string $folderName): bool
         }
     }
     return false;
+}
+
+/**
+ * Validate that a user-supplied folder name exists on the IMAP server.
+ * Falls back to INBOX and emits a flash warning if the folder is unknown.
+ * Prevents unauthenticated folder-name injection via crafted GET/POST parameters.
+ */
+function validateSourceFolder(ImapClient $imap, string $folder): string
+{
+    $folders = $imap->getFolders();
+    if (folderExists($folders, $folder)) {
+        return $folder;
+    }
+    // Unknown folder: silently fall back to INBOX to avoid leaking error details
+    return 'INBOX';
 }
 
 function moveToTrashOrDelete(ImapClient $imap, string $folder, int $msgNo, string $trash, bool $isTrashFolder): void
@@ -439,10 +455,15 @@ if ($action === 'login') {
                 $smtpHost = $smtpHost ?: $host;
             }
 
+            $allowImapInsecure = $serverSettingsShown ? !empty($_POST['allow_insecure_imap']) : (bool) Config::get('allow_insecure_imap_cert', false);
+            $allowSmtpInsecure = $serverSettingsShown ? !empty($_POST['allow_insecure_smtp']) : (bool) Config::get('allow_insecure_imap_cert', false);
+
             $result = $auth->loginWithImap(
                 $host, $port, $ssl, $username, $password,
                 $smtpHost, $smtpPort, $smtpSsl, $smtpTls,
-                !empty($_POST['remember_me'])
+                !empty($_POST['remember_me']),
+                $allowImapInsecure,
+                $allowSmtpInsecure
             );
             $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 
@@ -825,6 +846,7 @@ if ($action === 'email_body') {
 
     try {
         $imap    = $accountMgr->imapConnect($accountId);
+        $folder  = validateSourceFolder($imap, $folder); // L-NEW: validate source folder
         $message = $imap->getMessage($folder, $msgNo);
         $imap->disconnect();
     } catch (Throwable $e) {
@@ -1179,18 +1201,36 @@ if ($action === 'import_eml' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $file = $_FILES['eml_file'] ?? null;
 
     if ($file && $file['error'] === UPLOAD_ERR_OK) {
-        $raw = file_get_contents($file['tmp_name']);
-        try {
-            $imap = $accountMgr->imapConnect($accountId);
-            if ($imap->appendMessage($folder, $raw)) {
-                $flash = ['type' => 'success', 'message' => 'Email imported successfully.'];
-            } else {
+        // Basic EML validation: check for common MIME/Email headers
+        $f = fopen($file['tmp_name'], 'r');
+        $headerLine = fgets($f, 1024);
+        fclose($f);
+        
+        $isValid = false;
+        if ($headerLine !== false) {
+            $headerLine = trim($headerLine);
+            // Common headers at the start of EML files
+            if (preg_match('/^(Return-Path:|Received:|Date:|From:|Subject:|MIME-Version:|X-)/i', $headerLine)) {
+                $isValid = true;
+            }
+        }
+
+        if (!$isValid) {
+            $flash = ['type' => 'danger', 'message' => 'Invalid email format. Only .eml files are supported.'];
+        } else {
+            $raw = file_get_contents($file['tmp_name']);
+            try {
+                $imap = $accountMgr->imapConnect($accountId);
+                if ($imap->appendMessage($folder, $raw)) {
+                    $flash = ['type' => 'success', 'message' => 'Email imported successfully.'];
+                } else {
+                    $flash = ['type' => 'danger', 'message' => 'Failed to import email.'];
+                }
+                $imap->disconnect();
+            } catch (Exception $e) {
+                error_log('EML import failed for user ' . $userId . ', account ' . $accountId . ': ' . $e->getMessage());
                 $flash = ['type' => 'danger', 'message' => 'Failed to import email.'];
             }
-            $imap->disconnect();
-        } catch (Exception $e) {
-            error_log('EML import failed for user ' . $userId . ', account ' . $accountId . ': ' . $e->getMessage());
-            $flash = ['type' => 'danger', 'message' => 'Failed to import email.'];
         }
     } else {
         $flash = ['type' => 'danger', 'message' => 'No file uploaded or upload error.'];
@@ -1207,6 +1247,7 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
+        $folder = validateSourceFolder($imap, $folder); // L-NEW: validate source folder
         $trash = resolveTrashFolder($imap);
         $inTrash = isTrashFolderEquivalent($folder, $trash);
         moveToTrashOrDelete($imap, $folder, $msgNo, $trash, $inTrash);
@@ -1226,6 +1267,7 @@ if ($action === 'spam' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
+        $folder = validateSourceFolder($imap, $folder); // L-NEW: validate source folder
         $spam = resolveSpamFolder($imap);
         $imap->moveMessage($folder, $msgNo, $spam);
         $imap->disconnect();
@@ -1273,6 +1315,37 @@ if ($action === 'move' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
 }
 
+// ── Copy message ─────────────────────────────────────────────────────────────────
+if ($action === 'copy' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $msgNo       = (int) ($_GET['msg']    ?? 0);
+    $folder      = $_GET['folder'] ?? 'INBOX';
+    $destination = trim((string) ($_POST['destination'] ?? ''));
+
+    if ($msgNo <= 0 || $destination === '') {
+        flashSet('danger', 'Select a destination folder.');
+        redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
+    }
+
+    try {
+        $imap = $accountMgr->imapConnect($accountId);
+        $folders = $imap->getFolders();
+        if (!folderExists($folders, $destination)) {
+            $imap->disconnect();
+            flashSet('danger', 'Selected folder is not available.');
+            redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
+        }
+
+        $imap->copyMessage($folder, $msgNo, $destination);
+        $imap->disconnect();
+        flashSet('success', 'Message copied to "' . $destination . '".');
+        redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
+    } catch (RuntimeException $e) {
+        error_log('Copy message failed for user ' . $userId . ', account ' . $accountId . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        flashSet('danger', 'Could not copy the message. Please try again later.');
+        redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
+    }
+}
+
 // ── Email headers (raw) ───────────────────────────────────────────────────────
 if ($action === 'email_headers' && isAjax()) {
     $msgNo  = (int) ($_GET['msg']    ?? 0);
@@ -1280,6 +1353,7 @@ if ($action === 'email_headers' && isAjax()) {
 
     try {
         $imap    = $accountMgr->imapConnect($accountId);
+        $folder  = validateSourceFolder($imap, $folder); // L-NEW: validate source folder
         $headers = $imap->getRawHeaders($folder, $msgNo);
         $imap->disconnect();
         jsonResponse(['ok' => true, 'headers' => $headers]);
@@ -1353,6 +1427,14 @@ if ($action === 'bulk' && isAjax()) {
             }
             foreach ($uids as $uid) {
                 $imap->moveMessageByUid($folder, $uid, $destination);
+            }
+        } elseif ($act === 'copy') {
+            if ($destination === '') {
+                $imap->disconnect();
+                jsonResponse(['ok' => false, 'error' => 'Select a destination folder.']);
+            }
+            foreach ($uids as $uid) {
+                $imap->copyMessageByUid($folder, $uid, $destination);
             }
         } else {
             foreach ($uids as $uid) {
@@ -1654,9 +1736,10 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $smtp   = new SmtpClient();
-    $allowInsecure = (bool) Config::get('allow_insecure_imap_cert', false);
-    $smtp->setSslVerify(!$allowInsecure);
     $params = $accountMgr->smtpParams($fromAccountId);
+    // Fix M-3b: use per-account allow_insecure_smtp flag instead of the global config key
+    $allowInsecure = (bool) ($params['allow_insecure'] ?? false);
+    $smtp->setSslVerify(!$allowInsecure);
     $user   = Database::getInstance()->fetch('SELECT display_name FROM users WHERE id = ?', [$userId]);
     $accountFrom = $accountMgr->get($fromAccountId);
 
@@ -2090,6 +2173,8 @@ if ($action === 'settings_save') {
                     'smtp_starttls' => $smtpStarttls,
                     'username'      => trim($_POST['username']   ?? ''),
                     'password'      => $_POST['password']        ?? '',
+                    'allow_insecure_imap' => !empty($_POST['allow_insecure_imap']),
+                    'allow_insecure_smtp' => !empty($_POST['allow_insecure_smtp']),
                 ]);
                 $newAcc = $mgr->get($newId);
                 $isValid = ($newAcc['validation_status'] === 'valid');
@@ -2146,6 +2231,8 @@ if ($action === 'settings_save') {
                 'smtp_ssl'      => $smtpSsl,
                 'smtp_starttls' => $smtpStarttls,
                 'username'      => trim($_POST['username']    ?? $existing['username']),
+                'allow_insecure_imap' => !empty($_POST['allow_insecure_imap']),
+                'allow_insecure_smtp' => !empty($_POST['allow_insecure_smtp']),
             ];
             $newPassword = $_POST['password'] ?? '';
             if ($newPassword !== '') {

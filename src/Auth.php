@@ -11,12 +11,14 @@ class Auth
     private Database  $db;
     private Session   $session;
     private TwoFactor $tf;
+    private Logger    $logger;
 
     public function __construct()
     {
         $this->db      = Database::getInstance();
         $this->session = new Session();
         $this->tf      = new TwoFactor();
+        $this->logger  = new Logger();
     }
 
     // -------------------------------------------------------------------------
@@ -38,7 +40,9 @@ class Auth
         int    $smtpPort,
         bool   $smtpSsl,
         bool   $smtpStarttls,
-        bool   $rememberMe = false
+        bool   $rememberMe = false,
+        bool   $allowInsecureImap = false,
+        bool   $allowInsecureSmtp = false
     ): array {
         $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
         if ($this->isBanned($ip, $username)) {
@@ -48,18 +52,18 @@ class Auth
         // Test IMAP credentials
         try {
             $imap = new ImapClient();
-            // We pass allow_insecure_imap_cert from config if available
-            $allowInsecure = (bool) Config::get('allow_insecure_imap_cert', false);
-            $imap->connect($host, $port, $ssl, $username, $password, $allowInsecure);
+            $imap->connect($host, $port, $ssl, $username, $password, $allowInsecureImap);
             $imap->disconnect();
         } catch (RuntimeException $e) {
             $this->recordFailedAttempt($ip, $username);
+            $this->logger->security('login_failure', ['username' => $username, 'error' => $e->getMessage()]);
             error_log('IMAP login failed for ' . $username . ' from ' . $ip . ': ' . $e->getMessage());
             return ['ok' => false, 'error' => 'Invalid credentials or server unreachable. Please check your details.'];
         }
 
         // Success: clear attempts
         $this->clearAttempts($ip, $username);
+        $this->logger->security('login_step1_success', ['username' => $username]);
 
         // Provision or retrieve the user record
         $user = $this->db->fetch('SELECT * FROM users WHERE email = ?', [$username]);
@@ -82,14 +86,16 @@ class Auth
             $this->db->query(
                 'INSERT INTO accounts
                     (user_id, label, sender_name, signature, email, imap_host, imap_port, imap_ssl,
-                     smtp_host, smtp_port, smtp_ssl, smtp_starttls, username, password, is_primary, validation_status)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, "valid")',
+                     smtp_host, smtp_port, smtp_ssl, smtp_starttls, username, password, is_primary, validation_status,
+                     allow_insecure_imap, allow_insecure_smtp)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, "valid", ?, ?)',
                 [
                     $userId, 'Primary', $username, '',
                     $username,
                     $host, $port, (int) $ssl,
                     $smtpHost, $smtpPort, (int) $smtpSsl, (int) $smtpStarttls,
                     $username, $this->encryptPassword($password),
+                    (int) $allowInsecureImap, (int) $allowInsecureSmtp
                 ]
             );
             $accountId = $this->db->lastInsertId();
@@ -99,12 +105,14 @@ class Auth
             $this->db->query(
                 'UPDATE accounts SET imap_host=?, imap_port=?, imap_ssl=?,
                     smtp_host=?, smtp_port=?, smtp_ssl=?, smtp_starttls=?,
-                    password=?, username=?, validation_status="valid"
+                    password=?, username=?, validation_status="valid",
+                    allow_insecure_imap=?, allow_insecure_smtp=?
                  WHERE id=?',
                 [
                     $host, $port, (int) $ssl,
                     $smtpHost, $smtpPort, (int) $smtpSsl, (int) $smtpStarttls,
                     $this->encryptPassword($password), $username,
+                    (int) $allowInsecureImap, (int) $allowInsecureSmtp,
                     $accountId,
                 ]
             );
@@ -149,6 +157,10 @@ class Auth
             return ['ok' => false, 'error' => 'Too many failed attempts. Please log in again.'];
         }
 
+        $userId    = (int) $pending['user_id'];
+        $accountId = (int) $pending['account_id'];
+        $rememberMe = (bool) ($pending['remember_me'] ?? false);
+
         // IP-level rate limiting (shared with the IMAP login counter)
         $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
         $userRow = $this->db->fetch('SELECT email FROM users WHERE id = ?', [$userId]);
@@ -157,10 +169,6 @@ class Auth
             return ['ok' => false, 'error' => 'Too many failed login attempts. Please try again in 15 minutes.'];
         }
 
-        $userId    = (int) $pending['user_id'];
-        $accountId = (int) $pending['account_id'];
-        $rememberMe = (bool) ($pending['remember_me'] ?? false);
-
         $user = $this->db->fetch('SELECT * FROM users WHERE id = ?', [$userId]);
         if ($user === null) {
             unset($_SESSION['pending_2fa']);
@@ -168,8 +176,14 @@ class Auth
         }
 
         // Try TOTP first
-        if ($this->tf->verify($user['totp_secret'], $code)) {
+        $verifiedAt = $this->tf->verify($user['totp_secret'], $code, $user['last_totp_at'] ? (int)$user['last_totp_at'] : null);
+        if ($verifiedAt !== null) {
+            $this->db->query(
+                'UPDATE users SET last_totp_at = ? WHERE id = ?',
+                [$verifiedAt, $userId]
+            );
             $this->clearAttempts($ip);
+            $this->logger->security('login_success', ['userId' => $userId, 'username' => $username, 'type' => 'totp']);
             unset($_SESSION['pending_2fa']);
             $this->session->create($userId, $accountId, $rememberMe);
             return ['ok' => true];
@@ -184,6 +198,7 @@ class Auth
                 [json_encode($updated), $userId]
             );
             $this->clearAttempts($ip);
+            $this->logger->security('login_success', ['userId' => $userId, 'username' => $username, 'type' => 'recovery']);
             unset($_SESSION['pending_2fa']);
             $this->session->create($userId, $accountId, $rememberMe);
             return ['ok' => true, 'recovery_used' => true, 'remaining' => count($updated)];
@@ -192,6 +207,7 @@ class Auth
         // Failed attempt: increment counter in pending session and record against IP and username
         $_SESSION['pending_2fa']['attempts'] = $attempts + 1;
         $this->recordFailedAttempt($ip, $username);
+        $this->logger->security('login_2fa_failure', ['userId' => $userId, 'username' => $username]);
 
         $remaining = $maxAttempts - ($attempts + 1);
         if ($remaining <= 0) {
