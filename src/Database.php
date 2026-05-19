@@ -99,7 +99,9 @@ class Database
                 password     TEXT    NOT NULL,
                 is_primary   INTEGER NOT NULL DEFAULT 0,
                 created_at   INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-                validation_status TEXT NOT NULL DEFAULT 'pending'
+                validation_status TEXT NOT NULL DEFAULT 'pending',
+                allow_insecure_imap INTEGER NOT NULL DEFAULT 0,
+                allow_insecure_smtp INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS sessions (
@@ -147,6 +149,11 @@ class Database
         $this->ensureColumnExists('accounts', 'sender_name', "ALTER TABLE accounts ADD COLUMN sender_name TEXT NOT NULL DEFAULT ''");
         $this->ensureColumnExists('accounts', 'signature', "ALTER TABLE accounts ADD COLUMN signature TEXT NOT NULL DEFAULT ''");
         $this->ensureColumnExists('accounts', 'validation_status', "ALTER TABLE accounts ADD COLUMN validation_status TEXT NOT NULL DEFAULT 'pending'");
+        $this->ensureColumnExists('accounts', 'allow_insecure_imap', "ALTER TABLE accounts ADD COLUMN allow_insecure_imap INTEGER NOT NULL DEFAULT 0");
+        $this->ensureColumnExists('accounts', 'allow_insecure_smtp', "ALTER TABLE accounts ADD COLUMN allow_insecure_smtp INTEGER NOT NULL DEFAULT 0");
+        
+        // Users table
+        $this->ensureColumnExists('users', 'last_totp_at', "ALTER TABLE users ADD COLUMN last_totp_at INTEGER");
         
         // Contacts table
         $this->ensureColumnExists('contacts', 'phone_enc', "ALTER TABLE contacts ADD COLUMN phone_enc TEXT");

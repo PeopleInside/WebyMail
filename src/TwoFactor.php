@@ -56,22 +56,36 @@ class TwoFactor
     /**
      * Verify a 6-digit TOTP code against the secret.
      * Allows WINDOW steps of clock skew.
+     * 
+     * @param string $secret        Base32 secret
+     * @param string $code          User-provided code
+     * @param int|null $lastUsedAt  Timestamp of last successful verification
+     * @return int|null             Timestamp of successful verification step, or null on failure
      */
-    public function verify(string $secret, string $code): bool
+    public function verify(string $secret, string $code, ?int $lastUsedAt = null): ?int
     {
         $code = trim($code);
         if (!preg_match('/^\d{6}$/', $code)) {
-            return false;
+            return null;
         }
         $key      = $this->base32Decode($secret);
-        $timeStep = (int) floor(time() / self::PERIOD);
+        $time     = time();
+        $timeStep = (int) floor($time / self::PERIOD);
 
         for ($offset = -self::WINDOW; $offset <= self::WINDOW; $offset++) {
-            if (hash_equals($this->compute($key, $timeStep + $offset), $code)) {
-                return true;
+            $step = $timeStep + $offset;
+            $stepTimestamp = $step * self::PERIOD;
+            
+            // Replay protection: code must be for a newer time step than the last used one
+            if ($lastUsedAt !== null && $stepTimestamp <= $lastUsedAt) {
+                continue;
+            }
+
+            if (hash_equals($this->compute($key, $step), $code)) {
+                return $stepTimestamp;
             }
         }
-        return false;
+        return null;
     }
 
     /**

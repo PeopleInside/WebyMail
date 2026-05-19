@@ -108,11 +108,16 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                                            value="<?= htmlspecialchars($_POST['imap_port'] ?? Config::get('imap_port', '993')) ?>">
                                 </div>
                             </div>
-                            <div>
+                            <div style="display:flex;gap:1.5rem;flex-wrap:wrap">
                                 <label>
                                     <input type="checkbox" name="imap_ssl" value="1"
                                            <?= (empty($_POST) ? Config::get('imap_ssl', true) : !empty($_POST['imap_ssl'])) ? 'checked' : '' ?>>
                                     Use SSL/TLS
+                                </label>
+                                <label title="Compatibility only: use when the server has an invalid or self-signed certificate.">
+                                    <input type="checkbox" name="allow_insecure_imap" value="1"
+                                           <?= !empty($_POST['allow_insecure_imap']) ? 'checked' : '' ?>>
+                                    <span style="color:var(--wm-danger);font-size:.82rem">Insecure cert</span>
                                 </label>
                             </div>
                             <div style="display:grid;grid-template-columns:1fr 80px;gap:.5rem;align-items:end">
@@ -141,6 +146,11 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                                             data-smtp-starttls
                                             <?= (empty($_POST) ? Config::get('smtp_starttls', false) : !empty($_POST['smtp_starttls'])) ? 'checked' : '' ?>>
                                     STARTTLS (port 587)
+                                </label>
+                                <label title="Compatibility only: use when the server has an invalid or self-signed certificate.">
+                                    <input type="checkbox" name="allow_insecure_smtp" value="1"
+                                           <?= !empty($_POST['allow_insecure_smtp']) ? 'checked' : '' ?>>
+                                    <span style="color:var(--wm-danger);font-size:.82rem">Insecure cert</span>
                                 </label>
                             </div>
                         </div>

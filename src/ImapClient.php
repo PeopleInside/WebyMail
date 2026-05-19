@@ -204,11 +204,25 @@ class ImapClient
         return (bool) imap_mail_move($this->conn, (string) $msgNo, $destRaw);
     }
 
+    public function copyMessage(string $folder, int $msgNo, string $dest): bool
+    {
+        $this->reopenFolder($folder);
+        $destRaw = mb_convert_encoding($dest, 'UTF7-IMAP', 'UTF-8');
+        return (bool) imap_mail_copy($this->conn, (string) $msgNo, $destRaw);
+    }
+
     public function moveMessageByUid(string $folder, int $uid, string $dest): bool
     {
         $this->reopenFolder($folder);
         $destRaw = mb_convert_encoding($dest, 'UTF7-IMAP', 'UTF-8');
         return (bool) imap_mail_move($this->conn, (string) $uid, $destRaw, CP_UID);
+    }
+
+    public function copyMessageByUid(string $folder, int $uid, string $dest): bool
+    {
+        $this->reopenFolder($folder);
+        $destRaw = mb_convert_encoding($dest, 'UTF7-IMAP', 'UTF-8');
+        return (bool) imap_mail_copy($this->conn, (string) $uid, $destRaw, CP_UID);
     }
 
     public function markRead(string $folder, int $msgNo, bool $read): bool

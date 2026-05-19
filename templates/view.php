@@ -59,12 +59,13 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
         <form method="post" action="<?= htmlspecialchars($moveActionUrl) ?>" style="display:inline-flex;align-items:center;gap:.35rem" id="move-msg-form">
             <?= csrfInput() ?>
             <select name="destination" class="btn btn-outline btn-sm" style="max-width:180px" id="move-dest-select">
-                <option value="">Move to…</option>
+                <option value="">Folder…</option>
                 <?php foreach ($moveTargets as $target): ?>
                 <option value="<?= htmlspecialchars($target['name']) ?>"><?= htmlspecialchars($target['display'] ?? $target['name']) ?></option>
                 <?php endforeach; ?>
             </select>
             <button class="btn btn-ghost btn-sm" type="submit" title="Move message">Move</button>
+            <button class="btn btn-ghost btn-sm" type="submit" title="Copy message" formaction="?action=copy&folder=<?= rawurlencode($folder) ?>&msg=<?= $msgNo ?>">Copy</button>
         </form>
         <?php endif; ?>
 
@@ -210,7 +211,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
     const deleteForm = document.getElementById('delete-msg-form');
     if (deleteForm) {
         deleteForm.addEventListener('submit', function(e) {
-            const msg = '<?= ($isTrash ?? false) ? "Eliminare permanentemente questo messaggio? L\'azione non può essere annullata." : "Spostare questo messaggio nel cestino?" ?>';
+            const msg = '<?= ($isTrash ?? false) ? "Permanently delete this message? This action cannot be undone." : "Move this message to trash?" ?>';
             if (!confirm(msg)) e.preventDefault();
         });
     }
@@ -224,7 +225,10 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
                 alert('Select a destination folder.');
                 return;
             }
-            if (!confirm('Spostare questo messaggio nella cartella "' + destination.options[destination.selectedIndex].text + '"? L\'azione non può essere annullata.')) {
+            
+            const btn = e.submitter;
+            const actionLabel = (btn && btn.textContent === 'Copy') ? 'Copy' : 'Move';
+            if (!confirm(actionLabel + ' this message to folder "' + destination.options[destination.selectedIndex].text + '"?')) {
                 e.preventDefault();
             }
         });
