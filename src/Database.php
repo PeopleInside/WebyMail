@@ -110,7 +110,9 @@ class Database
                 user_agent   TEXT,
                 created_at   INTEGER NOT NULL DEFAULT (strftime('%s','now')),
                 expires_at   INTEGER NOT NULL,
-                last_seen    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+                last_seen    INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                remember_me  INTEGER NOT NULL DEFAULT 0,
+                idle_timeout INTEGER NOT NULL DEFAULT 7200
             );
 
             CREATE TABLE IF NOT EXISTS contacts (
@@ -126,6 +128,7 @@ class Database
 
             CREATE TABLE IF NOT EXISTS login_attempts (
                 ip_address    TEXT    NOT NULL DEFAULT '',
+                username      TEXT    NOT NULL DEFAULT '',
                 attempts      INTEGER NOT NULL DEFAULT 1,
                 last_attempt  INTEGER NOT NULL DEFAULT (strftime('%s','now'))
             );
@@ -154,9 +157,12 @@ class Database
         $this->ensureColumnExists('sessions', 'ip_address', "ALTER TABLE sessions ADD COLUMN ip_address TEXT");
         $this->ensureColumnExists('sessions', 'user_agent', "ALTER TABLE sessions ADD COLUMN user_agent TEXT");
         $this->ensureColumnExists('sessions', 'account_id', "ALTER TABLE sessions ADD COLUMN account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL");
+        $this->ensureColumnExists('sessions', 'remember_me', "ALTER TABLE sessions ADD COLUMN remember_me INTEGER NOT NULL DEFAULT 0");
+        $this->ensureColumnExists('sessions', 'idle_timeout', "ALTER TABLE sessions ADD COLUMN idle_timeout INTEGER NOT NULL DEFAULT 7200");
         
         // Login attempts table
         $this->ensureColumnExists('login_attempts', 'ip_address', "ALTER TABLE login_attempts ADD COLUMN ip_address TEXT NOT NULL DEFAULT ''");
+        $this->ensureColumnExists('login_attempts', 'username', "ALTER TABLE login_attempts ADD COLUMN username TEXT NOT NULL DEFAULT ''");
         $this->ensureColumnExists('login_attempts', 'attempts', "ALTER TABLE login_attempts ADD COLUMN attempts INTEGER NOT NULL DEFAULT 1");
         $this->ensureColumnExists('login_attempts', 'last_attempt', "ALTER TABLE login_attempts ADD COLUMN last_attempt INTEGER NOT NULL DEFAULT (strftime('%s','now'))");
 
@@ -166,6 +172,7 @@ class Database
             CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
             CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id);
             CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip_address);
+            CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts(username);
         ");
     }
 

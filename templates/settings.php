@@ -39,7 +39,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
         </a>
         <a href="?action=settings&tab=system" class="<?= $tab==='system' ? 'active' : '' ?>" target="_self">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-            System
+            System & Maintenance
         </a>
     </nav>
 
@@ -341,8 +341,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             <div class="wm-card-body">
                 <div class="wm-qr-box">
                     <div id="qrcode-canvas"></div>
-                    <script nonce="<?= $cspNonce ?>" src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
-                            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+                    <script nonce="<?= $cspNonce ?>" src="assets/js/qrcode.min.js"></script>
                     <script nonce="<?= $cspNonce ?>">
                     (function () {
                         var target = document.getElementById('qrcode-canvas');
@@ -415,8 +414,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 <p style="font-size:.875rem">
                     Your account is protected with TOTP two-factor authentication.
                 </p>
-                <form method="post" action="?action=settings_save&tab=disable_2fa"
-                      onsubmit="return confirm('Are you sure? This will disable 2FA protection.')">
+                <form method="post" action="?action=settings_save&tab=disable_2fa" id="disable-2fa-form">
                     <?= csrfInput() ?>
                     <button class="btn btn-danger btn-sm">Disable 2FA</button>
                     <button type="button" class="btn btn-outline btn-sm" id="view-recovery-codes-btn" style="margin-left:.5rem">View Recovery Codes</button>
@@ -572,7 +570,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                         </div>
                     </div>
                     <div style="margin-left:1rem">
-                        <form method="post" action="?action=settings_save&tab=revoke_session" onsubmit="return confirm('<?= $isCurrent ? 'Revoke your current session and sign out?' : 'Revoke this session?' ?>')">
+                        <form method="post" action="?action=settings_save&tab=revoke_session" class="revoke-session-form" data-confirm-msg="<?= $isCurrent ? 'Revoke your current session and sign out?' : 'Revoke this session?' ?>">
                             <?= csrfInput() ?>
                             <input type="hidden" name="token" value="<?= htmlspecialchars($s['token']) ?>">
                             <button class="btn btn-outline btn-xs text-danger" style="display:inline-flex;align-items:center;gap:.25rem" title="<?= $isCurrent ? 'Logout and delete session' : 'Revoke and delete session' ?>">
@@ -584,8 +582,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 </div>
                 <?php endforeach; ?>
                 <div style="padding:1rem 1.25rem">
-                    <form method="post" action="?action=settings_save&tab=revoke_sessions"
-                          onsubmit="return confirm('This will sign you out of all devices including this one.')">
+                    <form method="post" action="?action=settings_save&tab=revoke_sessions" id="revoke-all-sessions-form">
                         <?= csrfInput() ?>
                         <button class="btn btn-danger btn-sm">Revoke all sessions</button>
                     </form>
@@ -699,8 +696,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                         <?php endif; ?>
                     </a>
                     <?php if (!$acc['is_primary']): ?>
-                    <form method="post" action="?action=settings_save&tab=delete_account"
-                          onsubmit="return confirm('Remove this account?')">
+                    <form method="post" action="?action=settings_save&tab=delete_account" class="delete-account-form">
                         <?= csrfInput() ?>
                         <input type="hidden" name="account_id" value="<?= (int)$acc['id'] ?>">
                         <button class="btn btn-ghost btn-sm text-danger" title="Remove">
@@ -791,20 +787,17 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                     <?= csrfInput() ?>
                     <div style="display:flex;gap:.75rem;flex-wrap:wrap">
                         <button type="submit" name="theme" value="system"
-                                onclick="return applyAndSubmitTheme('system')"
-                                id="theme-system" class="wm-theme-card">
+                                id="theme-system" class="wm-theme-card theme-btn">
                             <div class="wm-theme-preview" style="background:linear-gradient(135deg,#fff 50%,#0d1117 50%)"></div>
                             <span>System (auto)</span>
                         </button>
                         <button type="submit" name="theme" value="light"
-                                onclick="return applyAndSubmitTheme('light')"
-                                id="theme-light" class="wm-theme-card">
+                                id="theme-light" class="wm-theme-card theme-btn">
                             <div class="wm-theme-preview" style="background:#f0f4f8"></div>
                             <span>Light</span>
                         </button>
                         <button type="submit" name="theme" value="dark"
-                                onclick="return applyAndSubmitTheme('dark')"
-                                id="theme-dark" class="wm-theme-card">
+                                id="theme-dark" class="wm-theme-card theme-btn">
                             <div class="wm-theme-preview" style="background:#0d1117"></div>
                             <span>Dark</span>
                         </button>
@@ -815,15 +808,52 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
 
         <!-- ── System ── -->
         <?php elseif ($tab === 'system'): ?>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-            <h2 style="margin:0;font-size:1.1rem">System Health & Security</h2>
-            <div style="text-align:right">
-                <div style="font-size:.7rem;color:var(--wm-text-muted);margin-bottom:.25rem">
-                    Last check: <?= ($lastAt = $_SESSION['system_check_cache']['at'] ?? null) ? date('Y-m-d H:i:s', (int)$lastAt) : 'Never' ?>
+        <h2 style="margin-top:0;font-size:1.1rem;margin-bottom:1.5rem">System Information & Maintenance</h2>
+
+        <div class="wm-card" style="margin-bottom:1.5rem">
+            <div class="wm-card-header">Application Backup & Disaster Recovery</div>
+            <div class="wm-card-body">
+                <p style="font-size:.875rem;margin-top:0">
+                    To perform a full backup of your WebyMail installation, you must preserve the following items:
+                </p>
+                <div style="background:var(--wm-surface-2);padding:.75rem;border-radius:8px;border:1px solid var(--wm-border);margin-bottom:.75rem">
+                    <ul style="margin:0;padding-left:1.25rem;font-size:.82rem;line-height:1.6">
+                        <li><strong>Configuration:</strong> <code>config/config.php</code> in the application root.</li>
+                        <li><strong>Database:</strong> The SQLite file located at <code><?= htmlspecialchars(Config::resolveDbPath()) ?></code></li>
+                        <li><strong>Encryption Key:</strong> The <code>app_secret.wm</code> file located in the same data directory.</li>
+                        <li><strong>Setup:</strong> The <code>setup.php</code> file relocated in your data directory.</li>
+                    </ul>
                 </div>
-                <a href="?action=settings&tab=system&recheck=1" class="btn btn-outline btn-xs" target="_self">Run check now</a>
+                <div class="alert alert-info" style="font-size:.78rem;display:flex;align-items:flex-start;gap:.5rem">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-top:.15rem;flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                    <span>
+                        For security, the database and secrets are stored <strong>outside</strong> the webroot by default. 
+                        The exact path is defined by the <code>db_path</code> setting in your <code>config/config.php</code> file.
+                    </span>
+                </div>
+                <p style="font-size:.82rem;color:var(--wm-text-muted);margin-top:1rem">
+                    By keeping the database and secret file outside the web root directory, 
+                    we ensure that sensitive data is not exposed if the server is misconfigured.
+                </p>
+                <div style="border-top:1px solid var(--wm-border);margin-top:1rem;padding-top:1rem">
+                    <p style="font-size:.78rem;margin:0;color:var(--wm-text-muted)">
+                        <strong>Legal Disclaimer:</strong> WebyMail is provided "as is." While we strive for security, you use this software at your own risk. Accepted during installation.
+                    </p>
+                </div>
             </div>
         </div>
+
+        <div class="wm-card" style="margin-bottom:1.5rem">
+            <div class="wm-card-header" style="justify-content:space-between">
+                <span>System Health & Security</span>
+                <div style="text-align:right">
+                    <div style="font-size:.7rem;color:var(--wm-text-muted);font-weight:normal">
+                        Last check: <?= ($lastAt = $_SESSION['system_check_cache']['at'] ?? null) ? date('Y-m-d H:i:s', (int)$lastAt) : 'Never' ?>
+                    </div>
+                    <a href="?action=settings&tab=system&recheck=1" class="btn btn-outline btn-xs" target="_self">Run check now</a>
+                </div>
+            </div>
+            <div class="wm-card-body" style="padding:0">
         
         <?php 
         $sys = Config::checkSystem(); 
@@ -833,19 +863,6 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
         // stale update or mismatch alerts clear as soon as the release state changes.
         $availableUpdateVersion = Config::getNewerVersion(true);
         ?>
-
-        <div class="wm-card" style="margin-bottom:1.5rem">
-            <div class="wm-card-header">Legal Disclaimer</div>
-            <div class="wm-card-body">
-                <p style="font-size:.85rem;margin-top:0;color:var(--wm-text-muted)">
-                    <strong>Responsibility:</strong> WebyMail is provided "as is." While we strive for security, you use this software at your own risk.
-                </p>
-                <div style="display:flex;align-items:center;gap:.5rem;color:var(--wm-success);font-size:.82rem;font-weight:600">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-                    Accepted during installation
-                </div>
-            </div>
-        </div>
 
         <?php
         $twoFaSystemEnabled = Config::get('2fa_enabled', true);
@@ -942,6 +959,14 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             <div class="wm-card-header">System Information</div>
             <div class="wm-card-body" style="padding:0">
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
+                    <span style="font-size:.85rem">Security Protocol</span>
+                    <span style="font-size:.85rem;font-weight:600"><?= isRequestSecure() ? 'HTTPS ✅' : 'HTTP ⚠' ?></span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
+                    <span style="font-size:.85rem">PHP Version</span>
+                    <span style="font-size:.85rem;font-weight:600"><?= PHP_VERSION ?></span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
                     <span style="font-size:.85rem">WebyMail Version</span>
                     <span style="font-size:.85rem;font-weight:600;display:flex;align-items:center;gap:.4rem">
                         v<?= Config::VERSION ?>
@@ -950,13 +975,25 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                         $latestSys = Config::getLatestGitHubVersion();
                         if ($localAheadSys === true):
                         ?>
-                        <span style="font-size:.68rem;color:var(--wm-warning);font-weight:700;border:1px solid rgba(var(--wm-warning-rgb),.35);border-radius:999px;padding:.1rem .45rem;display:inline-flex;align-items:center;gap:.2rem"
+                        <span class="wm-version-mismatch-badge" style="font-size:.68rem;color:var(--wm-warning);font-weight:700;border:1px solid rgba(var(--wm-warning-rgb),.35);border-radius:999px;padding:.1rem .45rem;display:inline-flex;align-items:center;gap:.2rem"
                               title="Installed version (v<?= htmlspecialchars(Config::VERSION) ?>) is newer than latest GitHub release (v<?= htmlspecialchars((string)$latestSys) ?>). Version mismatch warning.">
                             ⚠ version mismatch
                         </span>
                         <?php endif; ?>
                     </span>
                 </div>
+                <?php if ($localAheadSys === true): ?>
+                <div class="wm-version-mismatch-badge" style="padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border);background:rgba(var(--wm-warning-rgb),.05)">
+                    <p style="font-size:.78rem;color:var(--wm-warning);margin:0;display:flex;gap:.5rem;align-items:flex-start">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-top:.1rem;flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <span>
+                            <strong>Note:</strong> You are currently using a version of WebyMail (v<?= htmlspecialchars(Config::VERSION) ?>) that is not indexed in the official GitHub repository releases (latest: v<?= htmlspecialchars((string)$latestSys) ?>). 
+                            This is common if you are using a development/beta release, or if the update server is temporarily out of sync. 
+                            The application remains fully functional, but ensure you only install versions from trusted sources.
+                        </span>
+                    </p>
+                </div>
+                <?php endif; ?>
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
                     <span style="font-size:.85rem">Latest Releases</span>
                     <?php
@@ -1033,22 +1070,23 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 <span>File Permissions & Security</span>
                 <form method="post" action="?action=fix_permissions">
                     <?= csrfInput() ?>
-                    <button type="submit" class="btn btn-outline btn-xs" <?= $sys['all_ok'] ? 'disabled style="cursor:not-allowed;opacity:0.6"' : '' ?>>Fix Permissions</button>
+                    <button type="submit" class="btn btn-outline btn-xs" <?= ($sys['perms_ok'] ?? $sys['all_ok']) ? 'disabled style="cursor:not-allowed;opacity:0.6"' : '' ?>>Fix Permissions</button>
                 </form>
             </div>
             <div class="wm-card-body" style="padding:0">
                 <?php 
                 $insecure = array_filter($sys['security'], fn($c) => !$c['ok']);
-                if (empty($insecure)): ?>
+                $permInsecure = array_filter($insecure, fn($c) => ($c['type'] ?? '') !== 'db_webroot');
+                if (empty($permInsecure)): ?>
                 <div style="padding:1.25rem;text-align:center;color:var(--wm-success);font-size:.85rem">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom:.5rem"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                     <br>All files and folders have correct permissions.
                     <div style="margin-top:1rem">
-                        <button type="button" class="btn btn-ghost btn-xs" onclick="document.getElementById('all-perms').style.display='block';this.style.display='none'">View Checked Permissions</button>
+                        <button type="button" class="btn btn-ghost btn-xs" id="show-perms-btn">View Checked Permissions</button>
                     </div>
                 </div>
                 <?php else: ?>
-                    <?php foreach ($insecure as $check): ?>
+                    <?php foreach ($permInsecure as $check): ?>
                     <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
                         <div>
                             <div style="font-family:var(--wm-font-mono);font-size:.85rem"><?= htmlspecialchars($check['path']) ?></div>
@@ -1062,12 +1100,52 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                     </div>
                     <?php endforeach; ?>
                     <div style="padding:.75rem 1.25rem;text-align:center">
-                        <button type="button" class="btn btn-ghost btn-xs" onclick="document.getElementById('all-perms').style.display='block';this.style.display='none'">View All Checked Permissions</button>
+                        <button type="button" class="btn btn-ghost btn-xs" id="show-all-perms-btn">View All Checked Permissions</button>
                     </div>
+                <?php endif; ?>
+
+                <?php if (!empty($sys['db_in_webroot']) && !Config::get('ignore_db_webroot_warning', false)): ?>
+                <div style="border-top:1px solid var(--wm-border);padding:.75rem 1.25rem">
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;margin-bottom:.75rem">
+                        <div>
+                            <div style="display:flex;align-items:center;gap:.5rem">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--wm-danger)" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                <span style="font-family:var(--wm-font-mono);font-size:.85rem">Database (<?= htmlspecialchars(basename(Config::resolveDbPath())) ?>)</span>
+                                <span style="font-size:.72rem;font-weight:700;color:var(--wm-danger)">INSECURE</span>
+                            </div>
+                            <div style="font-size:.78rem;color:var(--wm-text-muted);margin-top:.3rem">
+                                Full path: <code style="font-size:.7rem"><?= htmlspecialchars(Config::resolveDbPath()) ?></code>
+                            </div>
+                            <div style="font-size:.78rem;color:var(--wm-text-muted);margin-top:.2rem">
+                                The database is inside a web-accessible directory. On Nginx or misconfigured Apache servers the file could be downloaded directly, exposing encrypted passwords, TOTP secrets and session tokens.
+                            </div>
+                        </div>
+                        <form method="post" action="?action=settings_save&tab=dismiss_db_warning" style="flex-shrink:0">
+                            <?= csrfInput() ?>
+                            <button type="submit" class="btn btn-ghost btn-xs" title="Dismiss this warning (the risk remains)">Dismiss</button>
+                        </form>
+                    </div>
+                <form method="post" action="?action=move_database" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end" id="move-db-form">
+                        <?= csrfInput() ?>
+                        <div style="flex:1;min-width:220px">
+                            <label for="db_target_path" style="font-size:.78rem;display:block;margin-bottom:.25rem">
+                                Move to path <span style="color:var(--wm-text-muted)">(absolute, or relative to app root)</span>
+                            </label>
+                            <input type="text" id="db_target_path" name="db_target_path"
+                                   class="form-control" style="font-family:var(--wm-font-mono);font-size:.78rem"
+                                   value="<?= htmlspecialchars(Config::suggestSafeDbPath()) ?>"
+                                   placeholder="<?= htmlspecialchars(Config::suggestSafeDbPath()) ?>">
+                        </div>
+                        <button type="submit" class="btn btn-danger btn-sm">
+                            Move database
+                        </button>
+                    </form>
+                </div>
                 <?php endif; ?>
                 
                 <div id="all-perms" style="display:none;max-height:400px;overflow-y:auto;border-top:1px solid var(--wm-border)">
                     <?php foreach ($sys['security'] as $check): ?>
+                    <?php if (($check['type'] ?? '') === 'db_webroot') continue; ?>
                     <div style="display:flex;align-items:center;justify-content:space-between;padding:.5rem 1.25rem;border-bottom:1px solid var(--wm-border);font-size:.8rem">
                         <div style="font-family:var(--wm-font-mono)"><?= htmlspecialchars($check['path']) ?></div>
                         <div style="display:flex;align-items:center;gap:1rem">
@@ -1205,5 +1283,42 @@ function applyAndSubmitTheme(theme) {
     <?php foreach ($accounts as $acc): ?>
     handleAccountForm('edit-account-form-<?= (int)$acc['id'] ?>', 'edit-account-error-<?= (int)$acc['id'] ?>');
     <?php endforeach; ?>
+
+    // General confirmations
+    document.getElementById('disable-2fa-form')?.addEventListener('submit', function(e) {
+        if (!confirm('Are you sure? This will disable 2FA protection.')) e.preventDefault();
+    });
+    document.getElementById('revoke-all-sessions-form')?.addEventListener('submit', function(e) {
+        if (!confirm('This will sign you out of all devices including this one.')) e.preventDefault();
+    });
+    document.querySelectorAll('.revoke-session-form').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            if (!confirm(this.dataset.confirmMsg)) e.preventDefault();
+        });
+    });
+    document.querySelectorAll('.delete-account-form').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            if (!confirm('Remove this account?')) e.preventDefault();
+        });
+    });
+    document.getElementById('move-db-form')?.addEventListener('submit', function(e) {
+        if (!confirm('Spostare il database in questo percorso? Il file attuale verrà eliminato permanentemente dalla root dopo la copia. ATTENZIONE: Verrai disconnesso e dovrai effettuare nuovamente l\'accesso.')) e.preventDefault();
+    });
+    document.getElementById('show-all-perms-btn')?.addEventListener('click', function() {
+        var el = document.getElementById('all-perms');
+        if (el) { el.style.display = 'block'; this.style.display = 'none'; }
+    });
+    document.getElementById('show-perms-btn')?.addEventListener('click', function() {
+        var el = document.getElementById('all-perms');
+        if (el) { el.style.display = 'block'; this.style.display = 'none'; }
+    });
+
+    // Theme buttons
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            ThemeManager.apply(this.dataset.theme);
+            updateThemeCards();
+        });
+    });
 })();
 </script>

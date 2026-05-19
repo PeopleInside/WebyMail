@@ -204,6 +204,13 @@ class ImapClient
         return (bool) imap_mail_move($this->conn, (string) $msgNo, $destRaw);
     }
 
+    public function moveMessageByUid(string $folder, int $uid, string $dest): bool
+    {
+        $this->reopenFolder($folder);
+        $destRaw = mb_convert_encoding($dest, 'UTF7-IMAP', 'UTF-8');
+        return (bool) imap_mail_move($this->conn, (string) $uid, $destRaw, CP_UID);
+    }
+
     public function markRead(string $folder, int $msgNo, bool $read): bool
     {
         $this->reopenFolder($folder);
@@ -211,6 +218,17 @@ class ImapClient
             imap_setflag_full($this->conn, (string) $msgNo, '\\Seen');
         } else {
             imap_clearflag_full($this->conn, (string) $msgNo, '\\Seen');
+        }
+        return true;
+    }
+
+    public function markReadByUid(string $folder, int $uid, bool $read): bool
+    {
+        $this->reopenFolder($folder);
+        if ($read) {
+            imap_setflag_full($this->conn, (string) $uid, '\\Seen', ST_UID);
+        } else {
+            imap_clearflag_full($this->conn, (string) $uid, '\\Seen', ST_UID);
         }
         return true;
     }

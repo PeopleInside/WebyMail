@@ -33,11 +33,26 @@ if (!isset($cspNonce)) {
 
 function isRequestSecure(): bool
 {
-    $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
-    $forwardedSsl   = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? ''));
-    return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        || str_contains($forwardedProto, 'https')
-        || $forwardedSsl === 'on';
+    if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+        return true;
+    }
+
+    // Only trust X-Forwarded-* headers when a trusted proxy list is configured.
+    // Without this guard a client could send X-Forwarded-Proto: https on a plain
+    // HTTP connection, causing the session cookie to be set without the Secure flag.
+    $trustedProxies = array_filter(array_map('trim', explode(',', (string) Config::get('trusted_proxies', ''))));
+    if (!empty($trustedProxies)) {
+        $remoteIp = $_SERVER['REMOTE_ADDR'] ?? '';
+        if (in_array($remoteIp, $trustedProxies, true)) {
+            $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+            $forwardedSsl   = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL']   ?? ''));
+            if (str_contains($forwardedProto, 'https') || $forwardedSsl === 'on') {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 // PHP native session is used only for the 2FA pending state
@@ -56,7 +71,7 @@ session_set_cookie_params([
 session_start();
 
 // ── Security Headers ──────────────────────────────────────────────────────────
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{$cspNonce}' 'unsafe-eval' https://cdnjs.cloudflare.com; script-src-attr 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; worker-src 'self' blob:; frame-src 'self';");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{$cspNonce}'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; worker-src 'self' blob:; frame-src 'self'; frame-ancestors 'self';");
 header("X-Content-Type-Options: nosniff");
 header("X-Frame-Options: SAMEORIGIN");
 header("X-XSS-Protection: 1; mode=block");
@@ -90,6 +105,9 @@ if (!Config::isSetup()) {
     header('Location: setup.php');
     exit;
 }
+
+// ── Housekeeping ─────────────────────────────────────────────────────────────
+Config::cleanup();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -144,8 +162,10 @@ function findFolderName(array $folders, array $candidates, string $fallback): st
     return $fallback;
 }
 
-const TRASH_FOLDER_VARIANTS = ['Trash', 'Deleted', 'Deleted Items'];
-const SPAM_FOLDER_VARIANTS  = ['Spam', 'Junk', 'Junk E-mail', 'Junk Mail'];
+const TRASH_FOLDER_VARIANTS = ['Trash', 'Deleted', 'Deleted Items', 'Cestino', 'Posta eliminata'];
+const SPAM_FOLDER_VARIANTS  = ['Spam', 'Junk', 'Junk E-mail', 'Junk Mail', 'Posta indesiderata', 'Antispam'];
+const SENT_FOLDER_VARIANTS  = ['Sent', 'Sent Items', 'Posta inviata', 'Inviata'];
+const DRAFTS_FOLDER_VARIANTS = ['Drafts', 'Bozze', 'Draft'];
 
 function resolveTrashFolder(ImapClient $imap): string
 {
@@ -163,6 +183,16 @@ function resolveSpamFolder(ImapClient $imap): string
     return findFolderName($imap->getFolders(), SPAM_FOLDER_VARIANTS, 'Spam');
 }
 
+function resolveSentFolder(ImapClient $imap): string
+{
+    return findFolderName($imap->getFolders(), SENT_FOLDER_VARIANTS, 'Sent');
+}
+
+function resolveDraftsFolder(ImapClient $imap): string
+{
+    return findFolderName($imap->getFolders(), DRAFTS_FOLDER_VARIANTS, 'Drafts');
+}
+
 function isTrashFolderEquivalent(string $folder, string $trash): bool
 {
     $normalizeFolderName = static function (string $name): string {
@@ -170,6 +200,12 @@ function isTrashFolderEquivalent(string $folder, string $trash): bool
         return strtolower(end($parts));
     };
     return $normalizeFolderName($folder) === $normalizeFolderName($trash);
+}
+
+function isDraftsFolderEquivalent(string $folder, ImapClient $imap): bool
+{
+    $drafts = resolveDraftsFolder($imap);
+    return isTrashFolderEquivalent($folder, $drafts); // We use the same normalization logic
 }
 
 function folderExists(array $folders, string $folderName): bool
@@ -190,6 +226,15 @@ function moveToTrashOrDelete(ImapClient $imap, string $folder, int $msgNo, strin
         $imap->deleteMessage($folder, $msgNo);
     } else {
         $imap->moveMessage($folder, $msgNo, $trash);
+    }
+}
+
+function moveToTrashOrDeleteByUid(ImapClient $imap, string $folder, int $uid, string $trash, bool $isTrashFolder): void
+{
+    if ($isTrashFolder) {
+        $imap->deleteMessageByUid($folder, $uid);
+    } else {
+        $imap->moveMessageByUid($folder, $uid, $trash);
     }
 }
 
@@ -396,7 +441,8 @@ if ($action === 'login') {
 
             $result = $auth->loginWithImap(
                 $host, $port, $ssl, $username, $password,
-                $smtpHost, $smtpPort, $smtpSsl, $smtpTls
+                $smtpHost, $smtpPort, $smtpSsl, $smtpTls,
+                !empty($_POST['remember_me'])
             );
             $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 
@@ -727,12 +773,22 @@ if ($action === 'view') {
     $msgNo  = (int) ($_GET['msg'] ?? 0);
     $message = null;
     $isTrash = false;
+    $isDraft = false;
 
     try {
         $imap    = $accountMgr->imapConnect($accountId);
         $message = $imap->getMessage($currentFolder, $msgNo);
         $trash   = resolveTrashFolder($imap);
         $isTrash = isTrashFolderEquivalent($currentFolder, $trash);
+        $isDraft = isDraftsFolderEquivalent($currentFolder, $imap);
+
+        // Redirect to compose for drafts instead of simple view
+        if ($isDraft) {
+            $imap->disconnect();
+            $folderEnc = urlencode($currentFolder);
+            header('Location: ?action=compose&folder=' . $folderEnc . '&edit_draft=' . $msgNo);
+            exit;
+        }
         $imap->disconnect();
     } catch (RuntimeException $e) {
         error_log('Message load failed for user ' . $userId . ', account ' . $accountId . ', folder ' . $currentFolder . ', msg ' . $msgNo . ': ' . $e->getMessage());
@@ -754,6 +810,7 @@ if ($action === 'view') {
         'message'     => $message,
         'folder'      => $currentFolder,
         'isTrash'     => $isTrash,
+        'isDraft'     => $isDraft,
         'hasExternal' => $hasExternal,
         'pageTitle'   => pageTitle($message['subject'] ?? 'View message'),
     ]);
@@ -1278,7 +1335,7 @@ if ($action === 'bulk' && isAjax()) {
             $trash = resolveTrashFolder($imap);
             $inTrash = isTrashFolderEquivalent($folder, $trash);
             foreach ($uids as $uid) {
-                moveToTrashOrDelete($imap, $folder, $uid, $trash, $inTrash);
+                moveToTrashOrDeleteByUid($imap, $folder, $uid, $trash, $inTrash);
             }
         } elseif ($act === 'move') {
             $moveError = null;
@@ -1295,13 +1352,13 @@ if ($action === 'bulk' && isAjax()) {
                 jsonResponse(['ok' => false, 'error' => $moveError]);
             }
             foreach ($uids as $uid) {
-                $imap->moveMessage($folder, $uid, $destination);
+                $imap->moveMessageByUid($folder, $uid, $destination);
             }
         } else {
             foreach ($uids as $uid) {
                 match ($act) {
-                    'read'   => $imap->markRead($folder, $uid, true),
-                    'unread' => $imap->markRead($folder, $uid, false),
+                    'read'   => $imap->markReadByUid($folder, $uid, true),
+                    'unread' => $imap->markReadByUid($folder, $uid, false),
                     default  => null,
                 };
             }
@@ -1618,7 +1675,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'subject'     => $_POST['subject']  ?? '',
         'reply_to'    => $_POST['reply_to'] ?? '',
         'in_reply_to' => $_POST['in_reply_to'] ?? '',
-        'body_html'   => $_POST['body_html'] ?? '',
+        'body_html'   => sanitizeHtml($_POST['body_html'] ?? '', true, 'light'),
         'from_name'   => $fromName,
         'priority'    => $_POST['priority'] ?? 'normal',
         'request_read_receipt' => !empty($_POST['request_read_receipt']),
@@ -1695,19 +1752,55 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             if (filesize($tmp) > $maxSize) {
                 continue;
             }
+
+            // Detect the true MIME type server-side; never trust the browser-supplied type
+            $detectedMime = 'application/octet-stream';
+            if (function_exists('finfo_open')) {
+                $fi = finfo_open(FILEINFO_MIME_TYPE);
+                if ($fi !== false) {
+                    $m = finfo_file($fi, $tmp);
+                    finfo_close($fi);
+                    if ($m !== false && $m !== '') {
+                        $detectedMime = $m;
+                    }
+                }
+            }
+
+            // Block dangerous extensions regardless of MIME type
+            $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+            $blockedExtensions = [
+                'php', 'php3', 'php4', 'php5', 'php7', 'phtml', 'phar',
+                'exe', 'bat', 'cmd', 'com', 'msi', 'vbs', 'vbe', 'js',
+                'jse', 'wsf', 'wsh', 'ps1', 'sh', 'bash', 'csh',
+                'dll', 'so', 'dylib', 'jar', 'class', 'war',
+                'asp', 'aspx', 'cfm', 'cgi', 'pl', 'py', 'rb',
+                'htaccess', 'htpasswd',
+            ];
+            if (in_array($ext, $blockedExtensions, true)) {
+                $_SESSION['attachment_rejected'][] = htmlspecialchars($name);
+                continue;
+            }
+
             $data = file_get_contents($tmp);
             if ($data === false) {
                 continue;
             }
             $attachments[] = [
                 'name' => $name,
-                'type' => $_FILES['attachments']['type'][$i] ?: 'application/octet-stream',
+                'type' => $detectedMime,
                 'data' => $data,
             ];
         }
     }
     if (!empty($attachments)) {
         $message['attachments'] = $attachments;
+    }
+
+    if (!empty($_SESSION['attachment_rejected'])) {
+        $rejected = $_SESSION['attachment_rejected'];
+        unset($_SESSION['attachment_rejected']);
+        $names = implode(', ', $rejected);
+        flashSet('warning', 'The following attachment(s) were removed because their file type is not permitted: ' . $names);
     }
 
     $isDraft = !empty($_POST['save_draft']);
@@ -1827,17 +1920,20 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $draftError = $e->getMessage();
             }
 
-            if ($draftSaved && $newDraftUid > 0) {
-                error_log('Send failed for user ' . $userId . ', account ' . $fromAccountId . ': ' . $smtp->getLog());
-                $_SESSION['last_failed_draft_uid'] = (int)$newDraftUid;
-                flashSet('danger', 'Failed to send message: ' . $smtp->getLog() . '. Your message was saved in Drafts.');
-                redirect('?action=inbox&folder=' . urlencode($draftsFolder));
-            }
-
+            // Always redirect to the Drafts folder so the message is never lost.
+            // Mark the new draft with the ⚠ indicator if it was saved successfully.
             error_log('Send failed for user ' . $userId . ', account ' . $fromAccountId . ': ' . $smtp->getLog() . ($draftError ? ' Draft error: ' . $draftError : ''));
-            $_SESSION['compose_prefill'] = $composePrefill;
-            flashSet('danger', 'Failed to send message: ' . $smtp->getLog() . ($draftError ? ' (Draft save failed: ' . $draftError . ')' : ''));
-            redirect('?action=compose');
+            if ($draftSaved && $newDraftUid > 0) {
+                $_SESSION['last_failed_draft_uid'] = (int)$newDraftUid;
+                flashSet('danger', $smtp->getSendErrorForUser() . ' Your message has been saved as a draft.');
+            } else {
+                $errMsg = $smtp->getSendErrorForUser();
+                if ($draftError) {
+                    $errMsg .= ' The message could not be saved as a draft — check your IMAP connection.';
+                }
+                flashSet('danger', $errMsg);
+            }
+            redirect('?action=inbox&folder=' . urlencode($draftsFolder));
         }
 }
 
@@ -2109,6 +2205,12 @@ if ($action === 'settings_save') {
             flashSet('success', 'CAPTCHA Proof-of-Work activation started. Changes should be applied in about 5 minutes.');
             redirect('?action=settings&tab=system');
 
+        case 'dismiss_db_warning':
+            Config::set('ignore_db_webroot_warning', true);
+            Config::save();
+            unset($_SESSION['system_check_cache']);
+            redirect('?action=settings&tab=system');
+
         default:
             redirect('?action=settings');
     }
@@ -2123,6 +2225,23 @@ if ($action === 'fix_permissions' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     // fixPermissions() already calls checkSystem() which refreshes the session
     // cache, so the banner will reflect the current state on the next page load.
+    redirect('?action=settings&tab=system');
+}
+
+// ── Move database outside webroot ─────────────────────────────────────────────
+if ($action === 'move_database' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $targetPath = trim($_POST['db_target_path'] ?? '');
+    if ($targetPath === '') {
+        $targetPath = Config::suggestSafeDbPath();
+    }
+    $result = Config::moveDatabase($targetPath);
+    if ($result['ok']) {
+        // Invalidate the DB singleton so the next request re-connects to the new file
+        unset($_SESSION['system_check_cache']);
+        flashSet('success', 'Database moved successfully to: ' . $result['new'] . '. The original file has been deleted from the webroot.');
+    } else {
+        flashSet('danger', 'Database move failed: ' . $result['error']);
+    }
     redirect('?action=settings&tab=system');
 }
 
@@ -2192,6 +2311,22 @@ if ($action === 'test_credentials' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         error_log('Credential test failed: ' . $e->getMessage());
         jsonResponse(['ok' => false, 'error' => $errorMessage]);
     }
+}
+
+// ── Check for updates ─────────────────────────────────────────────────────────
+if ($action === 'check_updates') {
+    $newer = Config::getNewerVersion(true);
+    $latest = Config::getLatestGitHubVersion();
+    $ahead = Config::isLocalVersionAheadOfGitHub();
+    $avail = Config::isGitHubRepoAvailable();
+    jsonResponse([
+        'ok' => true,
+        'version' => Config::VERSION,
+        'newer_available' => $newer,
+        'latest_version' => $latest,
+        'is_ahead' => $ahead,
+        'repo_available' => $avail
+    ]);
 }
 
 // ── Fallback ──────────────────────────────────────────────────────────────────

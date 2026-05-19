@@ -9,13 +9,12 @@ if (session_status() === PHP_SESSION_NONE) {
 // Security Headers matching index.php
 $cspNonce = bin2hex(random_bytes(16));
 $cspHeader = "default-src 'self'; " .
-             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; " .
-             "script-src-attr 'unsafe-inline'; " .
+             "script-src 'self' 'nonce-{$cspNonce}'; " .
              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " .
              "font-src 'self' https://fonts.gstatic.com; " .
              "img-src 'self' data: https:; " .
              "connect-src 'self'; " .
-             "frame-ancestors 'none'; " .
+             "frame-ancestors 'self'; " .
              "base-uri 'self'; " .
              "form-action 'self';";
 
@@ -59,6 +58,25 @@ $isForced = !empty($_SESSION['setup_force']);
 if (Config::get('setup_complete') && !$isForced && ($_GET['action'] ?? '') !== 'setup') {
     header('Location: index.php');
     exit;
+}
+
+// Re-running setup on an already-configured installation (force=1) requires
+// an active authenticated session to prevent unauthorised reconfiguration.
+if ($isForced && Config::get('setup_complete')) {
+    spl_autoload_register(function (string $class): void {
+        $file = __DIR__ . '/src/' . $class . '.php';
+        if (file_exists($file)) {
+            require_once $file;
+        }
+    }, prepend: true);
+
+    $sessionObj = new Session();
+    if ($sessionObj->current() === null) {
+        // No valid session: abort and send the user to the normal login page
+        unset($_SESSION['setup_force']);
+        header('Location: index.php?action=login');
+        exit;
+    }
 }
 
 // Simple CSRF token for setup forms (session-bound, single token for the whole wizard)
@@ -180,8 +198,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $step = 'done';
         // Clear the force flag so the wizard cannot be re-entered without ?force=1
         unset($_SESSION['setup_force'], $_SESSION['setup_csrf']);
-        // Auto-rename setup.php to prevent accidental re-runs
-        @rename(__FILE__, __FILE__ . '.bak');
+
+        // Move setup.php to the database directory for security (hardening)
+        $dbDir = dirname(Config::resolveDbPath());
+        if (is_dir($dbDir) && is_writable($dbDir)) {
+            @rename(__FILE__, $dbDir . DIRECTORY_SEPARATOR . 'setup.php');
+        } else {
+            @unlink(__FILE__);
+        }
     } elseif ($step === 'fix_permissions') {
         // Ensure a session is active so Config::checkSystem() can persist the
         // result cache, preventing a stale "issues found" banner in the main app.
@@ -189,6 +213,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             session_start();
         }
         Config::fixPermissions();
+        $step = 'security';
+        $sys = Config::checkSystem();
+        $securityChecks = $sys['security'];
+    } elseif ($step === 'move_database') {
+        $targetPath = trim($_POST['db_target_path'] ?? '');
+        if ($targetPath === '') {
+            $targetPath = Config::suggestSafeDbPath();
+        }
+        $result = Config::moveDatabase($targetPath);
+        if (!$result['ok']) {
+            $error = 'Failed to move database: ' . $result['error'];
+        }
         $step = 'security';
         $sys = Config::checkSystem();
         $securityChecks = $sys['security'];

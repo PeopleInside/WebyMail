@@ -26,9 +26,9 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
     <input type="checkbox" id="select-all" title="Select all">
 
     <div id="bulk-bar" style="display:none;align-items:center;gap:.5rem">
-        <button class="btn btn-outline btn-sm" onclick="bulkAction('read')">Mark read</button>
-        <button class="btn btn-outline btn-sm" onclick="bulkAction('unread')">Mark unread</button>
-        <button class="btn btn-outline btn-sm" onclick="bulkExport()">Export ZIP</button>
+        <button class="btn btn-outline btn-sm" id="bulk-read">Mark read</button>
+        <button class="btn btn-outline btn-sm" id="bulk-unread">Mark unread</button>
+        <button class="btn btn-outline btn-sm" id="bulk-export">Export ZIP</button>
         <?php if (!empty($moveTargets)): ?>
         <select id="bulk-move-destination" class="btn btn-outline btn-sm" style="max-width:180px">
             <option value="">Move to…</option>
@@ -36,9 +36,9 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
             <option value="<?= htmlspecialchars($target['name']) ?>"><?= htmlspecialchars($target['display'] ?? $target['name']) ?></option>
             <?php endforeach; ?>
         </select>
-        <button class="btn btn-outline btn-sm" onclick="bulkMove()">Move</button>
+        <button class="btn btn-outline btn-sm" id="bulk-move">Move</button>
         <?php endif; ?>
-        <button class="btn btn-danger btn-sm" onclick="bulkAction('delete')">
+        <button class="btn btn-danger btn-sm" id="bulk-delete">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
             Delete
         </button>
@@ -46,12 +46,12 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
 
     <span id="inbox-total-count" style="font-size:.78rem;color:var(--wm-text-muted);margin-left:auto"><?= $total ?> message<?= $total !== 1 ? 's' : '' ?></span>
 
-    <button class="btn btn-ghost btn-icon" title="Refresh" onclick="window.location.reload()">
+    <button class="btn btn-ghost btn-icon" title="Refresh" id="refresh-btn">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
     </button>
 
     <?php if (($isTrash ?? false) || ($isSpam ?? false)): ?>
-    <form method="post" action="?action=empty_folder" onsubmit="return confirm('Permanently empty this folder? This cannot be undone.')" style="margin:0">
+    <form method="post" action="?action=empty_folder" style="margin:0" id="empty-folder-form">
         <?= csrfInput() ?>
         <input type="hidden" name="folder" value="<?= htmlspecialchars($folder) ?>">
         <button class="btn btn-outline btn-sm" style="color:var(--wm-danger);border-color:var(--wm-danger)">
@@ -65,9 +65,9 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
     <form id="import-eml-form" method="post" action="?action=import_eml" enctype="multipart/form-data" style="display:none">
         <?= csrfInput() ?>
         <input type="hidden" name="folder" value="<?= htmlspecialchars($folder) ?>">
-        <input type="file" name="eml_file" id="eml-file-input" accept=".eml" onchange="document.getElementById('import-eml-form').submit()">
+        <input type="file" name="eml_file" id="eml-file-input" accept=".eml">
     </form>
-    <button class="btn btn-ghost btn-icon" title="Import .eml" onclick="document.getElementById('eml-file-input').click()">
+    <button class="btn btn-ghost btn-icon" title="Import .eml" id="import-eml-btn">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     </button>
 </div>
@@ -87,7 +87,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
     <div class="wm-mail-row <?= $msg['is_read'] ? '' : 'unread' ?>"
          data-href="<?= '?action=view&folder=' . $folderEnc . '&msg=' . (int)$msg['msg_no'] ?>">
         <div class="wm-mail-check">
-            <input type="checkbox" class="mail-checkbox" data-uid="<?= (int)$msg['msg_no'] ?>">
+            <input type="checkbox" class="mail-checkbox" data-uid="<?= (int)$msg['uid'] ?>">
         </div>
         <div class="wm-mail-from">
             <?php if (!$msg['is_read']): ?>
@@ -150,59 +150,99 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
 </div>
 
 <script nonce="<?= $cspNonce ?>">
-function bulkAction(action) {
-    var uids = getSelectedUids();
-    if (!uids.length) return;
-    
-    if (action === 'delete') {
-        var msg = '<?= ($isTrash ?? false) ? "Permanently delete selected messages? This cannot be undone." : "Move selected messages to Trash?" ?>';
-        if (!confirm(msg)) return;
-    }
-    
-    apiPost('?action=bulk', {
-        action: action,
-        uids:   uids,
-        folder: <?= $folderJs ?>
-    }).then(function(res) {
-        if (res.ok) {
-            if (res.redirect) window.location.href = res.redirect;
-            else window.location.reload();
+(function() {
+    function bulkAction(action) {
+        var uids = getSelectedUids();
+        if (!uids.length) return;
+        
+        if (action === 'delete') {
+            var msg = '<?= ($isTrash ?? false) ? "Permanently delete selected messages? This cannot be undone." : "Move selected messages to Trash?" ?>';
+            if (!confirm(msg)) return;
         }
-        else alert(res.error || 'Action failed.');
-    });
-}
-
-function bulkMove() {
-    const uids = getSelectedUids();
-    const destination = document.getElementById('bulk-move-destination');
-    if (!uids.length) return;
-    if (!destination || !destination.value) {
-        alert('Select a destination folder.');
-        return;
-    }
-    if (!confirm('Move the selected messages to "' + destination.options[destination.selectedIndex].text + '"? This action cannot be undone.')) {
-        return;
+        
+        apiPost('?action=bulk', {
+            action: action,
+            uids:   uids,
+            folder: <?= $folderJs ?>
+        }).then(function(res) {
+            if (res.ok) {
+                if (res.redirect) window.location.href = res.redirect;
+                else window.location.reload();
+            }
+            else alert(res.error || 'Action failed.');
+        });
     }
 
-    apiPost('?action=bulk', {
-        action: 'move',
-        uids: uids,
-        folder: <?= $folderJs ?>,
-        destination: destination.value
-    }).then(function(res) {
-        if (res.ok) {
-            if (res.redirect) window.location.href = res.redirect;
-            else window.location.reload();
+    function bulkMove() {
+        const uids = getSelectedUids();
+        const destination = document.getElementById('bulk-move-destination');
+        if (!uids.length) return;
+        if (!destination || !destination.value) {
+            alert('Select a destination folder.');
+            return;
         }
-        else alert(res.error || 'Action failed.');
-    });
-}
+        if (!confirm('Move the selected messages to "' + destination.options[destination.selectedIndex].text + '"? This action cannot be undone.')) {
+            return;
+        }
 
-function bulkExport() {
-    const uids = getSelectedUids();
-    if (!uids.length) return;
-    window.location.href = <?= $exportZipBaseUrl ?> + '&uids=' + encodeURIComponent(uids.join(','));
-}
+        apiPost('?action=bulk', {
+            action: 'move',
+            uids: uids,
+            folder: <?= $folderJs ?>,
+            destination: destination.value
+        }).then(function(res) {
+            if (res.ok) {
+                if (res.redirect) window.location.href = res.redirect;
+                else window.location.reload();
+            }
+            else alert(res.error || 'Action failed.');
+        });
+    }
+
+    function bulkExport() {
+        const uids = getSelectedUids();
+        if (!uids.length) return;
+        window.location.href = <?= $exportZipBaseUrl ?> + '&uids=' + encodeURIComponent(uids.join(','));
+    }
+
+    // Bind event listeners
+    const bRead = document.getElementById('bulk-read');
+    if (bRead) bRead.addEventListener('click', () => bulkAction('read'));
+    
+    const bUnread = document.getElementById('bulk-unread');
+    if (bUnread) bUnread.addEventListener('click', () => bulkAction('unread'));
+    
+    const bExport = document.getElementById('bulk-export');
+    if (bExport) bExport.addEventListener('click', bulkExport);
+    
+    const bMove = document.getElementById('bulk-move');
+    if (bMove) bMove.addEventListener('click', bulkMove);
+    
+    const bDelete = document.getElementById('bulk-delete');
+    if (bDelete) bDelete.addEventListener('click', () => bulkAction('delete'));
+
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) refreshBtn.addEventListener('click', () => window.location.reload());
+
+    const importBtn = document.getElementById('import-eml-btn');
+    const importInput = document.getElementById('eml-file-input');
+    const importForm = document.getElementById('import-eml-form');
+    if (importBtn && importInput) {
+        importBtn.addEventListener('click', () => importInput.click());
+    }
+    if (importInput && importForm) {
+        importInput.addEventListener('change', () => importForm.submit());
+    }
+
+    const emptyForm = document.getElementById('empty-folder-form');
+    if (emptyForm) {
+        emptyForm.addEventListener('submit', function(e) {
+            if (!confirm('Sei sicuro di voler svuotare definitivamente questa cartella? Tutte le email verranno eliminate e l\'operazione non può essere annullata.')) {
+                e.preventDefault();
+            }
+        });
+    }
+})();
 </script>
 
 <?php if ($folder === 'Drafts') unset($_SESSION['last_failed_draft_uid']); ?>

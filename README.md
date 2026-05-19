@@ -31,20 +31,23 @@ https://github.com/PeopleInside/WebyMail/releases
 1. Upload the files to your web server.
 2. Ensure the `config/` and `data/` directories are writable by the web server.
 3. Visit `setup.php` in your browser to configure the application.
-4. After setup, `setup.php` is automatically renamed to `setup.php.bak` for security.
-   - To re-run setup, rename it back to `setup.php` and visit `setup.php?force=1`.
+4. After setup, `setup.php` is automatically deleted for security.
+   - To re-run setup, re-upload the `setup.php` file and visit `setup.php?force=1`.
 
 ## Update existing installation
-1. Make a backup before updating.
+1. **Critical:** Make a backup before updating. Ensure you have a copy of:
+   - Your configuration file: `config/config.php`
+   - Your database file (path defined in `config.php`)
+   - Your encryption key file: `app_secret.wm` (located next to the database)
 2. Replace all WebyMail files by FTP with the new release files.
-3. Keep your existing `config/config.php` file.
+3. Your data and settings are preserved as long as you keep `config/config.php` and your external data directory.
 
 ## Security
 - A self-hosted proof-of-work captcha is enabled by default on login. To disable it, set `'captcha_enabled' => false` in `config/config.php`.
 - Two factor can be disabled in case of login issue also on `config/config.php`
-- The application uses a per-installation `app_secret` for encryption of stored emails, contacts, account passwords, and recovery data. This value is generated automatically by setup and saved in `config/config.php`.
-- When upgrading, preserve your existing `config/config.php`. Overwriting or replacing it can break decryption of stored encrypted data.
-- Existing installations do not require manual changes to `app_secret` when updating, as long as `config/config.php` is retained.
+- The application uses a per-installation `app_secret` for encryption of account passwords, recovery data, and session tokens. For security, this secret is stored in an external file (`app_secret.wm`) in the same secure directory as your database.
+- When upgrading, preserve your existing `config/config.php` and the directory containing your database and `app_secret.wm`.
+- Existing installations will automatically migrate the `app_secret` from `config/config.php` to the new external file upon first run.
 
 **Light mode** 
 ![Light](https://github.com/user-attachments/assets/b93bbbd8-2350-494b-8125-9b5066266d83)

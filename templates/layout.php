@@ -240,9 +240,9 @@
                 <span>
                     WebyMail v<?= Config::VERSION ?>
                     <?php if ($localAhead === true): ?>
-                    <span style="margin-left:.35rem;font-size:.66rem;color:var(--wm-warning);font-weight:700;border:1px solid rgba(var(--wm-warning-rgb),.35);border-radius:999px;padding:.1rem .4rem;display:inline-flex;align-items:center;gap:.2rem" title="Installed version (v<?= htmlspecialchars(Config::VERSION) ?>) is newer than the latest GitHub release. Version mismatch warning.">
+                    <a href="?action=settings&tab=system" id="version-mismatch-tag" style="margin-left:.35rem;font-size:.66rem;color:var(--wm-warning);font-weight:700;border:1px solid rgba(var(--wm-warning-rgb),.35);border-radius:999px;padding:.1rem .4rem;display:inline-flex;align-items:center;gap:.2rem;text-decoration:none" title="Installed version (v<?= htmlspecialchars(Config::VERSION) ?>) is newer than the latest GitHub release. This mismatch may occur if you are using a development version or if the latest check failed. Click for more details.">
                         ⚠ version mismatch
-                    </span>
+                    </a>
                     <?php endif; ?>
                 </span>
                 <?php 
@@ -446,6 +446,33 @@ document.addEventListener('click', function() {
             deleteForm.submit();
         });
     }
+
+    // Periodic version check
+    (function() {
+        function checkUpdates() {
+            fetch('?action=check_updates', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.ok) {
+                        var isAhead = data.is_ahead;
+                        // Hide main mismatch tag in sidebar
+                        var mismatchTag = document.getElementById('version-mismatch-tag');
+                        if (mismatchTag) {
+                            mismatchTag.style.display = isAhead ? 'inline-flex' : 'none';
+                        }
+                        // Hide badges in settings page if we are there
+                        document.querySelectorAll('.wm-version-mismatch-badge').forEach(function(el) {
+                            el.style.display = isAhead ? '' : 'none';
+                        });
+                    }
+                })
+                .catch(function() {});
+        }
+        // Check more frequently as requested: every 2 minutes
+        setInterval(checkUpdates, 120000);
+        // Also run once on load
+        setTimeout(checkUpdates, 5000);
+    })();
 })();
 </script>
 
