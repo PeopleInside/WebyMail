@@ -328,7 +328,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom:.5rem"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                         <br>All files and folders have correct permissions.
                         <div style="margin-top:1rem">
-                            <button type="button" class="btn btn-ghost btn-xs" onclick="document.getElementById('all-perms-setup').style.display='block';this.style.display='none'">View All Checked Permissions</button>
+                            <button type="button" class="btn btn-ghost btn-xs" id="show-perms-setup-btn">View All Checked Permissions</button>
                         </div>
                     </div>
                     <?php else:
@@ -349,7 +349,42 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                     </div>
                     <?php endforeach; ?>
                     <div style="padding:.75rem;text-align:center">
-                        <button type="button" class="btn btn-ghost btn-xs" onclick="document.getElementById('all-perms-setup').style.display='block';this.style.display='none'">View All Checked Permissions</button>
+                        <button type="button" class="btn btn-ghost btn-xs" id="show-perms-setup-btn-2">View All Checked Permissions</button>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if ($dbWebroot): ?>
+                    <div style="background:var(--wm-bg-subtle);border:1px solid var(--wm-danger);border-radius:8px;padding:.75rem">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem">
+                            <div style="display:flex;align-items:center;gap:.6rem">
+                                <div style="color:var(--wm-danger)">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                </div>
+                                <div>
+                                    <div style="font-family:var(--wm-font-mono);font-size:.85rem">Database (<?= htmlspecialchars(basename(Config::resolveDbPath())) ?>)</div>
+                                    <div style="font-size:.7rem;color:var(--wm-text-muted)">
+                                        <?= htmlspecialchars(Config::resolveDbPath()) ?>
+                                    </div>
+                                </div>
+                            </div>
+                            <span style="font-size:.72rem;color:var(--wm-danger);font-weight:600;white-space:nowrap">INSECURE</span>
+                        </div>
+                        <div style="font-size:.78rem;color:var(--wm-text-muted);margin-bottom:.75rem">
+                            The database is inside a web-accessible directory. Move it outside the webroot before going live.
+                        </div>
+                        <form method="post" action="?action=setup" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end">
+                            <input type="hidden" name="step" value="move_database">
+                            <input type="hidden" name="setup_csrf" value="<?= htmlspecialchars($setupCsrfToken) ?>">
+                            <div style="flex:1;min-width:180px">
+                                <label style="font-size:.75rem;display:block;margin-bottom:.2rem">Move to path</label>
+                                <input type="text" name="db_target_path"
+                                       class="form-control" style="font-family:var(--wm-font-mono);font-size:.75rem"
+                                       value="<?= htmlspecialchars(Config::suggestSafeDbPath()) ?>">
+                            </div>
+                            <button type="submit" class="btn btn-danger btn-sm" id="move-db-setup-btn">
+                                Move database
+                            </button>
+                        </form>
                     </div>
                     <?php endif; ?>
 
@@ -435,8 +470,8 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                 </p>
                 <div class="alert alert-info" style="font-size:.82rem">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    For security, <code>setup.php</code> has been renamed to <code>setup.php.bak</code>.
-                    To run setup again, rename it back and visit <code>setup.php?force=1</code>.
+                    <?php $dbDir = dirname(Config::resolveDbPath()); ?>
+                    For security, <code>setup.php</code> has been moved to the data directory: <code><?= htmlspecialchars($dbDir) ?></code> (outside the webroot) to prevent unauthorised access.
                 </div>
                 <a href="index.php" class="btn btn-primary w-100" target="_self">Go to Login →</a>
             </div>
@@ -466,6 +501,27 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
     }
 
     if (!sslCheck || !tlsCheck || !portInput) return;
+
+    // Permissions visibility
+    const showPermsBtn = document.getElementById('show-perms-setup-btn');
+    const showPermsBtn2 = document.getElementById('show-perms-setup-btn-2');
+    const allPerms = document.getElementById('all-perms-setup');
+    const togglePerms = function() {
+        if (allPerms) allPerms.style.display = 'block';
+        this.style.display = 'none';
+    };
+    if (showPermsBtn) showPermsBtn.addEventListener('click', togglePerms);
+    if (showPermsBtn2) showPermsBtn2.addEventListener('click', togglePerms);
+
+    // Database move confirmation
+    const moveDbBtn = document.getElementById('move-db-setup-btn');
+    if (moveDbBtn) {
+        moveDbBtn.addEventListener('click', function(e) {
+            if (!confirm('Spostare il database in questo percorso? Il file attuale verrà eliminato permanentemente dalla root. ATTENZIONE: Se hai già effettuato l\'accesso, la tua sessione potrebbe andare persa e dovrai rientrare.')) {
+                e.preventDefault();
+            }
+        });
+    }
 
     sslCheck.addEventListener('change', function() {
         if (this.checked) {
