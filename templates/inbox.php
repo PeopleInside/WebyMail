@@ -107,6 +107,9 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
             </svg>
             <?php endif; ?>
+            <?php if ($folder === 'Drafts' && ($msg['uid'] ?? -1) === ($_SESSION['last_failed_draft_uid'] ?? -1)): ?>
+                <span style="color:var(--wm-danger);font-weight:bold;margin-right:4px" title="Sending this draft failed">⚠️</span>
+            <?php endif; ?>
             <?= htmlspecialchars($msg['subject']) ?>
         </div>
     </div>
@@ -118,7 +121,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
 <?php if ($pages > 1): ?>
 <div class="wm-pagination">
     <?php if ($page > 1): ?>
-    <a href="?action=inbox&folder=<?= $folderEnc ?>&page=<?= $page-1 ?>">‹</a>
+    <a href="?action=inbox&folder=<?= $folderEnc ?>&page=<?= $page-1 ?>" target="_self">‹</a>
     <?php else: ?>
     <span class="disabled">‹</span>
     <?php endif; ?>
@@ -132,13 +135,13 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
     <?php if ($i === $page): ?>
     <span class="current"><?= $i ?></span>
     <?php else: ?>
-    <a href="?action=inbox&folder=<?= $folderEnc ?>&page=<?= $i ?>"><?= $i ?></a>
+    <a href="?action=inbox&folder=<?= $folderEnc ?>&page=<?= $i ?>" target="_self"><?= $i ?></a>
     <?php endif; ?>
     <?php endfor; ?>
     <?php if ($end < $pages) echo '<span style="border:none;width:auto;padding:0 .25rem;color:var(--wm-text-muted)">…</span>'; ?>
 
     <?php if ($page < $pages): ?>
-    <a href="?action=inbox&folder=<?= $folderEnc ?>&page=<?= $page+1 ?>">›</a>
+    <a href="?action=inbox&folder=<?= $folderEnc ?>&page=<?= $page+1 ?>" target="_self">›</a>
     <?php else: ?>
     <span class="disabled">›</span>
     <?php endif; ?>
@@ -146,7 +149,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
 <?php endif; ?>
 </div>
 
-<script>
+<script nonce="<?= $cspNonce ?>">
 function bulkAction(action) {
     var uids = getSelectedUids();
     if (!uids.length) return;
@@ -201,3 +204,5 @@ function bulkExport() {
     window.location.href = <?= $exportZipBaseUrl ?> + '&uids=' + encodeURIComponent(uids.join(','));
 }
 </script>
+
+<?php if ($folder === 'Drafts') unset($_SESSION['last_failed_draft_uid']); ?>

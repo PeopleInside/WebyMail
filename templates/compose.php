@@ -20,7 +20,7 @@ $resumeSend = !empty($resumeSend);
 
     <!-- Toolbar -->
     <div class="wm-toolbar">
-        <a href="javascript:history.back()" class="btn btn-ghost btn-sm">
+        <a href="<?= $isReply ? '?action=view&folder=' . urlencode($folder) . '&msg=' . (int)$replyMsg : '?action=inbox&folder=' . urlencode($folder) ?>" class="btn btn-ghost btn-sm" target="_self">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
             Cancel
         </a>
@@ -56,7 +56,7 @@ $resumeSend = !empty($resumeSend);
         </div>
     </div>
 
-    <form id="compose-form" method="post" action="?action=send" enctype="multipart/form-data" style="display:contents">
+    <form id="compose-form" method="post" action="?action=send" target="_self" enctype="multipart/form-data" style="display:contents">
         <?= csrfInput() ?>
         <!-- Hidden fields -->
         <input type="hidden" name="folder"       value="<?= htmlspecialchars($folder) ?>">
@@ -68,6 +68,23 @@ $resumeSend = !empty($resumeSend);
 
         <!-- Address fields -->
         <div class="wm-compose-fields">
+
+            <?php if (!empty($accounts) && (int)($user['allow_from_change'] ?? 0) === 1): ?>
+            <div class="wm-compose-field">
+                <label for="from_account">From</label>
+                <select name="from_account" id="from_account" class="form-control">
+                    <?php foreach ($accounts as $acc): ?>
+                        <option value="<?= (int)$acc['id'] ?>" 
+                                data-signature="<?= htmlspecialchars($acc['signature'] ?: ($user['signature'] ?? '')) ?>"
+                                <?= (int)$acc['id'] === (int)$currentAccountId ? 'selected' : '' ?>>
+                            <?= htmlspecialchars(($acc['sender_name'] ?: ($acc['label'] ?: (explode('@', $acc['email'])[0]))) . " <" . $acc['email'] . ">") ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <?php else: ?>
+                <input type="hidden" name="from_account" value="<?= (int)$currentAccountId ?>">
+            <?php endif; ?>
 
             <div class="wm-compose-field">
                 <label for="to">To</label>
@@ -212,7 +229,7 @@ $resumeSend = !empty($resumeSend);
     </form>
 </div>
 
-<script>
+<script nonce="<?= $cspNonce ?>">
 (function() {
     var form       = document.getElementById('compose-form');
     var toolbar    = document.getElementById('quill-toolbar');
@@ -241,7 +258,7 @@ $resumeSend = !empty($resumeSend);
         // Only add signature automatically for new messages/replies, not when resuming a draft
         // as the draft likely already contains the signature from the previous save.
         if (signature && !isEditDraft && !resumeSend) {
-            content += '<p><br></p>' + signature + '<br><br>';
+            content += '<p><br></p><div class="wm-signature">' + signature + '</div><br><br>';
         }
         if (initialHtml) content += initialHtml;
         return content;
@@ -944,11 +961,25 @@ $resumeSend = !empty($resumeSend);
         saveDraft(true);
     }, autoSaveInterval);
 
+    // From account signature switcher
+    var fromSelect = document.getElementById('from_account');
+    if (fromSelect) {
+        fromSelect.addEventListener('change', function() {
+            var selectedOpt = fromSelect.options[fromSelect.selectedIndex];
+            var newSig = selectedOpt.dataset.signature;
+            var sigDiv = editorEl.querySelector('.wm-signature');
+            if (sigDiv && newSig !== undefined) {
+                sigDiv.innerHTML = newSig;
+                checkDirty();
+            }
+        });
+    }
+
 })();
 </script>
 
 <?php if (!$isReply): ?>
-<script>
+<script nonce="<?= $cspNonce ?>">
 // Show reply-to field toggle
 document.getElementById('show-replyto')?.addEventListener('click', function() {
     var row = document.getElementById('replyto-row');

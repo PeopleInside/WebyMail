@@ -6,6 +6,25 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+// Security Headers matching index.php
+$cspNonce = bin2hex(random_bytes(16));
+$cspHeader = "default-src 'self'; " .
+             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; " .
+             "script-src-attr 'unsafe-inline'; " .
+             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " .
+             "font-src 'self' https://fonts.gstatic.com; " .
+             "img-src 'self' data: https:; " .
+             "connect-src 'self'; " .
+             "frame-ancestors 'none'; " .
+             "base-uri 'self'; " .
+             "form-action 'self';";
+
+header("Content-Security-Policy: $cspHeader");
+header("X-Content-Type-Options: nosniff");
+header("X-Frame-Options: SAMEORIGIN");
+header("X-XSS-Protection: 1; mode=block");
+header("Permissions-Policy: geolocation=(), camera=(), microphone=()");
+
 // Prevent caching
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Cache-Control: post-check=0, pre-check=0', false);
