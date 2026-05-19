@@ -211,6 +211,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $step = 'security';
         $sys = Config::checkSystem();
         $securityChecks = $sys['security'];
+    } elseif ($step === 'move_database') {
+        $targetPath = trim($_POST['db_target_path'] ?? '');
+        if ($targetPath === '') {
+            $targetPath = Config::suggestSafeDbPath();
+        }
+        $result = Config::moveDatabase($targetPath);
+        if (!$result['ok']) {
+            $error = 'Failed to move database: ' . $result['error'];
+        }
+        $step = 'security';
+        $sys = Config::checkSystem();
+        $securityChecks = $sys['security'];
     }
 }
 

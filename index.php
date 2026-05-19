@@ -1879,17 +1879,20 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $draftError = $e->getMessage();
             }
 
-            if ($draftSaved && $newDraftUid > 0) {
-                error_log('Send failed for user ' . $userId . ', account ' . $fromAccountId . ': ' . $smtp->getLog());
-                $_SESSION['last_failed_draft_uid'] = (int)$newDraftUid;
-                flashSet('danger', $smtp->getSendErrorForUser() . ' Your message was saved in Drafts.');
-                redirect('?action=inbox&folder=' . urlencode($draftsFolder));
-            }
-
+            // Always redirect to the Drafts folder so the message is never lost.
+            // Mark the new draft with the ⚠ indicator if it was saved successfully.
             error_log('Send failed for user ' . $userId . ', account ' . $fromAccountId . ': ' . $smtp->getLog() . ($draftError ? ' Draft error: ' . $draftError : ''));
-            $_SESSION['compose_prefill'] = $composePrefill;
-            flashSet('danger', $smtp->getSendErrorForUser() . ($draftError ? ' (Draft could not be saved.)' : ''));
-            redirect('?action=compose');
+            if ($draftSaved && $newDraftUid > 0) {
+                $_SESSION['last_failed_draft_uid'] = (int)$newDraftUid;
+                flashSet('danger', $smtp->getSendErrorForUser() . ' Your message has been saved as a draft.');
+            } else {
+                $errMsg = $smtp->getSendErrorForUser();
+                if ($draftError) {
+                    $errMsg .= ' The message could not be saved as a draft — check your IMAP connection.';
+                }
+                flashSet('danger', $errMsg);
+            }
+            redirect('?action=inbox&folder=' . urlencode($draftsFolder));
         }
 }
 
@@ -2161,6 +2164,12 @@ if ($action === 'settings_save') {
             flashSet('success', 'CAPTCHA Proof-of-Work activation started. Changes should be applied in about 5 minutes.');
             redirect('?action=settings&tab=system');
 
+        case 'dismiss_db_warning':
+            Config::set('ignore_db_webroot_warning', true);
+            Config::save();
+            unset($_SESSION['system_check_cache']);
+            redirect('?action=settings&tab=system');
+
         default:
             redirect('?action=settings');
     }
@@ -2182,14 +2191,13 @@ if ($action === 'fix_permissions' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($action === 'move_database' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $targetPath = trim($_POST['db_target_path'] ?? '');
     if ($targetPath === '') {
-        // Default: one directory level above the application root
-        $targetPath = '../storage/webymail.db';
+        $targetPath = Config::suggestSafeDbPath();
     }
     $result = Config::moveDatabase($targetPath);
     if ($result['ok']) {
         // Invalidate the DB singleton so the next request re-connects to the new file
         unset($_SESSION['system_check_cache']);
-        flashSet('success', 'Database moved successfully to: ' . $result['new'] . '. The old file was renamed to ' . basename($result['bak']) . ' — you may delete it when you have confirmed everything works correctly.');
+        flashSet('success', 'Database moved successfully to: ' . $result['new'] . '. The original file has been deleted from the webroot.');
     } else {
         flashSet('danger', 'Database move failed: ' . $result['error']);
     }

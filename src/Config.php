@@ -180,15 +180,29 @@ class Config
         }
 
         // Check whether the database is stored inside the webroot
-        $results['db_in_webroot'] = self::isDbInWebroot();
-        if ($results['db_in_webroot']) {
+        $dbInWebroot = self::isDbInWebroot();
+        $results['db_in_webroot'] = $dbInWebroot; // always reflects reality
+        if ($dbInWebroot && !self::get('ignore_db_webroot_warning', false)) {
             $results['all_ok'] = false;
+            $results['security'][] = [
+                'path'  => 'Database (' . basename(self::resolveDbPath()) . ')',
+                'perms' => '',
+                'ok'    => false,
+                'type'  => 'db_webroot',
+            ];
             $results['security_suggestions'][] = [
                 'type'       => 'db_in_webroot',
-                'message'    => 'The database file is stored inside the web-accessible directory. On Nginx or misconfigured servers it could be downloaded directly. Move it outside the webroot.',
+                'message'    => 'The database file is stored inside a web-accessible directory. On Nginx or misconfigured servers it could be downloaded directly. Move it outside the webroot.',
                 'action_url' => '?action=settings&tab=system',
             ];
         }
+
+        // Separate flag: are all file-permission checks passing?
+        // Used by the UI to decide whether the "Fix Permissions" button should be active
+        // (the DB-webroot issue requires a different action and must not affect the button).
+        $results['perms_ok'] = empty(
+            array_filter($results['security'], fn($c) => !$c['ok'] && ($c['type'] ?? '') !== 'db_webroot')
+        );
 
         // Cache check results in session (avoids writing to config.php on every check)
         if (session_status() === PHP_SESSION_ACTIVE) {
@@ -455,9 +469,15 @@ class Config
     }
 
     /**
-     * Return true if the database file currently lives inside the webroot.
-     * "Webroot" is defined as the application root directory (dirname(__DIR__))
-     * since that is the directory exposed by the web server.
+     * Return true if the database file currently lives inside a web-accessible
+     * directory.  Two cases are checked:
+     *
+     *  1. Direct: the DB is somewhere inside the application root directory tree.
+     *  2. Container: the DB is inside a known webroot container (public_html, www,
+     *     htdocs, html, web, public, webroot, website) that also contains the
+     *     application root — for example, the app lives at
+     *     /home/user/public_html/webymail/ and the DB is at
+     *     /home/user/public_html/storage/webymail.db.
      */
     public static function isDbInWebroot(): bool
     {
@@ -466,9 +486,49 @@ class Config
         if ($appRoot === false || $dbPath === '') {
             return false;
         }
-        return str_starts_with($dbPath, $appRoot . DIRECTORY_SEPARATOR)
-            || str_starts_with($dbPath, $appRoot . '/');
+
+        // Case 1: DB inside the app root itself
+        if (str_starts_with($dbPath . '/', $appRoot . '/')) {
+            return true;
+        }
+
+        // Case 2: both app and DB share a common webroot container ancestor
+        $webrootNames = ['public_html', 'www', 'wwwroot', 'htdocs', 'html', 'web', 'public', 'webroot', 'website'];
+        $appParts     = array_values(array_filter(explode('/', $appRoot)));
+        for ($i = 0, $n = count($appParts); $i < $n; $i++) {
+            if (in_array(strtolower($appParts[$i]), $webrootNames, true)) {
+                $containerPath = '/' . implode('/', array_slice($appParts, 0, $i + 1));
+                if (str_starts_with($dbPath . '/', $containerPath . '/')) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
+
+    /**
+     * Suggest a safe absolute path for the database outside any detected webroot
+     * container (public_html, www, etc.).  Falls back to one level above the app
+     * root when no known webroot container is found in the path.
+     */
+    public static function suggestSafeDbPath(): string
+    {
+        $appRoot = realpath(dirname(__DIR__)) ?: dirname(__DIR__);
+
+        $webrootNames = ['public_html', 'www', 'wwwroot', 'htdocs', 'html', 'web', 'public', 'webroot', 'website'];
+        $parts        = array_values(array_filter(explode('/', $appRoot)));
+
+        // Walk from the end towards the root looking for the deepest webroot-like dir
+        for ($i = count($parts) - 1; $i >= 0; $i--) {
+            if (in_array(strtolower($parts[$i]), $webrootNames, true)) {
+                // Place the data directory as a sibling of the webroot container
+                $aboveWebroot = '/' . implode('/', array_slice($parts, 0, $i));
+                return $aboveWebroot . '/webymail_data/webymail.db';            }
+        }
+
+        // No webroot-like ancestor found: one level above the application root
+        return dirname($appRoot) . '/webymail_data/webymail.db';    }
 
     /**
      * Move the SQLite database to a new location safely:
@@ -553,18 +613,22 @@ class Config
             return ['ok' => false, 'error' => 'Config save failed: ' . $e->getMessage()];
         }
 
-        // Rename old file to .bak (keep it for recovery, do not silently delete user data)
-        $bakPath = $oldPath . '.bak';
-        @rename($oldPath, $bakPath);
-        // Also rename WAL / SHM sidecar files if present
+        // Delete the old database and its WAL/SHM sidecars so the file is no
+        // longer accessible from the webroot.  Non-fatal: if deletion fails (e.g.
+        // file is locked) we log it but do not roll back — the copy is valid and
+        // the config already points at the new location.
+        @unlink($oldPath);
         foreach (['-wal', '-shm'] as $suffix) {
             $sidecar = $oldPath . $suffix;
             if (is_file($sidecar)) {
-                @rename($sidecar, $sidecar . '.bak');
+                @unlink($sidecar);
             }
         }
+        if (is_file($oldPath)) {
+            error_log('WebyMail: could not delete old database after move: ' . $oldPath);
+        }
 
-        return ['ok' => true, 'old' => $oldPath, 'new' => $targetPath, 'bak' => $bakPath];
+        return ['ok' => true, 'old' => $oldPath, 'new' => $targetPath];
     }
 
     private static function defaults(): array
@@ -583,7 +647,7 @@ class Config
             'smtp_port'       => 465,
             'smtp_ssl'        => true,
             'smtp_starttls'   => false,
-            'db_path'         => '../storage/webymail.db', // one level above webroot
+            'db_path'         => '../webymail_data/webymail.db', // outside webroot by default
             'setup_complete'  => false,
             'timezone'        => 'Europe/Rome',
             'hide_server_on_login' => true,
