@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '3.4.6';
+    public const VERSION = '3.4.7';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
@@ -176,6 +176,17 @@ class Config
                 'type' => '2fa',
                 'message' => 'Two-Factor Authentication is globally disabled. Enabling it significantly improves account security.',
                 'action_url' => '?action=settings&tab=security'
+            ];
+        }
+
+        // Check whether the database is stored inside the webroot
+        $results['db_in_webroot'] = self::isDbInWebroot();
+        if ($results['db_in_webroot']) {
+            $results['all_ok'] = false;
+            $results['security_suggestions'][] = [
+                'type'       => 'db_in_webroot',
+                'message'    => 'The database file is stored inside the web-accessible directory. On Nginx or misconfigured servers it could be downloaded directly. Move it outside the webroot.',
+                'action_url' => '?action=settings&tab=system',
             ];
         }
 
@@ -427,6 +438,135 @@ class Config
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Database path helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Resolve the configured db_path to an absolute filesystem path.
+     */
+    public static function resolveDbPath(): string
+    {
+        $path = self::get('db_path', 'data/webymail.db');
+        if (!str_starts_with($path, '/') && !str_contains($path, ':')) {
+            $path = dirname(__DIR__) . '/' . $path;
+        }
+        return realpath($path) ?: $path;
+    }
+
+    /**
+     * Return true if the database file currently lives inside the webroot.
+     * "Webroot" is defined as the application root directory (dirname(__DIR__))
+     * since that is the directory exposed by the web server.
+     */
+    public static function isDbInWebroot(): bool
+    {
+        $appRoot = realpath(dirname(__DIR__));
+        $dbPath  = self::resolveDbPath();
+        if ($appRoot === false || $dbPath === '') {
+            return false;
+        }
+        return str_starts_with($dbPath, $appRoot . DIRECTORY_SEPARATOR)
+            || str_starts_with($dbPath, $appRoot . '/');
+    }
+
+    /**
+     * Move the SQLite database to a new location safely:
+     *  1. Checkpoint the WAL so the single .db file is self-contained.
+     *  2. Copy the file to the target path (creates parent dirs as needed).
+     *  3. Update config.php to point at the new location.
+     *  4. Rename the old file to .bak so it is no longer served but can be
+     *     recovered if something goes wrong.
+     *
+     * Returns ['ok' => true, 'old' => string, 'new' => string]
+     *      or ['ok' => false, 'error' => string].
+     */
+    public static function moveDatabase(string $targetPath): array
+    {
+        // Resolve the current absolute path
+        $oldPath = self::resolveDbPath();
+        if (!is_file($oldPath)) {
+            return ['ok' => false, 'error' => 'Current database file not found at: ' . $oldPath];
+        }
+
+        // Resolve the target absolute path
+        if (!str_starts_with($targetPath, '/') && !str_contains($targetPath, ':')) {
+            $targetPath = dirname(__DIR__) . '/' . $targetPath;
+        }
+
+        // Normalise (realpath won't work for a non-existent file, so we clean it manually)
+        $targetPath = rtrim(str_replace(['\\', '//'], ['/', '/'], $targetPath), '/');
+
+        if ($targetPath === $oldPath) {
+            return ['ok' => false, 'error' => 'Target path is the same as the current database location.'];
+        }
+
+        // Create target directory
+        $targetDir = dirname($targetPath);
+        if (!is_dir($targetDir)) {
+            if (!@mkdir($targetDir, 0700, true)) {
+                return ['ok' => false, 'error' => 'Cannot create target directory: ' . $targetDir];
+            }
+        }
+
+        if (!is_writable($targetDir)) {
+            return ['ok' => false, 'error' => 'Target directory is not writable: ' . $targetDir];
+        }
+
+        // Checkpoint the WAL before copying so the destination is a clean, consistent file
+        try {
+            $pdo = new \PDO('sqlite:' . $oldPath);
+            $pdo->exec('PRAGMA wal_checkpoint(TRUNCATE);');
+            $pdo = null;
+        } catch (\Exception $e) {
+            return ['ok' => false, 'error' => 'WAL checkpoint failed: ' . $e->getMessage()];
+        }
+
+        // Copy the database file
+        if (!@copy($oldPath, $targetPath)) {
+            return ['ok' => false, 'error' => 'Failed to copy database to: ' . $targetPath];
+        }
+        @chmod($targetPath, 0600);
+
+        // Verify the copy is readable and is a valid SQLite file
+        $magic = @file_get_contents($targetPath, false, null, 0, 16);
+        if ($magic === false || !str_starts_with($magic, 'SQLite format 3')) {
+            @unlink($targetPath);
+            return ['ok' => false, 'error' => 'Copied file does not appear to be a valid SQLite database.'];
+        }
+
+        // Store path as relative to app root when possible (more portable)
+        $appRoot  = dirname(__DIR__);
+        $savePath = $targetPath;
+        if (str_starts_with($targetPath, $appRoot . '/')) {
+            $savePath = substr($targetPath, strlen($appRoot) + 1);
+        } elseif (str_starts_with($targetPath, $appRoot . DIRECTORY_SEPARATOR)) {
+            $savePath = substr($targetPath, strlen($appRoot) + 1);
+        }
+
+        // Update configuration
+        self::set('db_path', $savePath);
+        try {
+            self::save();
+        } catch (\RuntimeException $e) {
+            @unlink($targetPath);
+            return ['ok' => false, 'error' => 'Config save failed: ' . $e->getMessage()];
+        }
+
+        // Rename old file to .bak (keep it for recovery, do not silently delete user data)
+        $bakPath = $oldPath . '.bak';
+        @rename($oldPath, $bakPath);
+        // Also rename WAL / SHM sidecar files if present
+        foreach (['-wal', '-shm'] as $suffix) {
+            $sidecar = $oldPath . $suffix;
+            if (is_file($sidecar)) {
+                @rename($sidecar, $sidecar . '.bak');
+            }
+        }
+
+        return ['ok' => true, 'old' => $oldPath, 'new' => $targetPath, 'bak' => $bakPath];
+    }
+
     private static function defaults(): array
     {
         return [
@@ -443,7 +583,7 @@ class Config
             'smtp_port'       => 465,
             'smtp_ssl'        => true,
             'smtp_starttls'   => false,
-            'db_path'         => 'data/webymail.db',
+            'db_path'         => '../storage/webymail.db', // one level above webroot
             'setup_complete'  => false,
             'timezone'        => 'Europe/Rome',
             'hide_server_on_login' => true,

@@ -1090,6 +1090,46 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
         </div>
         <?php endif; ?>
 
+        <?php if (!empty($sys['db_in_webroot'])): ?>
+        <div class="wm-card" style="margin-top:1.5rem;border-left:4px solid var(--wm-danger)">
+            <div class="wm-card-header" style="color:var(--wm-danger)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                Database is inside the webroot
+            </div>
+            <div class="wm-card-body">
+                <p style="font-size:.85rem;margin-top:0">
+                    The database file is stored inside the web-accessible directory
+                    (<code><?= htmlspecialchars(Config::resolveDbPath()) ?></code>).
+                    On Nginx or on Apache servers without a working <code>.htaccess</code>, this file
+                    could be downloaded directly by anyone, exposing encrypted passwords, TOTP secrets
+                    and session tokens.
+                </p>
+                <p style="font-size:.85rem">
+                    <strong>Recommended action:</strong> move the database one level above the webroot.
+                    WebyMail can do this for you automatically — the old file will be renamed to
+                    <code>.bak</code> so you can delete it once you have verified that everything
+                    still works correctly.
+                </p>
+                <form method="post" action="?action=move_database" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end">
+                    <?= csrfInput() ?>
+                    <div style="flex:1;min-width:200px">
+                        <label for="db_target_path" style="font-size:.82rem;display:block;margin-bottom:.25rem">
+                            Target path <span style="color:var(--wm-text-muted)">(relative to app root, or absolute)</span>
+                        </label>
+                        <input type="text" id="db_target_path" name="db_target_path"
+                               class="form-control" style="font-family:var(--wm-font-mono);font-size:.82rem"
+                               value="../storage/webymail.db"
+                               placeholder="../storage/webymail.db">
+                    </div>
+                    <button type="submit" class="btn btn-danger btn-sm"
+                            onclick="return confirm('Move the database to the specified path? The old file will be kept as a .bak backup.')">
+                        Move database outside webroot
+                    </button>
+                </form>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <?php endif; ?>
 
     </div><!-- /content -->

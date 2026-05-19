@@ -47,6 +47,41 @@ class SmtpClient
         return $this->log;
     }
 
+    /**
+     * Return a safe, user-facing error message for a failed send.
+     *
+     * If the server issued a 5xx rejection (e.g. 550 spam policy), the
+     * descriptive reason text is extracted and returned so the user understands
+     * why the message was refused.  All other server detail (hostnames, banner
+     * text, EHLO responses, authentication lines) is stripped.
+     */
+    public function getSendErrorForUser(): string
+    {
+        // Walk the log lines looking for the last 5xx server response
+        $reason = null;
+        foreach (explode("\n", $this->log) as $line) {
+            // Lines received from server start with "< "
+            if (str_starts_with($line, '< ') && preg_match('/^< (5\d{2})[-\s](.+)$/', $line, $m)) {
+                $code = $m[1];
+                $text = trim($m[2]);
+                // Strip enhanced status codes like "5.7.1 " at the start of the text
+                $text = preg_replace('/^\d+\.\d+\.\d+\s+/', '', $text);
+                // Keep only printable ASCII, collapse whitespace
+                $text = preg_replace('/[^\x20-\x7E]/', '', $text);
+                $text = trim((string) preg_replace('/\s{2,}/', ' ', $text));
+                if ($text !== '') {
+                    $reason = $code . ': ' . $text;
+                }
+            }
+        }
+
+        if ($reason !== null) {
+            return 'Message rejected by server — ' . $reason;
+        }
+
+        return 'Failed to send message. Please check your account settings or try again later.';
+    }
+
     public function getLastRaw(): ?string
     {
         return $this->lastRaw;
