@@ -52,7 +52,7 @@ class Auth
         } catch (RuntimeException $e) {
             $this->recordFailedAttempt($ip);
             error_log('IMAP login failed for ' . $username . ' from ' . $ip . ': ' . $e->getMessage());
-            return ['ok' => false, 'error' => 'Unable to authenticate. Server said: ' . $e->getMessage()];
+            return ['ok' => false, 'error' => 'Invalid credentials or server unreachable. Please check your details.'];
         }
 
         // Success: clear attempts for this IP
@@ -113,15 +113,17 @@ class Auth
             // Store pending auth in a short-lived token so the 2FA page can complete it
             $pending = bin2hex(random_bytes(16));
             $_SESSION['pending_2fa'] = [
-                'token'      => $pending,
-                'user_id'    => $userId,
-                'account_id' => $accountId,
-                'expires'    => time() + 300,
+                'token'       => $pending,
+                'user_id'     => $userId,
+                'account_id'  => $accountId,
+                'expires'     => time() + 300,
+                'attempts'    => 0,
+                'remember_me' => $rememberMe,
             ];
             return ['ok' => true, 'needs_2fa' => true, 'pending_token' => $pending];
         }
 
-        $this->session->create($userId, $accountId);
+        $this->session->create($userId, $accountId, $rememberMe);
         return ['ok' => true, 'needs_2fa' => false];
     }
 
