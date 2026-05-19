@@ -151,6 +151,39 @@ body {
 a { color: var(--wm-primary); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
+.wm-blocked-image {
+    max-width: 100%;
+    height: auto;
+    border: 1px dashed var(--wm-border);
+    border-radius: 4px;
+    display: inline-block;
+    margin: 0.5rem 0;
+    cursor: default;
+}
+
+select.form-control,
+input.form-control,
+textarea.form-control {
+    background-color: var(--wm-surface);
+    color: var(--wm-text);
+}
+
+select {
+    color-scheme: dark light;
+}
+
+select.form-control option {
+    background-color: var(--wm-surface);
+    color: var(--wm-text);
+}
+
+.wm-compose-field select {
+    border: 1px solid var(--wm-border);
+    border-radius: 4px;
+    padding: 0 0.5rem;
+    height: 32px;
+}
+
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--wm-scrollbar-track); }
 ::-webkit-scrollbar-thumb { background: var(--wm-scrollbar-thumb); border-radius: 3px; }

@@ -52,7 +52,7 @@ class Auth
         } catch (RuntimeException $e) {
             $this->recordFailedAttempt($ip);
             error_log('IMAP login failed for ' . $username . ' from ' . $ip . ': ' . $e->getMessage());
-            return ['ok' => false, 'error' => 'Unable to authenticate. Please verify your IMAP credentials and try again.'];
+            return ['ok' => false, 'error' => 'Unable to authenticate. Server said: ' . $e->getMessage()];
         }
 
         // Success: clear attempts for this IP

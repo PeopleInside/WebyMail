@@ -138,7 +138,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                     </label>
                     <?php endif; ?>
                     <div style="display:flex;gap:.75rem">
-                        <a href="?action=setup" class="btn btn-ghost" style="flex:1">← Back</a>
+                        <a href="?action=setup" class="btn btn-ghost" style="flex:1" target="_self">← Back</a>
                         <button type="submit" class="btn btn-primary" style="flex:2" <?= !$allOk ? 'id="req-submit" disabled' : '' ?>>
                             Continue to Server Config →
                         </button>
@@ -146,8 +146,8 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                 </form>
             </div>
         </div>
-        <script>
-            const ignoreCheck = document.querySelector('input[name="ignore_requirements"]');
+        <script nonce="<?= $cspNonce ?>">
+    const ignoreCheck = document.querySelector('input[name="ignore_requirements"]');
             const submitBtn = document.getElementById('req-submit');
             if (ignoreCheck && submitBtn) {
                 ignoreCheck.addEventListener('change', function() {
@@ -408,14 +408,14 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                     For security, <code>setup.php</code> has been renamed to <code>setup.php.bak</code>.
                     To run setup again, rename it back and visit <code>setup.php?force=1</code>.
                 </div>
-                <a href="index.php" class="btn btn-primary w-100">Go to Login →</a>
+                <a href="index.php" class="btn btn-primary w-100" target="_self">Go to Login →</a>
             </div>
         </div>
         <?php endif; ?>
     </div>
 </div>
 
-<script>
+<script nonce="<?= $cspNonce ?>">
 // SMTP Port auto-switching
 (function() {
     const sslCheck = document.querySelector('[data-smtp-ssl]');

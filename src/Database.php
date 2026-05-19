@@ -76,6 +76,7 @@ class Database
                 recovery_codes TEXT,
                 signature     TEXT    NOT NULL DEFAULT '',
                 theme         TEXT    NOT NULL DEFAULT 'system',
+                allow_from_change INTEGER NOT NULL DEFAULT 0,
                 created_at    INTEGER NOT NULL DEFAULT (strftime('%s','now')),
                 updated_at    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
             );
@@ -134,6 +135,7 @@ class Database
         // Users table
         $this->ensureColumnExists('users', 'theme', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'");
         $this->ensureColumnExists('users', 'signature', "ALTER TABLE users ADD COLUMN signature TEXT NOT NULL DEFAULT ''");
+        $this->ensureColumnExists('users', 'allow_from_change', "ALTER TABLE users ADD COLUMN allow_from_change INTEGER NOT NULL DEFAULT 0");
         $this->ensureColumnExists('users', 'totp_secret', "ALTER TABLE users ADD COLUMN totp_secret TEXT");
         $this->ensureColumnExists('users', 'totp_enabled', "ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0");
         $this->ensureColumnExists('users', 'recovery_codes', "ALTER TABLE users ADD COLUMN recovery_codes TEXT");

@@ -45,7 +45,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                     </div>
                     <button type="submit" class="btn btn-primary w-100">Verify</button>
                     <div style="text-align:center;margin-top:1rem">
-                        <a href="?action=cancel_2fa" class="btn btn-ghost btn-sm" style="font-size:.82rem">
+                        <a href="?action=cancel_2fa" class="btn btn-ghost btn-sm" style="font-size:.82rem" target="_self">
                             Cancel and return to login
                         </a>
                     </div>
@@ -197,7 +197,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
     </div>
 </div>
 
-<script>
+<script nonce="<?= $cspNonce ?>">
 // Password show/hide toggle
 document.getElementById('pw-toggle')?.addEventListener('click', function() {
     var pw = document.getElementById('password');
@@ -243,4 +243,4 @@ document.getElementById('username')?.addEventListener('blur', function() {
     });
 })();
 </script>
-<script src="assets/js/pow.js"></script>
+<script nonce="<?= $cspNonce ?>" src="assets/js/pow.js"></script>

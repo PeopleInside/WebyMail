@@ -346,17 +346,39 @@ function getCurrentFolder() {
 }
 
 function isInboxListView() {
-    const action = getCurrentAction();
-    return action === 'inbox';
+    // Explicitly check for compose or view containers to avoid any false positives
+    if (document.getElementById('compose-form') || document.getElementById('email-body-shadow') || document.getElementById('email-frame')) {
+        return false;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get('action');
+    // We only consider it the mailbox listing view if action is missing (default) or explicitly 'inbox'
+    return !action || action === 'inbox';
 }
 
 function isSafeToRefreshInboxView() {
     if (document.hidden) return false;
+
+    // Don't refresh if a modal is open
     const hasModal = document.querySelector('.wm-modal[style*="display: flex"]') ||
         document.querySelector('.wm-modal[style*="display: block"]');
+    if (hasModal) return false;
+
+    // Don't refresh if the folder context menu is open
+    const ctxMenu = document.getElementById('folder-ctx-menu');
+    if (ctxMenu && ctxMenu.style.display === 'block') return false;
+
+    // Don't refresh if the user is typing in any input, textarea or contenteditable element
     const activeEl = document.activeElement;
     const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.contentEditable === 'true');
-    return !hasModal && !isInput;
+    if (isInput) return false;
+
+    // Don't refresh if the user has selected some text on the page
+    const selection = window.getSelection();
+    if (selection && selection.toString().length > 0) return false;
+
+    return true;
 }
 
 async function refreshInboxViewPreservingState() {
@@ -376,6 +398,8 @@ async function refreshInboxViewPreservingState() {
     inboxRefreshInFlight = true;
     try {
         const refreshUrl = new URL(window.location.href);
+        // Ensure we preserve currently viewed folder and page, but always force 'inbox' action
+        // in case we were on the root URL without parameters.
         refreshUrl.searchParams.set('action', 'inbox');
         refreshUrl.hash = '';
 
@@ -388,6 +412,10 @@ async function refreshInboxViewPreservingState() {
         const doc = new DOMParser().parseFromString(html, 'text/html');
         const nextContainer = doc.getElementById('inbox-content');
         const nextTotal = doc.getElementById('inbox-total-count');
+        
+        // Safety check: if the fetched page doesn't have the mailbox content, 
+        // it means we probably got redirected to Login or something else.
+        // We MUST NOT replace the current list with nothing.
         if (!nextContainer) return false;
 
         const replacement = document.createDocumentFragment();
@@ -425,10 +453,11 @@ async function refreshInboxViewPreservingState() {
 }
 
 function initAutoRefresh() {
-    const REFRESH_INTERVAL = 120000; // 2 minutes
+    const REFRESH_INTERVAL = 120000; // 2 minutes (reverted from 5 minutes)
 
     setInterval(() => {
-        if (isInboxListView() && isSafeToRefreshInboxView()) {
+        // Only auto-refresh if we are in the INBOX folder listing. 
+        if (isInboxListView() && getCurrentFolder() === 'INBOX' && isSafeToRefreshInboxView()) {
             refreshInboxViewPreservingState();
         }
     }, REFRESH_INTERVAL);
@@ -452,9 +481,7 @@ window.updateFolderUnread = function(folderName, count) {
 function initUnreadChecker() {
     const CHECK_INTERVAL = 60000; // 1 minute
     const originalTitle = document.title;
-    const inboxBadgeText = document.querySelector('.badge[data-folder-unread="INBOX"]')?.textContent;
-    const parsedInitialInboxUnread = parseInt((inboxBadgeText ?? '').trim(), 10);
-    let lastInboxUnread = Number.isFinite(parsedInitialInboxUnread) ? parsedInitialInboxUnread : null;
+    let lastCounts = null;
 
     function check() {
         fetch('?action=check_unread', {
@@ -463,6 +490,10 @@ function initUnreadChecker() {
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success' && data.counts) {
+                const currentCounts = JSON.stringify(data.counts);
+                const countChanged = lastCounts !== null && lastCounts !== currentCounts;
+                lastCounts = currentCounts;
+
                 // Update all folder badges
                 for (const [folder, count] of Object.entries(data.counts)) {
                     window.updateFolderUnread(folder, count);
@@ -480,10 +511,7 @@ function initUnreadChecker() {
                     document.title = originalTitle;
                 }
 
-                const hasNewInboxMail = lastInboxUnread !== null && parsedInboxUnread > lastInboxUnread;
-                lastInboxUnread = parsedInboxUnread;
-
-                if (hasNewInboxMail && getCurrentFolder() === 'INBOX' && isInboxListView() && isSafeToRefreshInboxView()) {
+                if (countChanged && getCurrentFolder() === 'INBOX' && isInboxListView() && isSafeToRefreshInboxView()) {
                     refreshInboxViewPreservingState();
                 }
             }
