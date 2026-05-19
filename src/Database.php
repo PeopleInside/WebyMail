@@ -128,6 +128,7 @@ class Database
 
             CREATE TABLE IF NOT EXISTS login_attempts (
                 ip_address    TEXT    NOT NULL DEFAULT '',
+                username      TEXT    NOT NULL DEFAULT '',
                 attempts      INTEGER NOT NULL DEFAULT 1,
                 last_attempt  INTEGER NOT NULL DEFAULT (strftime('%s','now'))
             );
@@ -161,6 +162,7 @@ class Database
         
         // Login attempts table
         $this->ensureColumnExists('login_attempts', 'ip_address', "ALTER TABLE login_attempts ADD COLUMN ip_address TEXT NOT NULL DEFAULT ''");
+        $this->ensureColumnExists('login_attempts', 'username', "ALTER TABLE login_attempts ADD COLUMN username TEXT NOT NULL DEFAULT ''");
         $this->ensureColumnExists('login_attempts', 'attempts', "ALTER TABLE login_attempts ADD COLUMN attempts INTEGER NOT NULL DEFAULT 1");
         $this->ensureColumnExists('login_attempts', 'last_attempt', "ALTER TABLE login_attempts ADD COLUMN last_attempt INTEGER NOT NULL DEFAULT (strftime('%s','now'))");
 
@@ -170,6 +172,7 @@ class Database
             CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
             CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id);
             CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip_address);
+            CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts(username);
         ");
     }
 

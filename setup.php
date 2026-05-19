@@ -9,13 +9,12 @@ if (session_status() === PHP_SESSION_NONE) {
 // Security Headers matching index.php
 $cspNonce = bin2hex(random_bytes(16));
 $cspHeader = "default-src 'self'; " .
-             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; " .
-             "script-src-attr 'unsafe-inline'; " .
+             "script-src 'self' 'nonce-{$cspNonce}'; " .
              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " .
              "font-src 'self' https://fonts.gstatic.com; " .
              "img-src 'self' data: https:; " .
              "connect-src 'self'; " .
-             "frame-ancestors 'none'; " .
+             "frame-ancestors 'self'; " .
              "base-uri 'self'; " .
              "form-action 'self';";
 
@@ -199,8 +198,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $step = 'done';
         // Clear the force flag so the wizard cannot be re-entered without ?force=1
         unset($_SESSION['setup_force'], $_SESSION['setup_csrf']);
-        // Auto-rename setup.php to prevent accidental re-runs
-        @rename(__FILE__, __FILE__ . '.bak');
+
+        // Move setup.php to the database directory for security (hardening)
+        $dbDir = dirname(Config::resolveDbPath());
+        if (is_dir($dbDir) && is_writable($dbDir)) {
+            @rename(__FILE__, $dbDir . DIRECTORY_SEPARATOR . 'setup.php');
+        } else {
+            @unlink(__FILE__);
+        }
     } elseif ($step === 'fix_permissions') {
         // Ensure a session is active so Config::checkSystem() can persist the
         // result cache, preventing a stale "issues found" banner in the main app.

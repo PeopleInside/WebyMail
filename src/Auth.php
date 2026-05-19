@@ -41,7 +41,7 @@ class Auth
         bool   $rememberMe = false
     ): array {
         $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-        if ($this->isIpBanned($ip)) {
+        if ($this->isBanned($ip, $username)) {
             return ['ok' => false, 'error' => 'Too many failed login attempts. Please try again in 15 minutes.'];
         }
 
@@ -53,13 +53,13 @@ class Auth
             $imap->connect($host, $port, $ssl, $username, $password, $allowInsecure);
             $imap->disconnect();
         } catch (RuntimeException $e) {
-            $this->recordFailedAttempt($ip);
+            $this->recordFailedAttempt($ip, $username);
             error_log('IMAP login failed for ' . $username . ' from ' . $ip . ': ' . $e->getMessage());
             return ['ok' => false, 'error' => 'Invalid credentials or server unreachable. Please check your details.'];
         }
 
-        // Success: clear attempts for this IP
-        $this->clearAttempts($ip);
+        // Success: clear attempts
+        $this->clearAttempts($ip, $username);
 
         // Provision or retrieve the user record
         $user = $this->db->fetch('SELECT * FROM users WHERE email = ?', [$username]);
@@ -151,7 +151,9 @@ class Auth
 
         // IP-level rate limiting (shared with the IMAP login counter)
         $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-        if ($this->isIpBanned($ip)) {
+        $userRow = $this->db->fetch('SELECT email FROM users WHERE id = ?', [$userId]);
+        $username = $userRow['email'] ?? '';
+        if ($this->isBanned($ip, $username)) {
             return ['ok' => false, 'error' => 'Too many failed login attempts. Please try again in 15 minutes.'];
         }
 
@@ -187,9 +189,9 @@ class Auth
             return ['ok' => true, 'recovery_used' => true, 'remaining' => count($updated)];
         }
 
-        // Failed attempt: increment counter in pending session and record against IP
+        // Failed attempt: increment counter in pending session and record against IP and username
         $_SESSION['pending_2fa']['attempts'] = $attempts + 1;
-        $this->recordFailedAttempt($ip);
+        $this->recordFailedAttempt($ip, $username);
 
         $remaining = $maxAttempts - ($attempts + 1);
         if ($remaining <= 0) {
@@ -234,47 +236,83 @@ class Auth
     // Rate Limiting
     // -------------------------------------------------------------------------
 
-    private function isIpBanned(string $ip): bool
+    private function isBanned(string $ip, string $username): bool
     {
-        $row = $this->db->fetch('SELECT * FROM login_attempts WHERE ip_address = ?', [$ip]);
-        if (!$row) return false;
+        $window = 15 * 60; // 15 minutes
+        $maxAttempts = 5;
 
-        $attempts = (int) $row['attempts'];
-        $last     = (int) $row['last_attempt'];
-        $window   = 15 * 60; // 15 minutes
-
-        if ($attempts >= 5 && (time() - $last) < $window) {
-            return true;
+        // Check by IP
+        $rowIp = $this->db->fetch('SELECT * FROM login_attempts WHERE ip_address = ? AND username = \'\'', [$ip]);
+        if ($rowIp) {
+            $attempts = (int) $rowIp['attempts'];
+            $last     = (int) $rowIp['last_attempt'];
+            if ($attempts >= $maxAttempts && (time() - $last) < $window) {
+                return true;
+            }
+            if ((time() - $last) >= $window) {
+                $this->clearAttempts($ip, '');
+            }
         }
 
-        // If window passed, reset
-        if ((time() - $last) >= $window) {
-            $this->clearAttempts($ip);
-            return false;
+        // Check by Username
+        if ($username !== '') {
+            $rowUser = $this->db->fetch('SELECT * FROM login_attempts WHERE username = ?', [$username]);
+            if ($rowUser) {
+                $attempts = (int) $rowUser['attempts'];
+                $last     = (int) $rowUser['last_attempt'];
+                if ($attempts >= $maxAttempts && (time() - $last) < $window) {
+                    return true;
+                }
+                if ((time() - $last) >= $window) {
+                    $this->clearAttempts('', $username);
+                }
+            }
         }
 
         return false;
     }
 
-    private function recordFailedAttempt(string $ip): void
+    private function recordFailedAttempt(string $ip, string $username): void
     {
-        $row = $this->db->fetch('SELECT * FROM login_attempts WHERE ip_address = ?', [$ip]);
-        if ($row) {
+        // Record for IP
+        $rowIp = $this->db->fetch('SELECT * FROM login_attempts WHERE ip_address = ? AND username = \'\'', [$ip]);
+        if ($rowIp) {
             $this->db->query(
-                'UPDATE login_attempts SET attempts = attempts + 1, last_attempt = ? WHERE ip_address = ?',
+                'UPDATE login_attempts SET attempts = attempts + 1, last_attempt = ? WHERE ip_address = ? AND username = \'\'',
                 [time(), $ip]
             );
         } else {
             $this->db->query(
-                'INSERT INTO login_attempts (ip_address, attempts, last_attempt) VALUES (?, 1, ?)',
+                'INSERT INTO login_attempts (ip_address, username, attempts, last_attempt) VALUES (?, \'\', 1, ?)',
                 [$ip, time()]
             );
         }
+
+        // Record for Username
+        if ($username !== '') {
+            $rowUser = $this->db->fetch('SELECT * FROM login_attempts WHERE username = ? AND ip_address = \'\'', [$username]);
+            if ($rowUser) {
+                $this->db->query(
+                    'UPDATE login_attempts SET attempts = attempts + 1, last_attempt = ? WHERE username = ? AND ip_address = \'\'',
+                    [time(), $username]
+                );
+            } else {
+                $this->db->query(
+                    'INSERT INTO login_attempts (ip_address, username, attempts, last_attempt) VALUES (\'\', ?, 1, ?)',
+                    [$username, time()]
+                );
+            }
+        }
     }
 
-    private function clearAttempts(string $ip): void
+    private function clearAttempts(string $ip, string $username): void
     {
-        $this->db->query('DELETE FROM login_attempts WHERE ip_address = ?', [$ip]);
+        if ($ip !== '') {
+            $this->db->query('DELETE FROM login_attempts WHERE ip_address = ? AND username = \'\'', [$ip]);
+        }
+        if ($username !== '') {
+            $this->db->query('DELETE FROM login_attempts WHERE username = ? AND ip_address = \'\'', [$username]);
+        }
     }
 
     // -------------------------------------------------------------------------

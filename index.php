@@ -71,7 +71,7 @@ session_set_cookie_params([
 session_start();
 
 // ── Security Headers ──────────────────────────────────────────────────────────
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{$cspNonce}' https://cdnjs.cloudflare.com; script-src-attr 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; worker-src 'self' blob:; frame-src 'self';");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{$cspNonce}'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; worker-src 'self' blob:; frame-src 'self'; frame-ancestors 'self';");
 header("X-Content-Type-Options: nosniff");
 header("X-Frame-Options: SAMEORIGIN");
 header("X-XSS-Protection: 1; mode=block");
@@ -105,6 +105,9 @@ if (!Config::isSetup()) {
     header('Location: setup.php');
     exit;
 }
+
+// ── Housekeeping ─────────────────────────────────────────────────────────────
+Config::cleanup();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -159,8 +162,10 @@ function findFolderName(array $folders, array $candidates, string $fallback): st
     return $fallback;
 }
 
-const TRASH_FOLDER_VARIANTS = ['Trash', 'Deleted', 'Deleted Items'];
-const SPAM_FOLDER_VARIANTS  = ['Spam', 'Junk', 'Junk E-mail', 'Junk Mail'];
+const TRASH_FOLDER_VARIANTS = ['Trash', 'Deleted', 'Deleted Items', 'Cestino', 'Posta eliminata'];
+const SPAM_FOLDER_VARIANTS  = ['Spam', 'Junk', 'Junk E-mail', 'Junk Mail', 'Posta indesiderata', 'Antispam'];
+const SENT_FOLDER_VARIANTS  = ['Sent', 'Sent Items', 'Posta inviata', 'Inviata'];
+const DRAFTS_FOLDER_VARIANTS = ['Drafts', 'Bozze', 'Draft'];
 
 function resolveTrashFolder(ImapClient $imap): string
 {
@@ -178,6 +183,16 @@ function resolveSpamFolder(ImapClient $imap): string
     return findFolderName($imap->getFolders(), SPAM_FOLDER_VARIANTS, 'Spam');
 }
 
+function resolveSentFolder(ImapClient $imap): string
+{
+    return findFolderName($imap->getFolders(), SENT_FOLDER_VARIANTS, 'Sent');
+}
+
+function resolveDraftsFolder(ImapClient $imap): string
+{
+    return findFolderName($imap->getFolders(), DRAFTS_FOLDER_VARIANTS, 'Drafts');
+}
+
 function isTrashFolderEquivalent(string $folder, string $trash): bool
 {
     $normalizeFolderName = static function (string $name): string {
@@ -185,6 +200,12 @@ function isTrashFolderEquivalent(string $folder, string $trash): bool
         return strtolower(end($parts));
     };
     return $normalizeFolderName($folder) === $normalizeFolderName($trash);
+}
+
+function isDraftsFolderEquivalent(string $folder, ImapClient $imap): bool
+{
+    $drafts = resolveDraftsFolder($imap);
+    return isTrashFolderEquivalent($folder, $drafts); // We use the same normalization logic
 }
 
 function folderExists(array $folders, string $folderName): bool
@@ -205,6 +226,15 @@ function moveToTrashOrDelete(ImapClient $imap, string $folder, int $msgNo, strin
         $imap->deleteMessage($folder, $msgNo);
     } else {
         $imap->moveMessage($folder, $msgNo, $trash);
+    }
+}
+
+function moveToTrashOrDeleteByUid(ImapClient $imap, string $folder, int $uid, string $trash, bool $isTrashFolder): void
+{
+    if ($isTrashFolder) {
+        $imap->deleteMessageByUid($folder, $uid);
+    } else {
+        $imap->moveMessageByUid($folder, $uid, $trash);
     }
 }
 
@@ -743,12 +773,22 @@ if ($action === 'view') {
     $msgNo  = (int) ($_GET['msg'] ?? 0);
     $message = null;
     $isTrash = false;
+    $isDraft = false;
 
     try {
         $imap    = $accountMgr->imapConnect($accountId);
         $message = $imap->getMessage($currentFolder, $msgNo);
         $trash   = resolveTrashFolder($imap);
         $isTrash = isTrashFolderEquivalent($currentFolder, $trash);
+        $isDraft = isDraftsFolderEquivalent($currentFolder, $imap);
+
+        // Redirect to compose for drafts instead of simple view
+        if ($isDraft) {
+            $imap->disconnect();
+            $folderEnc = urlencode($currentFolder);
+            header('Location: ?action=compose&folder=' . $folderEnc . '&edit_draft=' . $msgNo);
+            exit;
+        }
         $imap->disconnect();
     } catch (RuntimeException $e) {
         error_log('Message load failed for user ' . $userId . ', account ' . $accountId . ', folder ' . $currentFolder . ', msg ' . $msgNo . ': ' . $e->getMessage());
@@ -770,6 +810,7 @@ if ($action === 'view') {
         'message'     => $message,
         'folder'      => $currentFolder,
         'isTrash'     => $isTrash,
+        'isDraft'     => $isDraft,
         'hasExternal' => $hasExternal,
         'pageTitle'   => pageTitle($message['subject'] ?? 'View message'),
     ]);
@@ -1294,7 +1335,7 @@ if ($action === 'bulk' && isAjax()) {
             $trash = resolveTrashFolder($imap);
             $inTrash = isTrashFolderEquivalent($folder, $trash);
             foreach ($uids as $uid) {
-                moveToTrashOrDelete($imap, $folder, $uid, $trash, $inTrash);
+                moveToTrashOrDeleteByUid($imap, $folder, $uid, $trash, $inTrash);
             }
         } elseif ($act === 'move') {
             $moveError = null;
@@ -1311,13 +1352,13 @@ if ($action === 'bulk' && isAjax()) {
                 jsonResponse(['ok' => false, 'error' => $moveError]);
             }
             foreach ($uids as $uid) {
-                $imap->moveMessage($folder, $uid, $destination);
+                $imap->moveMessageByUid($folder, $uid, $destination);
             }
         } else {
             foreach ($uids as $uid) {
                 match ($act) {
-                    'read'   => $imap->markRead($folder, $uid, true),
-                    'unread' => $imap->markRead($folder, $uid, false),
+                    'read'   => $imap->markReadByUid($folder, $uid, true),
+                    'unread' => $imap->markReadByUid($folder, $uid, false),
                     default  => null,
                 };
             }
@@ -1634,7 +1675,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'subject'     => $_POST['subject']  ?? '',
         'reply_to'    => $_POST['reply_to'] ?? '',
         'in_reply_to' => $_POST['in_reply_to'] ?? '',
-        'body_html'   => $_POST['body_html'] ?? '',
+        'body_html'   => sanitizeHtml($_POST['body_html'] ?? '', true, 'light'),
         'from_name'   => $fromName,
         'priority'    => $_POST['priority'] ?? 'normal',
         'request_read_receipt' => !empty($_POST['request_read_receipt']),
@@ -2270,6 +2311,22 @@ if ($action === 'test_credentials' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         error_log('Credential test failed: ' . $e->getMessage());
         jsonResponse(['ok' => false, 'error' => $errorMessage]);
     }
+}
+
+// ── Check for updates ─────────────────────────────────────────────────────────
+if ($action === 'check_updates') {
+    $newer = Config::getNewerVersion(true);
+    $latest = Config::getLatestGitHubVersion();
+    $ahead = Config::isLocalVersionAheadOfGitHub();
+    $avail = Config::isGitHubRepoAvailable();
+    jsonResponse([
+        'ok' => true,
+        'version' => Config::VERSION,
+        'newer_available' => $newer,
+        'latest_version' => $latest,
+        'is_ahead' => $ahead,
+        'repo_available' => $avail
+    ]);
 }
 
 // ── Fallback ──────────────────────────────────────────────────────────────────

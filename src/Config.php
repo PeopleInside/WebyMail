@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '3.4.7';
+    public const VERSION = '3.4.8';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
@@ -17,25 +17,64 @@ class Config
         self::load();
 
         if ($key === 'app_secret') {
-            if (empty(self::$data['app_secret'])) {
-                self::$data['app_secret'] = bin2hex(random_bytes(32));
+            // Priority: memory -> external file -> config file (migration) -> generate new
+            if (isset(self::$data['app_secret'])) {
+                $secret = self::$data['app_secret'];
+                // Migration: if we have it here, move it out
+                self::saveAppSecretToFile($secret);
+                unset(self::$data['app_secret']);
                 self::save();
+                return $secret;
             }
-            return self::$data['app_secret'];
+
+            $secretFile = self::getAppSecretFilePath();
+            if (file_exists($secretFile)) {
+                return trim(file_get_contents($secretFile));
+            }
+
+            // Fallback: generate new and save
+            $secret = bin2hex(random_bytes(32));
+            self::saveAppSecretToFile($secret);
+            return $secret;
         }
 
         return self::$data[$key] ?? $default;
     }
 
+    private static function getAppSecretFilePath(): string
+    {
+        $dbPath = self::resolveDbPath();
+        return dirname($dbPath) . '/app_secret.wm';
+    }
+
+    private static function saveAppSecretToFile(string $secret): void
+    {
+        $path = self::getAppSecretFilePath();
+        $dir = dirname($path);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0750, true);
+        }
+        file_put_contents($path, $secret);
+        @chmod($path, 0600);
+        self::$data['app_secret_file'] = $path;
+    }
+
     public static function set(string $key, mixed $value): void
     {
         self::load();
+        if ($key === 'app_secret') {
+             self::saveAppSecretToFile($value);
+             return;
+        }
         self::$data[$key] = $value;
     }
 
     public static function save(): void
     {
         self::load();
+        // Remove app_secret from persistent config.php, as it now lives in its own file
+        unset(self::$data['app_secret']);
+        
         // Remove null values (cleanup)
         self::$data = array_filter(self::$data, fn($v) => $v !== null);
         
@@ -69,6 +108,27 @@ class Config
             'security' => [],
             'all_ok' => true
         ];
+
+        // Cleanup obsolete files
+        $root = dirname(__DIR__);
+        $setupBak = $root . DIRECTORY_SEPARATOR . 'setup.php.bak';
+        if (file_exists($setupBak)) {
+            @unlink($setupBak);
+        }
+
+        $dataDir = $root . DIRECTORY_SEPARATOR . 'data';
+        if (is_dir($dataDir)) {
+            $currentDb = @realpath(self::resolveDbPath());
+            $files = glob($dataDir . DIRECTORY_SEPARATOR . '*.db');
+            if ($files) {
+                foreach ($files as $f) {
+                    if ($currentDb && realpath($f) === $currentDb) {
+                        continue;
+                    }
+                    @unlink($f);
+                }
+            }
+        }
 
         // Requirements
         $needed = ['imap', 'pdo_sqlite', 'openssl', 'mbstring', 'iconv'];
@@ -162,6 +222,34 @@ class Config
 
         // 2FA and Captcha checks
         $results['security_suggestions'] = [];
+
+        // --- Post-upgrade / Security Cleanup ---
+        $root = dirname(__DIR__);
+        if (file_exists($root . '/setup.php.bak')) {
+            @unlink($root . '/setup.php.bak');
+        }
+
+        // Cleanup moved databases in data/
+        $dataDir = $root . '/data';
+        if (is_dir($dataDir)) {
+            $currentDb = realpath(self::resolveDbPath());
+            $files = glob($dataDir . '/*.{db,sqlite,sqlite3}', GLOB_BRACE);
+            if ($files) {
+                foreach ($files as $file) {
+                    $absFile = realpath($file);
+                    // If this file in data/ is NOT the one currently in use, delete it
+                    if ($absFile && $absFile !== $currentDb) {
+                        @unlink($absFile);
+                        foreach (['-wal', '-shm', '-journal'] as $suffix) {
+                            if (file_exists($absFile . $suffix)) {
+                                @unlink($absFile . $suffix);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if (!self::get('captcha_enabled', true)) {
             $results['security_suggestions'][] = [
                 'type' => 'captcha',
@@ -440,6 +528,35 @@ class Config
         return $ok;
     }
 
+    /**
+     * Remove temporary files and setup backups from root.
+     */
+    public static function cleanup(): void
+    {
+        // 1. Remove setup.php.bak from root
+        $root = dirname(__DIR__);
+        $rootSetupBak = $root . DIRECTORY_SEPARATOR . 'setup.php.bak';
+        if (is_file($rootSetupBak)) {
+            @unlink($rootSetupBak);
+        }
+
+        // 2. Remove migrated databases in data folder (e.g. .db.bak)
+        $dbPath = self::resolveDbPath();
+        $dbDir  = dirname($dbPath);
+        if (is_dir($dbDir)) {
+            $files = scandir($dbDir);
+            if ($files !== false) {
+                foreach ($files as $file) {
+                    if ($file === '.' || $file === '..') continue;
+                    // Remove any old .db.bak files resulting from previous migrations or manual renames
+                    if (str_ends_with($file, '.db.bak')) {
+                        @unlink($dbDir . DIRECTORY_SEPARATOR . $file);
+                    }
+                }
+            }
+        }
+    }
+
     private static function load(): void
     {
         if (self::$data !== null) {
@@ -636,7 +753,6 @@ class Config
         return [
             'app_name'        => 'WebyMail',
             'update_url'      => self::UPDATE_URL,
-            'app_secret'      => bin2hex(random_bytes(32)),
             'captcha_enabled'  => true,
             '2fa_enabled'      => true,
             'session_lifetime' => 15552000, // 6 months in seconds
