@@ -2134,8 +2134,9 @@ if ($action === 'settings_save') {
             redirect('?action=settings&tab=security');
 
         case 'revoke_sessions':
-            (new Session())->destroyAll($userId);
-            redirect('?action=login');
+            (new Session())->destroyAllExceptCurrent($userId);
+            flashSet('success', 'All other sessions have been revoked.');
+            redirect('?action=settings&tab=security');
 
         case 'revoke_session':
             $token = $_POST['token'] ?? '';

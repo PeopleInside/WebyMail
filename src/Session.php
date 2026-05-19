@@ -12,7 +12,7 @@ class Session
     private const LIFETIME_DEFAULT      = 86400;        // 24 hours  (no "remember me")
     private const LIFETIME_EXTENDED     = 15552000;     // 6 months  ("remember me")
     private const IDLE_TIMEOUT_DEFAULT  = 7200;         // 2 hours   (no "remember me")
-    private const IDLE_TIMEOUT_EXTENDED = 2592000;      // 30 days   ("remember me")
+    private const IDLE_TIMEOUT_EXTENDED = 15552000;     // 6 months  ("remember me")
 
     private Database $db;
     private int $lifetime;
@@ -176,6 +176,24 @@ class Session
     {
         $this->db->query('DELETE FROM sessions WHERE user_id = ?', [$userId]);
         $this->setCookie('', time() - 3600);
+    }
+
+    /**
+     * Destroy all sessions for a user except the current one.
+     */
+    public function destroyAllExceptCurrent(int $userId): void
+    {
+        $currentToken = trim((string) ($_COOKIE[self::COOKIE_NAME] ?? ''));
+        $isValidToken = ctype_xdigit($currentToken) && strlen($currentToken) === 64;
+        if ($isValidToken) {
+            $this->db->query(
+                'DELETE FROM sessions WHERE user_id = ? AND token <> ?',
+                [$userId, $currentToken]
+            );
+            return;
+        }
+
+        $this->db->query('DELETE FROM sessions WHERE user_id = ?', [$userId]);
     }
 
     /**
