@@ -33,11 +33,26 @@ if (!isset($cspNonce)) {
 
 function isRequestSecure(): bool
 {
-    $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
-    $forwardedSsl   = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? ''));
-    return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        || str_contains($forwardedProto, 'https')
-        || $forwardedSsl === 'on';
+    if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+        return true;
+    }
+
+    // Only trust X-Forwarded-* headers when a trusted proxy list is configured.
+    // Without this guard a client could send X-Forwarded-Proto: https on a plain
+    // HTTP connection, causing the session cookie to be set without the Secure flag.
+    $trustedProxies = array_filter(array_map('trim', explode(',', (string) Config::get('trusted_proxies', ''))));
+    if (!empty($trustedProxies)) {
+        $remoteIp = $_SERVER['REMOTE_ADDR'] ?? '';
+        if (in_array($remoteIp, $trustedProxies, true)) {
+            $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+            $forwardedSsl   = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL']   ?? ''));
+            if (str_contains($forwardedProto, 'https') || $forwardedSsl === 'on') {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 // PHP native session is used only for the 2FA pending state
@@ -56,7 +71,7 @@ session_set_cookie_params([
 session_start();
 
 // ── Security Headers ──────────────────────────────────────────────────────────
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{$cspNonce}' 'unsafe-eval' https://cdnjs.cloudflare.com; script-src-attr 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; worker-src 'self' blob:; frame-src 'self';");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{$cspNonce}' https://cdnjs.cloudflare.com; script-src-attr 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; worker-src 'self' blob:; frame-src 'self';");
 header("X-Content-Type-Options: nosniff");
 header("X-Frame-Options: SAMEORIGIN");
 header("X-XSS-Protection: 1; mode=block");
@@ -396,7 +411,8 @@ if ($action === 'login') {
 
             $result = $auth->loginWithImap(
                 $host, $port, $ssl, $username, $password,
-                $smtpHost, $smtpPort, $smtpSsl, $smtpTls
+                $smtpHost, $smtpPort, $smtpSsl, $smtpTls,
+                !empty($_POST['remember_me'])
             );
             $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 
@@ -1695,19 +1711,55 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             if (filesize($tmp) > $maxSize) {
                 continue;
             }
+
+            // Detect the true MIME type server-side; never trust the browser-supplied type
+            $detectedMime = 'application/octet-stream';
+            if (function_exists('finfo_open')) {
+                $fi = finfo_open(FILEINFO_MIME_TYPE);
+                if ($fi !== false) {
+                    $m = finfo_file($fi, $tmp);
+                    finfo_close($fi);
+                    if ($m !== false && $m !== '') {
+                        $detectedMime = $m;
+                    }
+                }
+            }
+
+            // Block dangerous extensions regardless of MIME type
+            $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+            $blockedExtensions = [
+                'php', 'php3', 'php4', 'php5', 'php7', 'phtml', 'phar',
+                'exe', 'bat', 'cmd', 'com', 'msi', 'vbs', 'vbe', 'js',
+                'jse', 'wsf', 'wsh', 'ps1', 'sh', 'bash', 'csh',
+                'dll', 'so', 'dylib', 'jar', 'class', 'war',
+                'asp', 'aspx', 'cfm', 'cgi', 'pl', 'py', 'rb',
+                'htaccess', 'htpasswd',
+            ];
+            if (in_array($ext, $blockedExtensions, true)) {
+                $_SESSION['attachment_rejected'][] = htmlspecialchars($name);
+                continue;
+            }
+
             $data = file_get_contents($tmp);
             if ($data === false) {
                 continue;
             }
             $attachments[] = [
                 'name' => $name,
-                'type' => $_FILES['attachments']['type'][$i] ?: 'application/octet-stream',
+                'type' => $detectedMime,
                 'data' => $data,
             ];
         }
     }
     if (!empty($attachments)) {
         $message['attachments'] = $attachments;
+    }
+
+    if (!empty($_SESSION['attachment_rejected'])) {
+        $rejected = $_SESSION['attachment_rejected'];
+        unset($_SESSION['attachment_rejected']);
+        $names = implode(', ', $rejected);
+        flashSet('warning', 'The following attachment(s) were removed because their file type is not permitted: ' . $names);
     }
 
     $isDraft = !empty($_POST['save_draft']);
@@ -1827,17 +1879,20 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $draftError = $e->getMessage();
             }
 
-            if ($draftSaved && $newDraftUid > 0) {
-                error_log('Send failed for user ' . $userId . ', account ' . $fromAccountId . ': ' . $smtp->getLog());
-                $_SESSION['last_failed_draft_uid'] = (int)$newDraftUid;
-                flashSet('danger', 'Failed to send message: ' . $smtp->getLog() . '. Your message was saved in Drafts.');
-                redirect('?action=inbox&folder=' . urlencode($draftsFolder));
-            }
-
+            // Always redirect to the Drafts folder so the message is never lost.
+            // Mark the new draft with the ⚠ indicator if it was saved successfully.
             error_log('Send failed for user ' . $userId . ', account ' . $fromAccountId . ': ' . $smtp->getLog() . ($draftError ? ' Draft error: ' . $draftError : ''));
-            $_SESSION['compose_prefill'] = $composePrefill;
-            flashSet('danger', 'Failed to send message: ' . $smtp->getLog() . ($draftError ? ' (Draft save failed: ' . $draftError . ')' : ''));
-            redirect('?action=compose');
+            if ($draftSaved && $newDraftUid > 0) {
+                $_SESSION['last_failed_draft_uid'] = (int)$newDraftUid;
+                flashSet('danger', $smtp->getSendErrorForUser() . ' Your message has been saved as a draft.');
+            } else {
+                $errMsg = $smtp->getSendErrorForUser();
+                if ($draftError) {
+                    $errMsg .= ' The message could not be saved as a draft — check your IMAP connection.';
+                }
+                flashSet('danger', $errMsg);
+            }
+            redirect('?action=inbox&folder=' . urlencode($draftsFolder));
         }
 }
 
@@ -2109,6 +2164,12 @@ if ($action === 'settings_save') {
             flashSet('success', 'CAPTCHA Proof-of-Work activation started. Changes should be applied in about 5 minutes.');
             redirect('?action=settings&tab=system');
 
+        case 'dismiss_db_warning':
+            Config::set('ignore_db_webroot_warning', true);
+            Config::save();
+            unset($_SESSION['system_check_cache']);
+            redirect('?action=settings&tab=system');
+
         default:
             redirect('?action=settings');
     }
@@ -2123,6 +2184,23 @@ if ($action === 'fix_permissions' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     // fixPermissions() already calls checkSystem() which refreshes the session
     // cache, so the banner will reflect the current state on the next page load.
+    redirect('?action=settings&tab=system');
+}
+
+// ── Move database outside webroot ─────────────────────────────────────────────
+if ($action === 'move_database' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $targetPath = trim($_POST['db_target_path'] ?? '');
+    if ($targetPath === '') {
+        $targetPath = Config::suggestSafeDbPath();
+    }
+    $result = Config::moveDatabase($targetPath);
+    if ($result['ok']) {
+        // Invalidate the DB singleton so the next request re-connects to the new file
+        unset($_SESSION['system_check_cache']);
+        flashSet('success', 'Database moved successfully to: ' . $result['new'] . '. The original file has been deleted from the webroot.');
+    } else {
+        flashSet('danger', 'Database move failed: ' . $result['error']);
+    }
     redirect('?action=settings&tab=system');
 }
 

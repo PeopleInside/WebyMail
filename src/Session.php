@@ -8,7 +8,11 @@ declare(strict_types=1);
  */
 class Session
 {
-    private const COOKIE_NAME = 'wm_session';
+    private const COOKIE_NAME           = 'wm_session';
+    private const LIFETIME_DEFAULT      = 86400;        // 24 hours  (no "remember me")
+    private const LIFETIME_EXTENDED     = 15552000;     // 6 months  ("remember me")
+    private const IDLE_TIMEOUT_DEFAULT  = 7200;         // 2 hours   (no "remember me")
+    private const IDLE_TIMEOUT_EXTENDED = 2592000;      // 30 days   ("remember me")
 
     private Database $db;
     private int $lifetime;
@@ -21,8 +25,10 @@ class Session
 
     /**
      * Create a new session and set the cookie.
+     * @param bool $rememberMe  When true the session lasts 6 months with a 30-day idle
+     *                          timeout; when false it lasts 24 hours with a 2-hour idle timeout.
      */
-    public function create(int $userId, int $accountId): string
+    public function create(int $userId, int $accountId, bool $rememberMe = false): string
     {
         // Regenerate the PHP native session ID to prevent session fixation attacks.
         if (session_status() === PHP_SESSION_ACTIVE) {
@@ -41,15 +47,19 @@ class Session
             $this->db->query('DELETE FROM sessions WHERE token = ?', [$oldest]);
         }
 
+        // Lifetime and idle timeout depend on "remember me"
+        $absoluteLifetime = $rememberMe ? self::LIFETIME_EXTENDED     : self::LIFETIME_DEFAULT;
+        $idleTimeout      = $rememberMe ? self::IDLE_TIMEOUT_EXTENDED  : self::IDLE_TIMEOUT_DEFAULT;
+
         $token     = bin2hex(random_bytes(32));
-        $expiresAt = time() + $this->lifetime;
+        $expiresAt = time() + $absoluteLifetime;
         $ip        = Config::encrypt($_SERVER['REMOTE_ADDR'] ?? '');
         $ua        = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
 
         $this->db->query(
-            'INSERT INTO sessions (token, user_id, account_id, ip_address, user_agent, expires_at)
-             VALUES (?, ?, ?, ?, ?, ?)',
-            [$token, $userId, $accountId, $ip, $ua, $expiresAt]
+            'INSERT INTO sessions (token, user_id, account_id, ip_address, user_agent, expires_at, remember_me, idle_timeout)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [$token, $userId, $accountId, $ip, $ua, $expiresAt, (int) $rememberMe, $idleTimeout]
         );
 
         $this->setCookie($token, $expiresAt);
@@ -112,6 +122,14 @@ class Session
         );
 
         if ($row === null) {
+            return null;
+        }
+
+        // Idle-timeout check: if the session has been inactive for longer than its
+        // idle_timeout, treat it as expired and destroy it.
+        $idleTimeout = (int) ($row['idle_timeout'] ?? 0);
+        if ($idleTimeout > 0 && (time() - (int) $row['last_seen']) > $idleTimeout) {
+            $this->destroy();
             return null;
         }
 
@@ -200,14 +218,17 @@ class Session
             return true;
         }
 
-        $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
-        if (str_contains($forwardedProto, 'https')) {
-            return true;
-        }
-
-        $forwardedSsl = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? ''));
-        if ($forwardedSsl === 'on') {
-            return true;
+        // Only trust X-Forwarded-* headers from explicitly configured trusted proxies.
+        $trustedProxies = array_filter(array_map('trim', explode(',', (string) Config::get('trusted_proxies', ''))));
+        if (!empty($trustedProxies)) {
+            $remoteIp = $_SERVER['REMOTE_ADDR'] ?? '';
+            if (in_array($remoteIp, $trustedProxies, true)) {
+                $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+                $forwardedSsl   = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL']   ?? ''));
+                if (str_contains($forwardedProto, 'https') || $forwardedSsl === 'on') {
+                    return true;
+                }
+            }
         }
 
         return false;

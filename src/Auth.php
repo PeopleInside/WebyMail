@@ -6,6 +6,8 @@ declare(strict_types=1);
  */
 class Auth
 {
+    /** Maximum 2FA verification failures before the pending session is invalidated. */
+    private const MAX_2FA_ATTEMPTS = 5;
     private Database  $db;
     private Session   $session;
     private TwoFactor $tf;
@@ -35,7 +37,8 @@ class Auth
         string $smtpHost,
         int    $smtpPort,
         bool   $smtpSsl,
-        bool   $smtpStarttls
+        bool   $smtpStarttls,
+        bool   $rememberMe = false
     ): array {
         $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
         if ($this->isIpBanned($ip)) {
@@ -52,7 +55,7 @@ class Auth
         } catch (RuntimeException $e) {
             $this->recordFailedAttempt($ip);
             error_log('IMAP login failed for ' . $username . ' from ' . $ip . ': ' . $e->getMessage());
-            return ['ok' => false, 'error' => 'Unable to authenticate. Server said: ' . $e->getMessage()];
+            return ['ok' => false, 'error' => 'Invalid credentials or server unreachable. Please check your details.'];
         }
 
         // Success: clear attempts for this IP
@@ -113,15 +116,17 @@ class Auth
             // Store pending auth in a short-lived token so the 2FA page can complete it
             $pending = bin2hex(random_bytes(16));
             $_SESSION['pending_2fa'] = [
-                'token'      => $pending,
-                'user_id'    => $userId,
-                'account_id' => $accountId,
-                'expires'    => time() + 300,
+                'token'       => $pending,
+                'user_id'     => $userId,
+                'account_id'  => $accountId,
+                'expires'     => time() + 300,
+                'attempts'    => 0,
+                'remember_me' => $rememberMe,
             ];
             return ['ok' => true, 'needs_2fa' => true, 'pending_token' => $pending];
         }
 
-        $this->session->create($userId, $accountId);
+        $this->session->create($userId, $accountId, $rememberMe);
         return ['ok' => true, 'needs_2fa' => false];
     }
 
@@ -132,21 +137,39 @@ class Auth
     {
         $pending = $_SESSION['pending_2fa'] ?? null;
         if ($pending === null || time() > $pending['expires']) {
+            unset($_SESSION['pending_2fa']);
             return ['ok' => false, 'error' => 'Session expired. Please log in again.'];
+        }
+
+        // Brute-force protection: max attempts before invalidating the pending session
+        $maxAttempts = self::MAX_2FA_ATTEMPTS;
+        $attempts    = (int) ($pending['attempts'] ?? 0);
+        if ($attempts >= $maxAttempts) {
+            unset($_SESSION['pending_2fa']);
+            return ['ok' => false, 'error' => 'Too many failed attempts. Please log in again.'];
+        }
+
+        // IP-level rate limiting (shared with the IMAP login counter)
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+        if ($this->isIpBanned($ip)) {
+            return ['ok' => false, 'error' => 'Too many failed login attempts. Please try again in 15 minutes.'];
         }
 
         $userId    = (int) $pending['user_id'];
         $accountId = (int) $pending['account_id'];
+        $rememberMe = (bool) ($pending['remember_me'] ?? false);
 
         $user = $this->db->fetch('SELECT * FROM users WHERE id = ?', [$userId]);
         if ($user === null) {
+            unset($_SESSION['pending_2fa']);
             return ['ok' => false, 'error' => 'User not found.'];
         }
 
         // Try TOTP first
         if ($this->tf->verify($user['totp_secret'], $code)) {
+            $this->clearAttempts($ip);
             unset($_SESSION['pending_2fa']);
-            $this->session->create($userId, $accountId);
+            $this->session->create($userId, $accountId, $rememberMe);
             return ['ok' => true];
         }
 
@@ -158,12 +181,23 @@ class Auth
                 'UPDATE users SET recovery_codes = ? WHERE id = ?',
                 [json_encode($updated), $userId]
             );
+            $this->clearAttempts($ip);
             unset($_SESSION['pending_2fa']);
-            $this->session->create($userId, $accountId);
+            $this->session->create($userId, $accountId, $rememberMe);
             return ['ok' => true, 'recovery_used' => true, 'remaining' => count($updated)];
         }
 
-        return ['ok' => false, 'error' => 'Invalid code.'];
+        // Failed attempt: increment counter in pending session and record against IP
+        $_SESSION['pending_2fa']['attempts'] = $attempts + 1;
+        $this->recordFailedAttempt($ip);
+
+        $remaining = $maxAttempts - ($attempts + 1);
+        if ($remaining <= 0) {
+            unset($_SESSION['pending_2fa']);
+            return ['ok' => false, 'error' => 'Too many failed attempts. Please log in again.'];
+        }
+
+        return ['ok' => false, 'error' => 'Invalid code. ' . $remaining . ' attempt(s) remaining.'];
     }
 
     /**

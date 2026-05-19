@@ -61,6 +61,25 @@ if (Config::get('setup_complete') && !$isForced && ($_GET['action'] ?? '') !== '
     exit;
 }
 
+// Re-running setup on an already-configured installation (force=1) requires
+// an active authenticated session to prevent unauthorised reconfiguration.
+if ($isForced && Config::get('setup_complete')) {
+    spl_autoload_register(function (string $class): void {
+        $file = __DIR__ . '/src/' . $class . '.php';
+        if (file_exists($file)) {
+            require_once $file;
+        }
+    }, prepend: true);
+
+    $sessionObj = new Session();
+    if ($sessionObj->current() === null) {
+        // No valid session: abort and send the user to the normal login page
+        unset($_SESSION['setup_force']);
+        header('Location: index.php?action=login');
+        exit;
+    }
+}
+
 // Simple CSRF token for setup forms (session-bound, single token for the whole wizard)
 if (empty($_SESSION['setup_csrf'])) {
     $_SESSION['setup_csrf'] = bin2hex(random_bytes(32));
@@ -189,6 +208,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             session_start();
         }
         Config::fixPermissions();
+        $step = 'security';
+        $sys = Config::checkSystem();
+        $securityChecks = $sys['security'];
+    } elseif ($step === 'move_database') {
+        $targetPath = trim($_POST['db_target_path'] ?? '');
+        if ($targetPath === '') {
+            $targetPath = Config::suggestSafeDbPath();
+        }
+        $result = Config::moveDatabase($targetPath);
+        if (!$result['ok']) {
+            $error = 'Failed to move database: ' . $result['error'];
+        }
         $step = 'security';
         $sys = Config::checkSystem();
         $securityChecks = $sys['security'];

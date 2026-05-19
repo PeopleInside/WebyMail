@@ -1033,13 +1033,14 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 <span>File Permissions & Security</span>
                 <form method="post" action="?action=fix_permissions">
                     <?= csrfInput() ?>
-                    <button type="submit" class="btn btn-outline btn-xs" <?= $sys['all_ok'] ? 'disabled style="cursor:not-allowed;opacity:0.6"' : '' ?>>Fix Permissions</button>
+                    <button type="submit" class="btn btn-outline btn-xs" <?= ($sys['perms_ok'] ?? $sys['all_ok']) ? 'disabled style="cursor:not-allowed;opacity:0.6"' : '' ?>>Fix Permissions</button>
                 </form>
             </div>
             <div class="wm-card-body" style="padding:0">
                 <?php 
                 $insecure = array_filter($sys['security'], fn($c) => !$c['ok']);
-                if (empty($insecure)): ?>
+                $permInsecure = array_filter($insecure, fn($c) => ($c['type'] ?? '') !== 'db_webroot');
+                if (empty($permInsecure)): ?>
                 <div style="padding:1.25rem;text-align:center;color:var(--wm-success);font-size:.85rem">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom:.5rem"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                     <br>All files and folders have correct permissions.
@@ -1048,7 +1049,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                     </div>
                 </div>
                 <?php else: ?>
-                    <?php foreach ($insecure as $check): ?>
+                    <?php foreach ($permInsecure as $check): ?>
                     <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
                         <div>
                             <div style="font-family:var(--wm-font-mono);font-size:.85rem"><?= htmlspecialchars($check['path']) ?></div>
@@ -1065,9 +1066,50 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                         <button type="button" class="btn btn-ghost btn-xs" onclick="document.getElementById('all-perms').style.display='block';this.style.display='none'">View All Checked Permissions</button>
                     </div>
                 <?php endif; ?>
+
+                <?php if (!empty($sys['db_in_webroot']) && !Config::get('ignore_db_webroot_warning', false)): ?>
+                <div style="border-top:1px solid var(--wm-border);padding:.75rem 1.25rem">
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;margin-bottom:.75rem">
+                        <div>
+                            <div style="display:flex;align-items:center;gap:.5rem">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--wm-danger)" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                <span style="font-family:var(--wm-font-mono);font-size:.85rem">Database (<?= htmlspecialchars(basename(Config::resolveDbPath())) ?>)</span>
+                                <span style="font-size:.72rem;font-weight:700;color:var(--wm-danger)">INSECURE</span>
+                            </div>
+                            <div style="font-size:.78rem;color:var(--wm-text-muted);margin-top:.3rem">
+                                Full path: <code style="font-size:.7rem"><?= htmlspecialchars(Config::resolveDbPath()) ?></code>
+                            </div>
+                            <div style="font-size:.78rem;color:var(--wm-text-muted);margin-top:.2rem">
+                                The database is inside a web-accessible directory. On Nginx or misconfigured Apache servers the file could be downloaded directly, exposing encrypted passwords, TOTP secrets and session tokens.
+                            </div>
+                        </div>
+                        <form method="post" action="?action=settings_save&tab=dismiss_db_warning" style="flex-shrink:0">
+                            <?= csrfInput() ?>
+                            <button type="submit" class="btn btn-ghost btn-xs" title="Dismiss this warning (the risk remains)">Dismiss</button>
+                        </form>
+                    </div>
+                    <form method="post" action="?action=move_database" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end">
+                        <?= csrfInput() ?>
+                        <div style="flex:1;min-width:220px">
+                            <label for="db_target_path" style="font-size:.78rem;display:block;margin-bottom:.25rem">
+                                Move to path <span style="color:var(--wm-text-muted)">(absolute, or relative to app root)</span>
+                            </label>
+                            <input type="text" id="db_target_path" name="db_target_path"
+                                   class="form-control" style="font-family:var(--wm-font-mono);font-size:.78rem"
+                                   value="<?= htmlspecialchars(Config::suggestSafeDbPath()) ?>"
+                                   placeholder="<?= htmlspecialchars(Config::suggestSafeDbPath()) ?>">
+                        </div>
+                        <button type="submit" class="btn btn-danger btn-sm"
+                                onclick="return confirm('Move the database to this path? The current file will be permanently deleted from the webroot after a successful copy.')">
+                            Move database
+                        </button>
+                    </form>
+                </div>
+                <?php endif; ?>
                 
                 <div id="all-perms" style="display:none;max-height:400px;overflow-y:auto;border-top:1px solid var(--wm-border)">
                     <?php foreach ($sys['security'] as $check): ?>
+                    <?php if (($check['type'] ?? '') === 'db_webroot') continue; ?>
                     <div style="display:flex;align-items:center;justify-content:space-between;padding:.5rem 1.25rem;border-bottom:1px solid var(--wm-border);font-size:.8rem">
                         <div style="font-family:var(--wm-font-mono)"><?= htmlspecialchars($check['path']) ?></div>
                         <div style="display:flex;align-items:center;gap:1rem">

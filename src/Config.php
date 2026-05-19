@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '3.4.6';
+    public const VERSION = '3.4.7';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
@@ -178,6 +178,31 @@ class Config
                 'action_url' => '?action=settings&tab=security'
             ];
         }
+
+        // Check whether the database is stored inside the webroot
+        $dbInWebroot = self::isDbInWebroot();
+        $results['db_in_webroot'] = $dbInWebroot; // always reflects reality
+        if ($dbInWebroot && !self::get('ignore_db_webroot_warning', false)) {
+            $results['all_ok'] = false;
+            $results['security'][] = [
+                'path'  => 'Database (' . basename(self::resolveDbPath()) . ')',
+                'perms' => '',
+                'ok'    => false,
+                'type'  => 'db_webroot',
+            ];
+            $results['security_suggestions'][] = [
+                'type'       => 'db_in_webroot',
+                'message'    => 'The database file is stored inside a web-accessible directory. On Nginx or misconfigured servers it could be downloaded directly. Move it outside the webroot.',
+                'action_url' => '?action=settings&tab=system',
+            ];
+        }
+
+        // Separate flag: are all file-permission checks passing?
+        // Used by the UI to decide whether the "Fix Permissions" button should be active
+        // (the DB-webroot issue requires a different action and must not affect the button).
+        $results['perms_ok'] = empty(
+            array_filter($results['security'], fn($c) => !$c['ok'] && ($c['type'] ?? '') !== 'db_webroot')
+        );
 
         // Cache check results in session (avoids writing to config.php on every check)
         if (session_status() === PHP_SESSION_ACTIVE) {
@@ -427,6 +452,185 @@ class Config
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Database path helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Resolve the configured db_path to an absolute filesystem path.
+     */
+    public static function resolveDbPath(): string
+    {
+        $path = self::get('db_path', 'data/webymail.db');
+        if (!str_starts_with($path, '/') && !str_contains($path, ':')) {
+            $path = dirname(__DIR__) . '/' . $path;
+        }
+        return realpath($path) ?: $path;
+    }
+
+    /**
+     * Return true if the database file currently lives inside a web-accessible
+     * directory.  Two cases are checked:
+     *
+     *  1. Direct: the DB is somewhere inside the application root directory tree.
+     *  2. Container: the DB is inside a known webroot container (public_html, www,
+     *     htdocs, html, web, public, webroot, website) that also contains the
+     *     application root — for example, the app lives at
+     *     /home/user/public_html/webymail/ and the DB is at
+     *     /home/user/public_html/storage/webymail.db.
+     */
+    public static function isDbInWebroot(): bool
+    {
+        $appRoot = realpath(dirname(__DIR__));
+        $dbPath  = self::resolveDbPath();
+        if ($appRoot === false || $dbPath === '') {
+            return false;
+        }
+
+        // Case 1: DB inside the app root itself
+        if (str_starts_with($dbPath . '/', $appRoot . '/')) {
+            return true;
+        }
+
+        // Case 2: both app and DB share a common webroot container ancestor
+        $webrootNames = ['public_html', 'www', 'wwwroot', 'htdocs', 'html', 'web', 'public', 'webroot', 'website'];
+        $appParts     = array_values(array_filter(explode('/', $appRoot)));
+        for ($i = 0, $n = count($appParts); $i < $n; $i++) {
+            if (in_array(strtolower($appParts[$i]), $webrootNames, true)) {
+                $containerPath = '/' . implode('/', array_slice($appParts, 0, $i + 1));
+                if (str_starts_with($dbPath . '/', $containerPath . '/')) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Suggest a safe absolute path for the database outside any detected webroot
+     * container (public_html, www, etc.).  Falls back to one level above the app
+     * root when no known webroot container is found in the path.
+     */
+    public static function suggestSafeDbPath(): string
+    {
+        $appRoot = realpath(dirname(__DIR__)) ?: dirname(__DIR__);
+
+        $webrootNames = ['public_html', 'www', 'wwwroot', 'htdocs', 'html', 'web', 'public', 'webroot', 'website'];
+        $parts        = array_values(array_filter(explode('/', $appRoot)));
+
+        // Walk from the end towards the root looking for the deepest webroot-like dir
+        for ($i = count($parts) - 1; $i >= 0; $i--) {
+            if (in_array(strtolower($parts[$i]), $webrootNames, true)) {
+                // Place the data directory as a sibling of the webroot container
+                $aboveWebroot = '/' . implode('/', array_slice($parts, 0, $i));
+                return $aboveWebroot . '/webymail_data/webymail.db';            }
+        }
+
+        // No webroot-like ancestor found: one level above the application root
+        return dirname($appRoot) . '/webymail_data/webymail.db';    }
+
+    /**
+     * Move the SQLite database to a new location safely:
+     *  1. Checkpoint the WAL so the single .db file is self-contained.
+     *  2. Copy the file to the target path (creates parent dirs as needed).
+     *  3. Update config.php to point at the new location.
+     *  4. Rename the old file to .bak so it is no longer served but can be
+     *     recovered if something goes wrong.
+     *
+     * Returns ['ok' => true, 'old' => string, 'new' => string]
+     *      or ['ok' => false, 'error' => string].
+     */
+    public static function moveDatabase(string $targetPath): array
+    {
+        // Resolve the current absolute path
+        $oldPath = self::resolveDbPath();
+        if (!is_file($oldPath)) {
+            return ['ok' => false, 'error' => 'Current database file not found at: ' . $oldPath];
+        }
+
+        // Resolve the target absolute path
+        if (!str_starts_with($targetPath, '/') && !str_contains($targetPath, ':')) {
+            $targetPath = dirname(__DIR__) . '/' . $targetPath;
+        }
+
+        // Normalise (realpath won't work for a non-existent file, so we clean it manually)
+        $targetPath = rtrim(str_replace(['\\', '//'], ['/', '/'], $targetPath), '/');
+
+        if ($targetPath === $oldPath) {
+            return ['ok' => false, 'error' => 'Target path is the same as the current database location.'];
+        }
+
+        // Create target directory
+        $targetDir = dirname($targetPath);
+        if (!is_dir($targetDir)) {
+            if (!@mkdir($targetDir, 0700, true)) {
+                return ['ok' => false, 'error' => 'Cannot create target directory: ' . $targetDir];
+            }
+        }
+
+        if (!is_writable($targetDir)) {
+            return ['ok' => false, 'error' => 'Target directory is not writable: ' . $targetDir];
+        }
+
+        // Checkpoint the WAL before copying so the destination is a clean, consistent file
+        try {
+            $pdo = new \PDO('sqlite:' . $oldPath);
+            $pdo->exec('PRAGMA wal_checkpoint(TRUNCATE);');
+            $pdo = null;
+        } catch (\Exception $e) {
+            return ['ok' => false, 'error' => 'WAL checkpoint failed: ' . $e->getMessage()];
+        }
+
+        // Copy the database file
+        if (!@copy($oldPath, $targetPath)) {
+            return ['ok' => false, 'error' => 'Failed to copy database to: ' . $targetPath];
+        }
+        @chmod($targetPath, 0600);
+
+        // Verify the copy is readable and is a valid SQLite file
+        $magic = @file_get_contents($targetPath, false, null, 0, 16);
+        if ($magic === false || !str_starts_with($magic, 'SQLite format 3')) {
+            @unlink($targetPath);
+            return ['ok' => false, 'error' => 'Copied file does not appear to be a valid SQLite database.'];
+        }
+
+        // Store path as relative to app root when possible (more portable)
+        $appRoot  = dirname(__DIR__);
+        $savePath = $targetPath;
+        if (str_starts_with($targetPath, $appRoot . '/')) {
+            $savePath = substr($targetPath, strlen($appRoot) + 1);
+        } elseif (str_starts_with($targetPath, $appRoot . DIRECTORY_SEPARATOR)) {
+            $savePath = substr($targetPath, strlen($appRoot) + 1);
+        }
+
+        // Update configuration
+        self::set('db_path', $savePath);
+        try {
+            self::save();
+        } catch (\RuntimeException $e) {
+            @unlink($targetPath);
+            return ['ok' => false, 'error' => 'Config save failed: ' . $e->getMessage()];
+        }
+
+        // Delete the old database and its WAL/SHM sidecars so the file is no
+        // longer accessible from the webroot.  Non-fatal: if deletion fails (e.g.
+        // file is locked) we log it but do not roll back — the copy is valid and
+        // the config already points at the new location.
+        @unlink($oldPath);
+        foreach (['-wal', '-shm'] as $suffix) {
+            $sidecar = $oldPath . $suffix;
+            if (is_file($sidecar)) {
+                @unlink($sidecar);
+            }
+        }
+        if (is_file($oldPath)) {
+            error_log('WebyMail: could not delete old database after move: ' . $oldPath);
+        }
+
+        return ['ok' => true, 'old' => $oldPath, 'new' => $targetPath];
+    }
+
     private static function defaults(): array
     {
         return [
@@ -443,7 +647,7 @@ class Config
             'smtp_port'       => 465,
             'smtp_ssl'        => true,
             'smtp_starttls'   => false,
-            'db_path'         => 'data/webymail.db',
+            'db_path'         => '../webymail_data/webymail.db', // outside webroot by default
             'setup_complete'  => false,
             'timezone'        => 'Europe/Rome',
             'hide_server_on_login' => true,
