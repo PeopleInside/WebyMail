@@ -183,8 +183,9 @@ class Session
      */
     public function destroyAllExceptCurrent(int $userId): void
     {
-        $currentToken = $_COOKIE[self::COOKIE_NAME] ?? '';
-        if ($currentToken !== '') {
+        $currentToken = trim((string) ($_COOKIE[self::COOKIE_NAME] ?? ''));
+        $isValidToken = ctype_xdigit($currentToken) && strlen($currentToken) === 64;
+        if ($isValidToken) {
             $this->db->query(
                 'DELETE FROM sessions WHERE user_id = ? AND token <> ?',
                 [$userId, $currentToken]

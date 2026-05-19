@@ -8,6 +8,8 @@ class Auth
 {
     /** Maximum 2FA verification failures before the pending session is invalidated. */
     private const MAX_2FA_ATTEMPTS = 5;
+    private const ATTEMPT_IDENTIFIER_IP_PREFIX = 'ip:';
+    private const ATTEMPT_IDENTIFIER_USER_PREFIX = 'user:';
     private Database  $db;
     private Session   $session;
     private TwoFactor $tf;
@@ -300,7 +302,7 @@ class Auth
         } else {
             $this->db->query(
                 'INSERT INTO login_attempts (identifier, ip_address, username, attempts, last_attempt) VALUES (?, ?, \'\', 1, ?)',
-                ['ip:' . $ip, $ip, time()]
+                [self::ATTEMPT_IDENTIFIER_IP_PREFIX . $ip, $ip, time()]
             );
         }
 
@@ -315,7 +317,7 @@ class Auth
             } else {
                 $this->db->query(
                     'INSERT INTO login_attempts (identifier, ip_address, username, attempts, last_attempt) VALUES (?, \'\', ?, 1, ?)',
-                    ['user:' . strtolower($username), $username, time()]
+                    [self::ATTEMPT_IDENTIFIER_USER_PREFIX . strtolower($username), $username, time()]
                 );
             }
         }
