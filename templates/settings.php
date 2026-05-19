@@ -21,23 +21,23 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
 
     <!-- Settings nav -->
     <nav class="wm-settings-nav">
-        <a href="?action=settings&tab=profile"    class="<?= $tab==='profile'    ? 'active' : '' ?>">
+        <a href="?action=settings&tab=profile"    class="<?= $tab==='profile'    ? 'active' : '' ?>" target="_self">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             Profile
         </a>
-        <a href="?action=settings&tab=security"   class="<?= $tab==='security'   ? 'active' : '' ?>">
+        <a href="?action=settings&tab=security"   class="<?= $tab==='security'   ? 'active' : '' ?>" target="_self">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
             Security & 2FA
         </a>
-        <a href="?action=settings&tab=accounts"   class="<?= $tab==='accounts'   ? 'active' : '' ?>">
+        <a href="?action=settings&tab=accounts"   class="<?= $tab==='accounts'   ? 'active' : '' ?>" target="_self">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
             Accounts
         </a>
-        <a href="?action=settings&tab=appearance" class="<?= $tab==='appearance' ? 'active' : '' ?>">
+        <a href="?action=settings&tab=appearance" class="<?= $tab==='appearance' ? 'active' : '' ?>" target="_self">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
             Appearance
         </a>
-        <a href="?action=settings&tab=system" class="<?= $tab==='system' ? 'active' : '' ?>">
+        <a href="?action=settings&tab=system" class="<?= $tab==='system' ? 'active' : '' ?>" target="_self">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
             System
         </a>
@@ -112,7 +112,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             </div>
         </div>
 
-        <script>
+        <script nonce="<?= $cspNonce ?>">
         (function() {
             var toolbar = document.getElementById('sig-toolbar');
             var editor  = document.getElementById('sig-editor');
@@ -341,9 +341,9 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             <div class="wm-card-body">
                 <div class="wm-qr-box">
                     <div id="qrcode-canvas"></div>
-                    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+                    <script nonce="<?= $cspNonce ?>" src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
                             crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-                    <script>
+                    <script nonce="<?= $cspNonce ?>">
                     (function () {
                         var target = document.getElementById('qrcode-canvas');
                         var payload = <?= json_encode($qrPayload) ?>;
@@ -450,7 +450,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             </div>
         </div>
 
-        <script>
+        <script nonce="<?= $cspNonce ?>">
         (function() {
             var btn = document.getElementById('view-recovery-codes-btn');
             var modal = document.getElementById('recovery-codes-modal');
@@ -524,29 +524,19 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
         <?php endif; ?>
 
         <div class="wm-card" style="margin-bottom:1.5rem">
-            <div class="wm-card-header">Diagnostic Mode</div>
+            <div class="wm-card-header">General Settings</div>
             <div class="wm-card-body">
-                <p style="font-size:.875rem;margin-top:0">
-                    Login failure messages are kept generic by default. Enable temporary diagnostic mode only when you need more detailed error information for troubleshooting.
-                </p>
-                <form method="post" action="?action=settings_save&tab=debug_errors">
+                <form method="post" action="?action=settings_save&tab=security">
                     <?= csrfInput() ?>
-                    <div class="form-group" style="max-width:220px;">
-                        <label for="debug_errors_minutes">Enable detailed diagnostics for</label>
-                        <select id="debug_errors_minutes" name="debug_errors_minutes" class="form-control">
-                            <option value="5">5 minutes</option>
-                            <option value="10" selected>10 minutes</option>
-                            <option value="30">30 minutes</option>
-                            <option value="60">60 minutes</option>
-                        </select>
+                    <div class="form-group">
+                        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+                            <input type="checkbox" name="allow_from_change" value="1" <?= (int)($user['allow_from_change'] ?? 0) === 1 ? 'checked' : '' ?>>
+                            Allow choosing "From" account in composer
+                        </label>
+                        <p class="form-hint">If enabled, you can select which connected account to send from when composing a new message.</p>
                     </div>
-                    <button class="btn btn-primary btn-sm">Enable diagnostics</button>
+                    <button class="btn btn-primary btn-sm">Save settings</button>
                 </form>
-                <?php if (!empty($_SESSION['detailed_errors_until']) && time() <= (int) $_SESSION['detailed_errors_until']): ?>
-                <div class="alert alert-warning" style="margin-top:1rem">
-                    Detailed diagnostics are enabled until <?= date('Y-m-d H:i:s', (int) $_SESSION['detailed_errors_until']) ?>.
-                </div>
-                <?php endif; ?>
             </div>
         </div>
 
@@ -608,7 +598,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
             <h2 style="margin:0;font-size:1.1rem">Connected Accounts</h2>
             <div style="display:flex;gap:.5rem">
-                <a href="?action=settings&tab=accounts&add=1" class="btn btn-primary btn-sm">
+                <a href="?action=settings&tab=accounts&add=1" class="btn btn-primary btn-sm" target="_self">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                     Add account
                 </a>
@@ -664,7 +654,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                     </fieldset>
                     <div style="display:flex;gap:.5rem;margin-top:1rem">
                         <button type="submit" class="btn btn-primary btn-sm">Add account</button>
-                        <a href="?action=settings&tab=accounts" class="btn btn-outline btn-sm">Cancel</a>
+                        <a href="?action=settings&tab=accounts" class="btn btn-outline btn-sm" target="_self">Cancel</a>
                     </div>
                 </form>
             </div>
@@ -701,7 +691,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 </span>
                 <span style="display:flex;gap:.25rem">
                     <a href="?action=settings&tab=accounts<?= $isEditing ? '' : '&edit_account=' . (int)$acc['id'] ?>"
-                       class="btn btn-ghost btn-sm" title="<?= $isEditing ? 'Close' : 'Edit' ?>">
+                       class="btn btn-ghost btn-sm" title="<?= $isEditing ? 'Close' : 'Edit' ?>" target="_self">
                         <?php if ($isEditing): ?>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                         <?php else: ?>
@@ -769,7 +759,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                     </fieldset>
                     <div style="display:flex;gap:.5rem;margin-top:1rem">
                         <button type="submit" class="btn btn-primary btn-sm">Save changes</button>
-                        <a href="?action=settings&tab=accounts" class="btn btn-outline btn-sm">Cancel</a>
+                        <a href="?action=settings&tab=accounts" class="btn btn-outline btn-sm" target="_self">Cancel</a>
                     </div>
                 </form>
                 <?php else: ?>
@@ -831,7 +821,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 <div style="font-size:.7rem;color:var(--wm-text-muted);margin-bottom:.25rem">
                     Last check: <?= ($lastAt = $_SESSION['system_check_cache']['at'] ?? null) ? date('Y-m-d H:i:s', (int)$lastAt) : 'Never' ?>
                 </div>
-                <a href="?action=settings&tab=system&recheck=1" class="btn btn-outline btn-xs">Run check now</a>
+                <a href="?action=settings&tab=system&recheck=1" class="btn btn-outline btn-xs" target="_self">Run check now</a>
             </div>
         </div>
         
@@ -912,7 +902,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 <p style="font-size:.85rem;margin:0 0 .5rem">
                     Enabling 2FA adds an extra layer of protection beyond just your password.
                 </p>
-                <a href="?action=settings&tab=security" class="btn btn-primary btn-xs" style="margin-bottom:.75rem">Enable 2FA now</a>
+                <a href="?action=settings&tab=security" class="btn btn-primary btn-xs" style="margin-bottom:.75rem" target="_self">Enable 2FA now</a>
                 <?php endif; ?>
 
                 <?php if ($captchaActivationPending): ?>
@@ -1130,7 +1120,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
 }
 </style>
 
-<script>
+<script nonce="<?= $cspNonce ?>">
 function updateThemeCards() {
     var current = ThemeManager.current();
     document.querySelectorAll('.wm-theme-card').forEach(function(btn) {

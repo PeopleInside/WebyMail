@@ -19,26 +19,26 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
 <!-- Toolbar -->
 <div class="wm-toolbar">
     <div class="wm-toolbar-content">
-    <a href="?action=inbox&folder=<?= $folderEnc ?>" class="btn btn-ghost btn-sm">
+    <a href="?action=inbox&folder=<?= $folderEnc ?>" class="btn btn-ghost btn-sm" target="_self">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
         Back
     </a>
 
     <?php if (strtoupper($folder) === 'DRAFTS' || strtolower($message['folder'] ?? '') === 'drafts'): ?>
-    <a href="?action=compose&edit_draft=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-primary btn-sm" title="Resume Draft">
+    <a href="?action=compose&edit_draft=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-primary btn-sm" title="Resume Draft" target="_self">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         Resume
     </a>
     <?php else: ?>
-    <a href="?action=compose&reply=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-outline btn-sm" title="Reply">
+    <a href="?action=compose&reply=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-outline btn-sm" title="Reply" target="_self">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
         Reply
     </a>
-    <a href="?action=compose&reply_all=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-outline btn-sm" title="Reply All">
+    <a href="?action=compose&reply_all=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-outline btn-sm" title="Reply All" target="_self">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 17 2 12 7 7"/><polyline points="12 17 7 12 12 7"/><path d="M22 18v-2a4 4 0 00-4-4H2"/></svg>
         Reply All
     </a>
-    <a href="?action=compose&forward=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-outline btn-sm" title="Forward">
+    <a href="?action=compose&forward=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-outline btn-sm" title="Forward" target="_self">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 014-4h12"/></svg>
         Forward
     </a>
@@ -104,7 +104,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
 <div class="wm-img-banner wm-read-receipt-banner">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
     <span>The sender has requested a read receipt.</span>
-    <a href="?action=compose&reply=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-primary btn-sm" style="margin-left:auto">Send a reply</a>
+    <a href="?action=compose&reply=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-primary btn-sm" style="margin-left:auto" target="_self">Send a reply</a>
 </div>
 <?php endif; ?>
 
@@ -206,7 +206,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
     </div>
 </div>
 
-<script>
+<script nonce="<?= $cspNonce ?>">
 function confirmSingleMove(form) {
     const destination = form.querySelector('select[name="destination"]');
     if (!destination || !destination.value) {
@@ -325,6 +325,12 @@ function confirmSingleMove(form) {
             showImagesBtn.addEventListener('click', function() {
                 loadEmailBody(true);
                 if (banner) banner.style.display = 'none';
+                // Update reply links to allow images in the quote if they were accepted here
+                document.querySelectorAll('a[href*="action=compose"]').forEach(function(a) {
+                    if (!a.href.includes('&images=')) {
+                        a.href += '&images=1';
+                    }
+                });
             });
         }
     }

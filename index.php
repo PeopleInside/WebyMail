@@ -20,6 +20,17 @@ header('Expires: Sat, 26 Jul 1997 05:00:00 GMT');
 
 define('WEBYMAIL_ROOT', __DIR__);
 
+/**
+ * Generate a cryptographically secure random nonce for CSP.
+ */
+if (!isset($cspNonce)) {
+    try {
+        $cspNonce = base64_encode(random_bytes(16));
+    } catch (Exception $e) {
+        $cspNonce = md5(uniqid((string)mt_rand(), true));
+    }
+}
+
 function isRequestSecure(): bool
 {
     $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
@@ -36,16 +47,16 @@ if ($secure) {
 }
 
 session_set_cookie_params([
-    'lifetime' => 300,
+    'lifetime' => 0, // Session cookie
     'path'     => '/',
-    'secure'   => $secure,
+    'secure'   => $secure, // Dynamically set based on detected protocol
     'httponly' => true,
-    'samesite' => 'Strict',
+    'samesite' => 'Lax',
 ]);
 session_start();
 
 // ── Security Headers ──────────────────────────────────────────────────────────
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; frame-src 'self';");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{$cspNonce}' 'unsafe-eval' https://cdnjs.cloudflare.com; script-src-attr 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; worker-src 'self' blob:; frame-src 'self';");
 header("X-Content-Type-Options: nosniff");
 header("X-Frame-Options: SAMEORIGIN");
 header("X-XSS-Protection: 1; mode=block");
@@ -91,6 +102,7 @@ if (!Config::isSetup()) {
  */
 function render(string $template, array $vars = [], bool $shell = true): void
 {
+    global $cspNonce;
     extract($vars, EXTR_SKIP);
 
     // Capture inner template
@@ -298,16 +310,6 @@ function csrfToken(): string
 function csrfInput(): string
 {
     return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars(csrfToken()) . '">';
-}
-
-function debugErrorsEnabled(): bool
-{
-    return isset($_SESSION['detailed_errors_until']) && time() <= (int) $_SESSION['detailed_errors_until'];
-}
-
-function debugErrorMessage(string $generic, string $detailed): string
-{
-    return debugErrorsEnabled() ? $detailed : $generic;
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────
@@ -798,7 +800,7 @@ if ($action === 'email_body') {
 /**
  * Robust HTML sanitization for email bodies.
  */
-function sanitizeHtml(string $html, bool $showImages, string $theme): string
+function sanitizeHtml(string $html, bool $showImages, string $theme, bool $stripRemoteImages = false): string
 {
     if (!class_exists('DOMDocument') || trim($html) === '') {
         return $html;
@@ -881,13 +883,24 @@ function sanitizeHtml(string $html, bool $showImages, string $theme): string
             $a->setAttribute('rel', 'noopener noreferrer');
         }
 
-        // Handle images (blocking)
-        foreach ($doc->getElementsByTagName('img') as $img) {
+        // Handle images (blocking/stripping)
+        $imgs = $doc->getElementsByTagName('img');
+        for ($i = $imgs->length - 1; $i >= 0; $i--) {
+            $img = $imgs->item($i);
             $src = $img->getAttribute('src');
-            if (!$showImages && str_starts_with(strtolower($src), 'http')) {
+            $isRemote = str_starts_with(strtolower($src), 'http');
+            
+            if ($stripRemoteImages && $isRemote) {
+                $img->parentNode->removeChild($img);
+                continue;
+            }
+
+            if (!$showImages && $isRemote) {
                 $img->setAttribute('data-blocked-src', $src);
-                $img->setAttribute('src', '');
-                $img->setAttribute('alt', '[image blocked]');
+                $img->setAttribute('src', 'data:image/svg+xml;base64,' . base64_encode('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="30" viewBox="0 0 100 30"><rect width="100%" height="100%" fill="#f1f5f9"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#64748b">[Image Blocked]</text></svg>'));
+                $img->setAttribute('alt', '[Blocked Image]');
+                $img->setAttribute('title', 'This remote image was blocked for your privacy. Use the "Allow images" button to see it.');
+                $img->setAttribute('class', ($img->getAttribute('class') ? $img->getAttribute('class') . ' ' : '') . 'wm-blocked-image');
             }
             $img->setAttribute('referrerpolicy', 'no-referrer');
         }
@@ -1497,8 +1510,14 @@ if ($action === 'compose') {
             $isForward  = isset($_GET['forward']);
             $isReplyAll = isset($_GET['reply_all']);
             $isEditDraft = isset($_GET['edit_draft']);
+            $imagesAllowed = !empty($_GET['images']) && $_GET['images'] === '1';
 
-            $bodyHtml = $orig['body_html'] ?: nl2br(htmlspecialchars($orig['body_text']));
+            $rawHtml = $orig['body_html'] ?: nl2br(htmlspecialchars($orig['body_text']));
+            $theme = $session['theme'] ?? ($_COOKIE['wm_theme'] ?? 'system');
+
+            // Block remote images from the original body if they were not explicitly accepted
+            // in the previous view. This follows User Request.
+            $bodyHtml = $isEditDraft ? $rawHtml : sanitizeHtml($rawHtml, $imagesAllowed, $theme, false);
 
             if ($isEditDraft) {
                 $prefill = [
@@ -1554,10 +1573,11 @@ if ($action === 'compose') {
     unset($_SESSION['compose_prefill']);
 
     $account = $accountMgr->get($accountId);
-    $user    = Database::getInstance()->fetch('SELECT signature FROM users WHERE id = ?', [$userId]);
-    $signature = $account['signature'] ?? ($user['signature'] ?? '');
+    $user    = Database::getInstance()->fetch('SELECT * FROM users WHERE id = ?', [$userId]);
+    $signature = ($account['signature'] ?? '') ?: ($user['signature'] ?? '');
 
     render('compose', $layoutCommon + [
+        'user'              => $user,
         'prefill'           => $prefill,
         'replyMsg'          => $replyMsg,
         'folder'            => $currentFolder,
@@ -1781,34 +1801,44 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         flashSet('success', 'Message sent successfully.');
         redirect('?action=inbox');
-    } else {
-        $draftSaved = false;
-        $draftError = null;
-        $newDraftUid = 0;
-        $draftsFolder = 'Drafts';
-        try {
-            $raw = $smtp->buildRaw($accountFrom['email'], $message);
-            $imap = $accountMgr->imapConnect($fromAccountId);
-            $draftsFolder = findFolderName($imap->getFolders(), ['Drafts'], 'Drafts');
-            $imap->appendToFolder($draftsFolder, $raw, '\\Draft');
-            $newDraftUid = $imap->getLastUid($draftsFolder);
-            $imap->disconnect();
-            $draftSaved = true;
-        } catch (Throwable $e) {
-            $draftError = $e->getMessage();
-        }
+        } else {
+            $draftSaved = false;
+            $draftError = null;
+            $newDraftUid = 0;
+            $draftsFolder = 'Drafts';
+            try {
+                $raw = $smtp->buildRaw($accountFrom['email'], $message);
+                $imap = $accountMgr->imapConnect($fromAccountId);
+                $draftsFolder = findFolderName($imap->getFolders(), ['Drafts'], 'Drafts');
 
-        if ($draftSaved && $newDraftUid > 0) {
-            error_log('Send failed after SMTP accept for user ' . $userId . ', account ' . $fromAccountId . ': ' . $smtp->getLog() . ' Draft error: ' . ($draftError ?? 'none'));
-            flashSet('danger', 'Failed to send message. Your message was saved to Drafts.');
-            redirect('?action=compose&edit_draft=' . (int)$newDraftUid . '&folder=' . urlencode($draftsFolder));
-        }
+                // Delete existing draft if any, so we don't get duplicates on failed re-sends
+                $oldDraftUid = (int)($_POST['draft_uid'] ?? 0);
+                if ($oldDraftUid > 0) {
+                    try {
+                        $imap->deleteMessageByUid($draftsFolder, $oldDraftUid);
+                    } catch (Throwable $e) {}
+                }
 
-        error_log('Send failed for user ' . $userId . ', account ' . $fromAccountId . ': ' . $smtp->getLog() . ($draftError ? ' Draft error: ' . $draftError : ''));
-        $_SESSION['compose_prefill'] = $composePrefill;
-        flashSet('danger', 'Failed to send message. Please check your settings and try again.');
-        redirect('?action=compose');
-    }
+                $imap->appendToFolder($draftsFolder, $raw, '\\Draft');
+                $newDraftUid = $imap->getLastUid($draftsFolder);
+                $imap->disconnect();
+                $draftSaved = true;
+            } catch (Throwable $e) {
+                $draftError = $e->getMessage();
+            }
+
+            if ($draftSaved && $newDraftUid > 0) {
+                error_log('Send failed for user ' . $userId . ', account ' . $fromAccountId . ': ' . $smtp->getLog());
+                $_SESSION['last_failed_draft_uid'] = (int)$newDraftUid;
+                flashSet('danger', 'Failed to send message: ' . $smtp->getLog() . '. Your message was saved in Drafts.');
+                redirect('?action=inbox&folder=' . urlencode($draftsFolder));
+            }
+
+            error_log('Send failed for user ' . $userId . ', account ' . $fromAccountId . ': ' . $smtp->getLog() . ($draftError ? ' Draft error: ' . $draftError : ''));
+            $_SESSION['compose_prefill'] = $composePrefill;
+            flashSet('danger', 'Failed to send message: ' . $smtp->getLog() . ($draftError ? ' (Draft save failed: ' . $draftError . ')' : ''));
+            redirect('?action=compose');
+        }
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -1918,13 +1948,10 @@ if ($action === 'settings_save') {
             flashSet('success', 'Two-factor authentication has been disabled.');
             redirect('?action=settings&tab=security');
 
-        case 'debug_errors':
-            $duration = (int) ($_POST['debug_errors_minutes'] ?? 10);
-            if ($duration < 1 || $duration > 240) {
-                $duration = 10;
-            }
-            $_SESSION['detailed_errors_until'] = time() + ($duration * 60);
-            flashSet('success', 'Temporary diagnostic mode enabled for ' . $duration . ' minutes.');
+        case 'security':
+            $allowFrom = isset($_POST['allow_from_change']) ? 1 : 0;
+            $db->query("UPDATE users SET allow_from_change = ? WHERE id = ?", [$allowFrom, $userId]);
+            flashSet('success', 'Settings updated.');
             redirect('?action=settings&tab=security');
 
         case 'revoke_sessions':

@@ -43,7 +43,7 @@
         Theme is applied BEFORE CSS loads to prevent flash:
         Read localStorage immediately and set data-theme attribute.
     -->
-    <script>
+    <script nonce="<?= $cspNonce ?>">
         (function(){
             var serverTheme = null;
             <?php
@@ -63,6 +63,7 @@
     </script>
 
     <link rel="stylesheet" href="assets/css/style.css">
+    <script nonce="<?= $cspNonce ?>" src="assets/js/app.js" defer></script>
 
     <?php if (!empty($extraHead)) echo $extraHead; ?>
 </head>
@@ -92,7 +93,7 @@
                 <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
             </svg>
         </button>
-        <a href="?action=inbox" class="brand">Weby<span>Mail</span></a>
+        <a href="?action=inbox" class="brand" target="_self">Weby<span>Mail</span></a>
 
         <div class="wm-topbar-spacer"></div>
 
@@ -105,7 +106,7 @@
 
         <!-- Search -->
         <div class="wm-topbar-search">
-            <form method="get" action="" style="display:contents">
+            <form method="get" action="" target="_self" style="display:contents">
                 <input type="hidden" name="action" value="search">
                 <div class="search-input-wrapper">
                     <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -165,7 +166,7 @@
                 <?php endforeach; ?>
                 <div style="height:1px;background:var(--wm-border)"></div>
                 <?php endif; ?>
-                <a href="?action=settings" style="display:flex;align-items:center;gap:.6rem;padding:.6rem 1rem;font-size:.85rem;color:var(--wm-text);text-decoration:none">
+                <a href="?action=settings" target="_self" style="display:flex;align-items:center;gap:.6rem;padding:.6rem 1rem;font-size:.85rem;color:var(--wm-text);text-decoration:none">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
                     Settings
                 </a>
@@ -183,7 +184,7 @@
 
     <!-- Sidebar -->
     <nav class="wm-sidebar">
-        <a href="?action=compose" class="btn btn-primary" style="margin:.5rem .75rem .75rem;justify-content:center">
+        <a href="?action=compose" class="btn btn-primary" target="_self" style="margin:.5rem .75rem .75rem;justify-content:center">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Compose
         </a>
@@ -207,6 +208,7 @@
         <div class="wm-sidebar-folder-row" style="display:flex;align-items:center;position:relative">
             <a href="?action=inbox&folder=<?= urlencode($f['name']) ?>"
                class="<?= ($currentFolder ?? 'INBOX') === $f['name'] ? 'active' : '' ?>"
+               target="_self"
                style="flex:1;min-width:0">
                 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= htmlspecialchars($f['display']) ?></span>
                 <span class="badge" data-folder-unread="<?= htmlspecialchars($f['name']) ?>" <?= empty($f['unread']) ? 'style="display:none"' : '' ?>><?= (int)$f['unread'] ?></span>
@@ -222,7 +224,7 @@
         <?php endforeach; ?>
 
         <!-- Folder management forms (hidden) -->
-        <form id="new-folder-form" method="post" action="?action=create_folder"
+        <form id="new-folder-form" method="post" action="?action=create_folder" target="_self"
               style="display:none;padding:.4rem .75rem;gap:.3rem;flex-direction:column">
             <?php if (function_exists('csrfInput')) echo csrfInput(); ?>
             <input type="text" name="name" id="new-folder-name" placeholder="Folder name"
@@ -334,7 +336,7 @@
     <input type="hidden" name="name" id="delete-folder-name">
 </form>
 
-<script>
+<script nonce="<?= $cspNonce ?>">
 // User menu toggle
 document.getElementById('user-menu-btn')?.addEventListener('click', function(e) {
     e.stopPropagation();
@@ -564,7 +566,7 @@ document.addEventListener('click', function() {
     </svg>
 </div>
 
-<script>
+<script nonce="<?= $cspNonce ?>">
 (function() {
     var contactsBtn = document.getElementById('contacts-btn');
     var modal = document.getElementById('contacts-modal');
@@ -789,7 +791,6 @@ document.addEventListener('click', function() {
 })();
 </script>
 
-<script src="assets/js/app.js"></script>
 <?php if (!empty($extraScripts)) echo $extraScripts; ?>
 </body>
 </html>
