@@ -172,6 +172,7 @@ class Database
         $this->ensureColumnExists('login_attempts', 'username', "ALTER TABLE login_attempts ADD COLUMN username TEXT NOT NULL DEFAULT ''");
         $this->ensureColumnExists('login_attempts', 'attempts', "ALTER TABLE login_attempts ADD COLUMN attempts INTEGER NOT NULL DEFAULT 1");
         $this->ensureColumnExists('login_attempts', 'last_attempt', "ALTER TABLE login_attempts ADD COLUMN last_attempt INTEGER NOT NULL DEFAULT (strftime('%s','now'))");
+        $this->ensureColumnExists('login_attempts', 'identifier', "ALTER TABLE login_attempts ADD COLUMN identifier TEXT NOT NULL DEFAULT ''");
 
         // 3. Create indexes (must happen AFTER columns are ensured to exist)
         $this->pdo->exec("
@@ -180,6 +181,7 @@ class Database
             CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id);
             CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip_address);
             CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts(username);
+            CREATE INDEX IF NOT EXISTS idx_login_attempts_identifier ON login_attempts(identifier);
         ");
     }
 

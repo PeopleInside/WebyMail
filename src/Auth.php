@@ -182,7 +182,7 @@ class Auth
                 'UPDATE users SET last_totp_at = ? WHERE id = ?',
                 [$verifiedAt, $userId]
             );
-            $this->clearAttempts($ip);
+            $this->clearAttempts($ip, $username);
             $this->logger->security('login_success', ['userId' => $userId, 'username' => $username, 'type' => 'totp']);
             unset($_SESSION['pending_2fa']);
             $this->session->create($userId, $accountId, $rememberMe);
@@ -197,7 +197,7 @@ class Auth
                 'UPDATE users SET recovery_codes = ? WHERE id = ?',
                 [json_encode($updated), $userId]
             );
-            $this->clearAttempts($ip);
+            $this->clearAttempts($ip, $username);
             $this->logger->security('login_success', ['userId' => $userId, 'username' => $username, 'type' => 'recovery']);
             unset($_SESSION['pending_2fa']);
             $this->session->create($userId, $accountId, $rememberMe);
@@ -299,8 +299,8 @@ class Auth
             );
         } else {
             $this->db->query(
-                'INSERT INTO login_attempts (ip_address, username, attempts, last_attempt) VALUES (?, \'\', 1, ?)',
-                [$ip, time()]
+                'INSERT INTO login_attempts (identifier, ip_address, username, attempts, last_attempt) VALUES (?, ?, \'\', 1, ?)',
+                ['ip:' . $ip, $ip, time()]
             );
         }
 
@@ -314,8 +314,8 @@ class Auth
                 );
             } else {
                 $this->db->query(
-                    'INSERT INTO login_attempts (ip_address, username, attempts, last_attempt) VALUES (\'\', ?, 1, ?)',
-                    [$username, time()]
+                    'INSERT INTO login_attempts (identifier, ip_address, username, attempts, last_attempt) VALUES (?, \'\', ?, 1, ?)',
+                    ['user:' . strtolower($username), $username, time()]
                 );
             }
         }

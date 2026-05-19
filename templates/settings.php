@@ -584,7 +584,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 <div style="padding:1rem 1.25rem">
                     <form method="post" action="?action=settings_save&tab=revoke_sessions" id="revoke-all-sessions-form">
                         <?= csrfInput() ?>
-                        <button class="btn btn-danger btn-sm">Revoke all sessions</button>
+                        <button class="btn btn-danger btn-sm">Revoke all except current session</button>
                     </form>
                 </div>
             </div>
@@ -1309,7 +1309,7 @@ function applyAndSubmitTheme(theme) {
         if (!confirm('Are you sure? This will disable 2FA protection.')) e.preventDefault();
     });
     document.getElementById('revoke-all-sessions-form')?.addEventListener('submit', function(e) {
-        if (!confirm('This will sign you out of all devices including this one.')) e.preventDefault();
+        if (!confirm('This will revoke all other sessions and keep your current session active.')) e.preventDefault();
     });
     document.querySelectorAll('.revoke-session-form').forEach(form => {
         form.addEventListener('submit', function(e) {
