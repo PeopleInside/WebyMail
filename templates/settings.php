@@ -636,7 +636,13 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                             <div><label>Host</label><input type="text" name="imap_host" class="form-control" placeholder="mail.example.com" required></div>
                             <div><label>Port</label><input type="number" name="imap_port" class="form-control" value="993"></div>
                         </div>
-                        <label style="margin-top:.5rem"><input type="checkbox" name="imap_ssl" value="1" checked> SSL/TLS</label>
+                        <label style="margin-top:.5rem;display:flex;gap:1.5rem;flex-wrap:wrap;align-items:center">
+                            <span><input type="checkbox" name="imap_ssl" value="1" checked> SSL/TLS</span>
+                            <label title="Compatibility only: use when the server has an invalid or self-signed certificate." style="cursor:pointer;font-weight:normal;margin:0">
+                                <input type="checkbox" name="allow_insecure_imap" value="1">
+                                <span style="color:var(--wm-danger);font-size:.78rem">Allow insecure certificate</span>
+                            </label>
+                        </label>
                     </fieldset>
                     <fieldset style="border:1px solid var(--wm-border);border-radius:8px;padding:1rem;margin-bottom:1rem">
                         <legend style="font-size:.78rem;font-weight:600;color:var(--wm-text-muted);padding:0 .5rem">SMTP</legend>
@@ -644,9 +650,13 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                             <div><label>Host</label><input type="text" name="smtp_host" class="form-control" placeholder="mail.example.com" required></div>
                             <div><label>Port</label><input type="number" name="smtp_port" class="form-control" data-smtp-port value="587"></div>
                         </div>
-                        <div style="display:flex;gap:1.5rem;margin-top:.5rem">
-                            <label><input type="checkbox" name="smtp_ssl" value="1" data-smtp-ssl checked> SSL</label>
-                            <label><input type="checkbox" name="smtp_starttls" value="1" data-smtp-starttls> STARTTLS</label>
+                        <div style="display:flex;gap:1.5rem;margin-top:.5rem;flex-wrap:wrap;align-items:center">
+                            <label style="font-weight:normal"><input type="checkbox" name="smtp_ssl" value="1" data-smtp-ssl checked> SSL</label>
+                            <label style="font-weight:normal"><input type="checkbox" name="smtp_starttls" value="1" data-smtp-starttls> STARTTLS</label>
+                            <label title="Compatibility only: use when the server has an invalid or self-signed certificate." style="cursor:pointer;font-weight:normal;margin:0">
+                                <input type="checkbox" name="allow_insecure_smtp" value="1">
+                                <span style="color:var(--wm-danger);font-size:.78rem">Allow insecure certificate</span>
+                            </label>
                         </div>
                     </fieldset>
                     <div style="display:flex;gap:.5rem;margin-top:1rem">
@@ -740,7 +750,13 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                             <div><label>Host</label><input type="text" name="imap_host" class="form-control" value="<?= htmlspecialchars($acc['imap_host']) ?>" required></div>
                             <div><label>Port</label><input type="number" name="imap_port" class="form-control" value="<?= (int)$acc['imap_port'] ?>"></div>
                         </div>
-                        <label style="margin-top:.5rem"><input type="checkbox" name="imap_ssl" value="1" <?= $acc['imap_ssl'] ? 'checked' : '' ?>> SSL/TLS</label>
+                        <label style="margin-top:.5rem;display:flex;gap:1.5rem;flex-wrap:wrap;align-items:center">
+                            <span><input type="checkbox" name="imap_ssl" value="1" <?= $acc['imap_ssl'] ? 'checked' : '' ?>> SSL/TLS</span>
+                            <label title="Compatibility only: use when the server has an invalid or self-signed certificate." style="cursor:pointer;font-weight:normal;margin:0">
+                                <input type="checkbox" name="allow_insecure_imap" value="1" <?= ($acc['allow_insecure_imap'] ?? 0) ? 'checked' : '' ?>>
+                                <span style="color:var(--wm-danger);font-size:.78rem">Allow insecure certificate</span>
+                            </label>
+                        </label>
                     </fieldset>
                     <fieldset style="border:1px solid var(--wm-border);border-radius:8px;padding:1rem;margin-bottom:1rem">
                         <legend style="font-size:.78rem;font-weight:600;color:var(--wm-text-muted);padding:0 .5rem">SMTP</legend>
@@ -748,9 +764,13 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                             <div><label>Host</label><input type="text" name="smtp_host" class="form-control" value="<?= htmlspecialchars($acc['smtp_host']) ?>" required></div>
                             <div><label>Port</label><input type="number" name="smtp_port" class="form-control" data-smtp-port value="<?= (int)$acc['smtp_port'] ?>"></div>
                         </div>
-                        <div style="display:flex;gap:1.5rem;margin-top:.5rem">
-                            <label><input type="checkbox" name="smtp_ssl" value="1" data-smtp-ssl <?= $acc['smtp_ssl'] ? 'checked' : '' ?>> SSL</label>
-                            <label><input type="checkbox" name="smtp_starttls" value="1" data-smtp-starttls <?= $acc['smtp_starttls'] ? 'checked' : '' ?>> STARTTLS</label>
+                        <div style="display:flex;gap:1.5rem;margin-top:.5rem;flex-wrap:wrap;align-items:center">
+                            <label style="font-weight:normal"><input type="checkbox" name="smtp_ssl" value="1" data-smtp-ssl <?= $acc['smtp_ssl'] ? 'checked' : '' ?>> SSL</label>
+                            <label style="font-weight:normal"><input type="checkbox" name="smtp_starttls" value="1" data-smtp-starttls <?= $acc['smtp_starttls'] ? 'checked' : '' ?>> STARTTLS</label>
+                            <label title="Compatibility only: use when the server has an invalid or self-signed certificate." style="cursor:pointer;font-weight:normal;margin:0">
+                                <input type="checkbox" name="allow_insecure_smtp" value="1" <?= ($acc['allow_insecure_smtp'] ?? 0) ? 'checked' : '' ?>>
+                                <span style="color:var(--wm-danger);font-size:.78rem">Allow insecure certificate</span>
+                            </label>
                         </div>
                     </fieldset>
                     <div style="display:flex;gap:.5rem;margin-top:1rem">
@@ -1302,7 +1322,7 @@ function applyAndSubmitTheme(theme) {
         });
     });
     document.getElementById('move-db-form')?.addEventListener('submit', function(e) {
-        if (!confirm('Spostare il database in questo percorso? Il file attuale verrà eliminato permanentemente dalla root dopo la copia. ATTENZIONE: Verrai disconnesso e dovrai effettuare nuovamente l\'accesso.')) e.preventDefault();
+        if (!confirm('Move the database to this path? The current file will be permanently deleted from the root after copying. WARNING: You will be signed out and must log in again.')) e.preventDefault();
     });
     document.getElementById('show-all-perms-btn')?.addEventListener('click', function() {
         var el = document.getElementById('all-perms');

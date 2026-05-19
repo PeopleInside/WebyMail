@@ -71,8 +71,9 @@ if ($isForced && Config::get('setup_complete')) {
     }, prepend: true);
 
     $sessionObj = new Session();
-    if ($sessionObj->current() === null) {
-        // No valid session: abort and send the user to the normal login page
+    $currentSession = $sessionObj->current();
+    if ($currentSession === null || (int)$currentSession['user_id'] !== 1) {
+        // No valid session or not the first user: abort and send the user to the normal login page
         unset($_SESSION['setup_force']);
         header('Location: index.php?action=login');
         exit;
@@ -178,6 +179,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $step  = 'server';
         } else {
             Config::save();
+
+            // Database backup before schema modifications (if database exists)
+            $dbPath = Config::resolveDbPath();
+            if (is_file($dbPath)) {
+                // Save backup in the same directory as the database
+                $backupDir = dirname($dbPath);
+                
+                if (is_dir($backupDir) && is_writable($backupDir)) {
+                    $backupFile = $backupDir . '/webymail_backup_' . date('Ymd_His') . '.db';
+                    @copy($dbPath, $backupFile);
+                    // Also copy WAL/SHM if they exist, to ensure a complete backup
+                    foreach (['-wal', '-shm'] as $suffix) {
+                        if (is_file($dbPath . $suffix)) {
+                            @copy($dbPath . $suffix, $backupFile . $suffix);
+                        }
+                    }
+
+                    // Maintain only 5 backups
+                    Config::rotateBackups($backupDir, 5);
+                }
+            }
 
             // Initialise the database (creates the SQLite file + schema)
             try {
