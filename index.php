@@ -879,7 +879,7 @@ if ($action === 'email_body') {
 /**
  * Robust HTML sanitization for email bodies.
  */
-function sanitizeHtml(string $html, bool $showImages, string $theme, bool $stripRemoteImages = false): string
+function sanitizeHtml(string $html, bool $showImages, string $theme, bool $stripRemoteImages = false, bool $isOutgoing = false): string
 {
     if (!class_exists('DOMDocument') || trim($html) === '') {
         return $html;
@@ -984,209 +984,225 @@ function sanitizeHtml(string $html, bool $showImages, string $theme, bool $strip
             $img->setAttribute('referrerpolicy', 'no-referrer');
         }
 
-        // Inject base styles and meta
-        $head = $doc->getElementsByTagName('head')->item(0);
-        if (!$head) {
-            $head = $doc->createElement('head');
-            if ($doc->documentElement->firstChild) {
-                $doc->documentElement->insertBefore($head, $doc->documentElement->firstChild);
-            } else {
-                $doc->documentElement->appendChild($head);
-            }
-        }
-        
-        $base = $doc->createElement('base');
-        $base->setAttribute('target', '_blank');
-        $base->setAttribute('rel', 'noopener noreferrer');
-        $head->appendChild($base);
-
-        $lightBg = '#ffffff';
-        $lightColor = '#1a2332';
-        $darkBg = '#161b22';
-        $darkColor = '#e6edf3';
-
-        $styleStr = '
-            :root { 
-                --bg: ' . $lightBg . '; 
-                --color: ' . $lightColor . '; 
-                color-scheme: light;
+        if (!$isOutgoing) {
+            // Inject base styles and meta
+            $head = $doc->getElementsByTagName('head')->item(0);
+            if (!$head) {
+                $head = $doc->createElement('head');
+                if ($doc->documentElement->firstChild) {
+                    $doc->documentElement->insertBefore($head, $doc->documentElement->firstChild);
+                } else {
+                    $doc->documentElement->appendChild($head);
+                }
             }
             
-            [data-theme="dark"] { 
-                --bg: ' . $darkBg . '; 
-                --color: ' . $darkColor . '; 
-                color-scheme: dark; 
-            }
-            
-            @media (prefers-color-scheme: dark) {
-                :root:not([data-theme="light"]) { 
+            $base = $doc->createElement('base');
+            $base->setAttribute('target', '_blank');
+            $base->setAttribute('rel', 'noopener noreferrer');
+            $head->appendChild($base);
+
+            $lightBg = '#ffffff';
+            $lightColor = '#1a2332';
+            $darkBg = '#161b22';
+            $darkColor = '#e6edf3';
+
+            $styleStr = '
+                :root { 
+                    --bg: ' . $lightBg . '; 
+                    --color: ' . $lightColor . '; 
+                    color-scheme: light;
+                }
+                
+                [data-theme="dark"] { 
                     --bg: ' . $darkBg . '; 
                     --color: ' . $darkColor . '; 
                     color-scheme: dark; 
                 }
-            }
-
-            html, body {
-                margin: 0;
-                padding: 0;
-                height: auto !important;
-                min-height: auto !important;
-                max-height: none !important;
-                overflow: visible !important;
-                background: var(--bg);
-                color: var(--color);
-            }
-
-            #wm-shadow-wrapper {
-                min-height: 100%;
-                display: block;
-                padding: 2.5rem;
-                box-sizing: border-box;
-                width: 100%;
-                max-width: 100%;
-                /* Base colors for inversion: assume light by default */
-                background: #ffffff;
-                color: #1a2332;
-                transition: background-color .2s, color .2s;
-            }
-
-            body {
-                padding: 0;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                font-size: .95rem;
-                line-height: 1.6;
-                word-break: break-word;
-                overflow-wrap: anywhere;
-                max-width: 100%;
-                margin: 0 auto;
-                overflow-x: hidden;
-            }
-
-            /* Force wrapping for all elements */
-            * {
-                overflow-wrap: anywhere !important;
-                word-break: break-word !important;
-            }
-
-            pre {
-                white-space: pre-wrap !important;
-                margin: 0;
-                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-            }
-
-            @media (max-width: 600px) {
-                #wm-shadow-wrapper { padding: 1.25rem; }
-                * { white-space: normal !important; }
-                pre, code, kbd, samp { white-space: pre-wrap !important; }
-            }
-
-            img, table { max-width: 100% !important; height: auto !important; }
-            table { border-collapse: collapse; }
-            a { color: #388bfd; }
-            
-            /* --- SMART DARK MODE INVERSION --- */
-            /* This technique inverts the entire content and then re-inverts media to keep them looking natural. */
-            
-            /* Target the root element (html or body) when data-theme="dark" is set */
-            [data-theme="dark"] {
-                background-color: var(--bg) !important;
-                color: var(--color) !important;
-            }
-
-            /* Apply inversion to the content wrapper in dark mode */
-            /* data-theme="dark" is set directly on #wm-shadow-wrapper by JS syncTheme(),
-               so we must use #wm-shadow-wrapper[data-theme="dark"] (not [data-theme="dark"] #wm-shadow-wrapper) */
-            #wm-shadow-wrapper[data-theme="dark"] {
-                filter: invert(100%) hue-rotate(180deg) brightness(1.1) contrast(0.9);
-                background: transparent !important; /* Transparent so the container #161b22 surface shows through */
-                color: #000000 !important; /* Ensure base text is black before inversion */
-            }
-            @media (prefers-color-scheme: dark) {
-                #wm-shadow-wrapper:not([data-theme="light"]) {
-                    filter: invert(100%) hue-rotate(180deg) brightness(1.1) contrast(0.9);
-                    background: transparent !important;
-                    color: #000000 !important;
+                
+                @media (prefers-color-scheme: dark) {
+                    :root:not([data-theme="light"]) { 
+                        --bg: ' . $darkBg . '; 
+                        --color: ' . $darkColor . '; 
+                        color-scheme: dark; 
+                    }
                 }
-            }
 
-            /* Force very dark colors to be more readable after inversion */
-            #wm-shadow-wrapper[data-theme="dark"] * {
-                /* Nudge contrast for better readability in dark mode */
-                text-shadow: 0 0 0.5px rgba(255,255,255,0.05);
-            }
-            @media (prefers-color-scheme: dark) {
-                #wm-shadow-wrapper:not([data-theme="light"]) * {
+                html, body {
+                    margin: 0;
+                    padding: 0;
+                    height: auto !important;
+                    min-height: auto !important;
+                    max-height: none !important;
+                    overflow: visible !important;
+                    background: var(--bg);
+                    color: var(--color);
+                }
+
+                #wm-shadow-wrapper {
+                    min-height: 100%;
+                    display: block;
+                    padding: 2.5rem;
+                    box-sizing: border-box;
+                    width: 100%;
+                    max-width: 100%;
+                    /* Base colors for inversion: assume light by default */
+                    background: #ffffff;
+                    color: #1a2332;
+                    transition: background-color .2s, color .2s;
+                }
+
+                body {
+                    padding: 0;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                    font-size: .95rem;
+                    line-height: 1.6;
+                    word-break: break-word;
+                    overflow-wrap: anywhere;
+                    max-width: 100%;
+                    margin: 0 auto;
+                    overflow-x: hidden;
+                }
+
+                /* Force wrapping for all elements */
+                * {
+                    overflow-wrap: anywhere !important;
+                    word-break: break-word !important;
+                }
+
+                pre {
+                    white-space: pre-wrap !important;
+                    margin: 0;
+                    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+                }
+
+                @media (max-width: 600px) {
+                    #wm-shadow-wrapper { padding: 1.25rem; }
+                    * { white-space: normal !important; }
+                    pre, code, kbd, samp { white-space: pre-wrap !important; }
+                }
+
+                img, table { max-width: 100% !important; height: auto !important; }
+                table { border-collapse: collapse; }
+                a { color: #388bfd; }
+                
+                /* --- SMART DARK MODE INVERSION --- */
+                /* This technique inverts the entire content and then re-inverts media to keep them looking natural. */
+                
+                /* Target the root element (html or body) when data-theme="dark" is set */
+                [data-theme="dark"] {
+                    background-color: var(--bg) !important;
+                    color: var(--color) !important;
+                }
+
+                /* Apply inversion to the content wrapper in dark mode */
+                /* data-theme="dark" is set directly on #wm-shadow-wrapper by JS syncTheme(),
+                   so we must use #wm-shadow-wrapper[data-theme="dark"] (not [data-theme="dark"] #wm-shadow-wrapper) */
+                #wm-shadow-wrapper[data-theme="dark"] {
+                    filter: invert(100%) hue-rotate(180deg) brightness(1.1) contrast(0.9);
+                    background: transparent !important; /* Transparent so the container #161b22 surface shows through */
+                    color: #000000 !important; /* Ensure base text is black before inversion */
+                }
+                @media (prefers-color-scheme: dark) {
+                    #wm-shadow-wrapper:not([data-theme="light"]) {
+                        filter: invert(100%) hue-rotate(180deg) brightness(1.1) contrast(0.9);
+                        background: transparent !important;
+                        color: #000000 !important;
+                    }
+                }
+
+                /* Force very dark colors to be more readable after inversion */
+                #wm-shadow-wrapper[data-theme="dark"] * {
+                    /* Nudge contrast for better readability in dark mode */
                     text-shadow: 0 0 0.5px rgba(255,255,255,0.05);
                 }
-            }
+                @media (prefers-color-scheme: dark) {
+                    #wm-shadow-wrapper:not([data-theme="light"]) * {
+                        text-shadow: 0 0 0.5px rgba(255,255,255,0.05);
+                    }
+                }
 
-            /* Re-invert images to restore their original colors (never show inverted images) */
-            #wm-shadow-wrapper[data-theme="dark"] img,
-            #wm-shadow-wrapper[data-theme="dark"] video,
-            #wm-shadow-wrapper[data-theme="dark"] iframe,
-            #wm-shadow-wrapper[data-theme="dark"] canvas,
-            #wm-shadow-wrapper[data-theme="dark"] svg,
-            #wm-shadow-wrapper[data-theme="dark"] [style*="background-image"],
-            #wm-shadow-wrapper[data-theme="dark"] [style*="background: url"],
-            #wm-shadow-wrapper[data-theme="dark"] [style*="background:url"] {
-                filter: invert(100%) hue-rotate(180deg) !important;
-            }
-            @media (prefers-color-scheme: dark) {
-                #wm-shadow-wrapper:not([data-theme="light"]) img,
-                #wm-shadow-wrapper:not([data-theme="light"]) video,
-                #wm-shadow-wrapper:not([data-theme="light"]) iframe,
-                #wm-shadow-wrapper:not([data-theme="light"]) canvas,
-                #wm-shadow-wrapper:not([data-theme="light"]) svg,
-                #wm-shadow-wrapper:not([data-theme="light"]) [style*="background-image"],
-                #wm-shadow-wrapper:not([data-theme="light"]) [style*="background: url"],
-                #wm-shadow-wrapper:not([data-theme="light"]) [style*="background:url"] {
+                /* Re-invert images to restore their original colors (never show inverted images) */
+                #wm-shadow-wrapper[data-theme="dark"] img,
+                #wm-shadow-wrapper[data-theme="dark"] video,
+                #wm-shadow-wrapper[data-theme="dark"] iframe,
+                #wm-shadow-wrapper[data-theme="dark"] canvas,
+                #wm-shadow-wrapper[data-theme="dark"] svg,
+                #wm-shadow-wrapper[data-theme="dark"] [style*="background-image"],
+                #wm-shadow-wrapper[data-theme="dark"] [style*="background: url"],
+                #wm-shadow-wrapper[data-theme="dark"] [style*="background:url"] {
                     filter: invert(100%) hue-rotate(180deg) !important;
                 }
-            }
+                @media (prefers-color-scheme: dark) {
+                    #wm-shadow-wrapper:not([data-theme="light"]) img,
+                    #wm-shadow-wrapper:not([data-theme="light"]) video,
+                    #wm-shadow-wrapper:not([data-theme="light"]) iframe,
+                    #wm-shadow-wrapper:not([data-theme="light"]) canvas,
+                    #wm-shadow-wrapper:not([data-theme="light"]) svg,
+                    #wm-shadow-wrapper:not([data-theme="light"]) [style*="background-image"],
+                    #wm-shadow-wrapper:not([data-theme="light"]) [style*="background: url"],
+                    #wm-shadow-wrapper:not([data-theme="light"]) [style*="background:url"] {
+                        filter: invert(100%) hue-rotate(180deg) !important;
+                    }
+                }
 
-            /* Fix for links which might become hard to read after inversion */
-            #wm-shadow-wrapper[data-theme="dark"] a {
-                filter: invert(100%) hue-rotate(180deg) !important;
-                color: #58a6ff !important;
-                text-decoration: underline;
-            }
-            @media (prefers-color-scheme: dark) {
-                #wm-shadow-wrapper:not([data-theme="light"]) a {
+                /* Fix for links which might become hard to read after inversion */
+                #wm-shadow-wrapper[data-theme="dark"] a {
                     filter: invert(100%) hue-rotate(180deg) !important;
                     color: #58a6ff !important;
                     text-decoration: underline;
                 }
-            }
+                @media (prefers-color-scheme: dark) {
+                    #wm-shadow-wrapper:not([data-theme="light"]) a {
+                        filter: invert(100%) hue-rotate(180deg) !important;
+                        color: #58a6ff !important;
+                        text-decoration: underline;
+                    }
+                }
 
-            /* Ensure background colors that were inverted to white become the theme background */
-            [data-theme="dark"] .inverted-bg-fix {
-                background-color: var(--bg) !important;
-            }
+                /* Ensure background colors that were inverted to white become the theme background */
+                [data-theme="dark"] .inverted-bg-fix {
+                    background-color: var(--bg) !important;
+                }
 
-            /* Additional overrides for common email elements that might still look bad */
-            [data-theme="dark"] table, 
-            [data-theme="dark"] td, 
-            [data-theme="dark"] div, 
-            [data-theme="dark"] span, 
-            [data-theme="dark"] p {
-                border-color: var(--wm-border, #30363d) !important;
-            }
-            
-            /* Special handling for blocked image placeholders in dark mode */
-            [data-theme="dark"] img[alt="[image blocked]"] {
-                filter: none !important;
-                background: #30363d;
-                color: #8b949e;
-                padding: 4px;
-                border-radius: 4px;
-                font-size: 0.75rem;
-            }
-        ';
-        $style = $doc->createElement('style');
-        $style->appendChild($doc->createTextNode($styleStr));
-        $head->appendChild($style);
+                /* Additional overrides for common email elements that might still look bad */
+                [data-theme="dark"] table, 
+                [data-theme="dark"] td, 
+                [data-theme="dark"] div, 
+                [data-theme="dark"] span, 
+                [data-theme="dark"] p {
+                    border-color: var(--wm-border, #30363d) !important;
+                }
+                
+                /* Special handling for blocked image placeholders in dark mode */
+                [data-theme="dark"] img[alt="[image blocked]"] {
+                    filter: none !important;
+                    background: #30363d;
+                    color: #8b949e;
+                    padding: 4px;
+                    border-radius: 4px;
+                    font-size: 0.75rem;
+                }
+            ';
+            $style = $doc->createElement('style');
+            $style->appendChild($doc->createTextNode($styleStr));
+            $head->appendChild($style);
 
-        $doc->documentElement->setAttribute('data-theme', $theme);
+            $doc->documentElement->setAttribute('data-theme', $theme);
+        }
+
+        if ($isOutgoing) {
+            if (!$isFullDoc) {
+                $bodyNode = $doc->getElementsByTagName('body')->item(0);
+                if ($bodyNode) {
+                    $innerHTML = '';
+                    foreach ($bodyNode->childNodes as $child) {
+                        $innerHTML .= $doc->saveHTML($child);
+                    }
+                    return $innerHTML ?: $html;
+                }
+            }
+            return $doc->saveHTML() ?: $html;
+        }
 
         return $doc->saveHTML() ?: $html;
     } catch (Throwable $e) {
@@ -1656,7 +1672,7 @@ if ($action === 'compose') {
 
             // Block remote images from the original body if they were not explicitly accepted
             // in the previous view. This follows User Request.
-            $bodyHtml = $isEditDraft ? $rawHtml : sanitizeHtml($rawHtml, $imagesAllowed, $theme, false);
+            $bodyHtml = $isEditDraft ? $rawHtml : sanitizeHtml($rawHtml, $imagesAllowed, $theme, false, true);
 
             if ($isEditDraft) {
                 $prefill = [
@@ -1758,7 +1774,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'subject'     => $_POST['subject']  ?? '',
         'reply_to'    => $_POST['reply_to'] ?? '',
         'in_reply_to' => $_POST['in_reply_to'] ?? '',
-        'body_html'   => sanitizeHtml($_POST['body_html'] ?? '', true, 'light'),
+        'body_html'   => sanitizeHtml($_POST['body_html'] ?? '', true, 'light', false, true),
         'from_name'   => $fromName,
         'priority'    => $_POST['priority'] ?? 'normal',
         'request_read_receipt' => !empty($_POST['request_read_receipt']),
