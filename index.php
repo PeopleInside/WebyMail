@@ -925,12 +925,18 @@ function sanitizeHtml(string $html, bool $showImages, string $theme, bool $strip
         if ($nodes) {
             foreach ($nodes as $attr) {
                 $name = strtolower($attr->nodeName);
-                if (str_starts_with($name, 'on') || in_array($name, ['formaction', 'form', 'srcdoc', 'action', 'method'], true)) {
+                if (str_starts_with($name, 'on') || in_array($name, ['formaction', 'form', 'srcdoc', 'action', 'method', 'background', 'lowsrc'], true)) {
+                    // 'background'/'lowsrc' are obsolete HTML4-era attributes that some legacy
+                    // engines resolved as javascript: URLs; no modern markup relies on them.
                     if ($attr->parentNode) {
                         $attr->parentNode->removeAttribute($attr->nodeName);
                     }
                 } elseif ($name === 'style') {
-                    $val = strtolower($attr->nodeValue);
+                    // Collapse whitespace (including newlines) before keyword checks so a
+                    // value like "url(java\nscript:...)" cannot dodge the "javascript:" check;
+                    // browsers ignore such whitespace inside CSS tokens, so collapsing it here
+                    // does not change how any legitimate style value is interpreted.
+                    $val = strtolower(preg_replace('/\s+/', '', $attr->nodeValue));
                     // Block dangerous CSS properties
                     $isDangerous = str_contains($val, 'expression') || 
                                    str_contains($val, 'javascript:') || 

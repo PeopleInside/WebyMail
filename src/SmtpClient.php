@@ -285,6 +285,9 @@ class SmtpClient
 
     private function extractAddress(string $str): string
     {
+        // Strip CR/LF/NUL first so a crafted "To"/"Cc"/"Bcc" value can never
+        // inject extra SMTP commands (e.g. "victim@x>\r\nRCPT TO:<attacker@y").
+        $str = str_replace(["\r", "\n", "\0"], '', $str);
         if (preg_match('/<([^>]+)>/', $str, $m)) {
             return $m[1];
         }
