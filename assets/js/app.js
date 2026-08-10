@@ -527,6 +527,179 @@ function initUnreadChecker() {
 }
 
 /* =============================================================
+   Copy-to-clipboard background sanitizer
+   Prevents page background color (light or dark) from being
+   copied into clipboard HTML when copying headers, emails, or UI text.
+   Preserves rich HTML structure, table layout, image alignment,
+   and signature formatting without injecting pre-wrap or broken styles.
+   ============================================================= */
+function initCopySanitizer() {
+    function isDarkColor(colorStr) {
+        if (!colorStr) return false;
+        const c = colorStr.trim().toLowerCase();
+        if (c.includes('var(--wm-surface') || c.includes('var(--wm-bg') || 
+            c === '#161b22' || c === '#0d1117' || c === '#1a1a1a' || 
+            c === '#121212' || c === '#1f2937' || c === '#000000' || c === '#000') {
+            return true;
+        }
+        if (c.startsWith('rgb')) {
+            const matches = c.match(/\d+/g);
+            if (matches && matches.length >= 3) {
+                const r = parseInt(matches[0], 10);
+                const g = parseInt(matches[1], 10);
+                const b = parseInt(matches[2], 10);
+                if (r < 55 && g < 55 && b < 55) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    function sanitizeRichHtml(container) {
+        if (!container) return;
+
+        // Clean dark theme background from top container if present
+        if (container.style) {
+            const bg = container.style.backgroundColor || container.style.background;
+            if (isDarkColor(bg)) {
+                container.style.removeProperty('background');
+                container.style.removeProperty('background-color');
+            }
+        }
+
+        const elements = container.querySelectorAll('*');
+        elements.forEach(el => {
+            // Remove shadow wrapper id/attributes that bind dark theme styles
+            if (el.id === 'wm-shadow-wrapper') {
+                el.removeAttribute('id');
+                el.removeAttribute('data-theme');
+            }
+            if (el.hasAttribute('bgcolor') && isDarkColor(el.getAttribute('bgcolor'))) {
+                el.removeAttribute('bgcolor');
+            }
+            if (el.style) {
+                const bg = el.style.backgroundColor || el.style.background;
+                if (isDarkColor(bg)) {
+                    el.style.removeProperty('background');
+                    el.style.removeProperty('background-color');
+                }
+                const color = el.style.color;
+                if (color && (color.includes('rgb(230') || color.includes('rgb(240') || color.includes('rgb(255') || color.toLowerCase() === '#fff' || color.toLowerCase() === '#ffffff')) {
+                    if (!el.style.backgroundColor || isDarkColor(el.style.backgroundColor)) {
+                        el.style.removeProperty('color');
+                    }
+                }
+            }
+        });
+    }
+
+    function isRichHtml(container) {
+        if (!container) return false;
+        // Check for rich structural elements: img, table, td, tr, a, hr, form, etc.
+        const richSelector = 'img, table, tr, td, th, a, iframe, svg, canvas, button, form, hr, ul, ol, li, blockquote';
+        if (container.querySelector(richSelector)) {
+            return true;
+        }
+        // Check for multiple element children with inline attributes or styles
+        const children = container.querySelectorAll('*');
+        for (let i = 0; i < children.length; i++) {
+            const el = children[i];
+            if (el.tagName === 'A' || el.tagName === 'IMG' || el.tagName === 'TABLE' || el.tagName === 'TD') return true;
+            if (el.attributes && el.attributes.length > 0) return true;
+        }
+        return false;
+    }
+
+    function escapeHtml(str) {
+        return (str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function handleCopy(e) {
+        // Do not intercept copying from standard form inputs or textareas
+        const target = e.target;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+            return;
+        }
+
+        // Get active selection from window or active shadow DOM
+        let activeSel = window.getSelection();
+
+        const shadowHost = document.getElementById('email-body-shadow');
+        if (shadowHost && shadowHost.shadowRoot && typeof shadowHost.shadowRoot.getSelection === 'function') {
+            try {
+                const sSel = shadowHost.shadowRoot.getSelection();
+                if (sSel && !sSel.isCollapsed && sSel.toString().length > 0) {
+                    activeSel = sSel;
+                }
+            } catch (err) {}
+        }
+
+        if (!activeSel || activeSel.isCollapsed || activeSel.rangeCount === 0) {
+            return;
+        }
+
+        const plainText = activeSel.toString();
+        if (!plainText) return;
+
+        // Determine if selection is preformatted / headers
+        let isPreOrHeader = false;
+        try {
+            let anchor = activeSel.anchorNode;
+            if (anchor && anchor.nodeType === Node.TEXT_NODE) anchor = anchor.parentNode;
+            if (anchor && anchor.closest) {
+                if (anchor.closest('pre') || anchor.closest('#headers-modal') || anchor.closest('#headers-content') || anchor.closest('.wm-view-meta')) {
+                    isPreOrHeader = true;
+                }
+            }
+        } catch (err) {}
+
+        // Clone selected range contents into a container element
+        const container = document.createElement('div');
+
+        for (let i = 0; i < activeSel.rangeCount; i++) {
+            container.appendChild(activeSel.getRangeAt(i).cloneContents());
+        }
+
+        let htmlPayload = '';
+
+        if (isPreOrHeader) {
+            const safeText = escapeHtml(plainText);
+            const textWithBr = safeText.replace(/\r?\n/g, '<br>');
+            htmlPayload = '<pre style="background: transparent !important; background-color: transparent !important; color: inherit !important; font-family: monospace, monospace; font-size: 13px; line-height: 1.5; white-space: pre-wrap !important; word-break: break-all; margin: 0; padding: 0;">' + textWithBr + '</pre>';
+        } else if (isRichHtml(container)) {
+            // Strip dark theme container background only, preserving rich HTML table layouts, signature formatting, image alignment & inline styles
+            sanitizeRichHtml(container);
+            htmlPayload = '<div style="color: inherit; font-family: inherit;">' + container.innerHTML + '</div>';
+        } else {
+            // Pure text selection: convert linebreaks to <br> with white-space: pre-wrap to preserve lines
+            const safeText = escapeHtml(plainText);
+            const textWithBr = safeText.replace(/\r?\n/g, '<br>');
+            htmlPayload = '<div style="color: inherit; font-family: inherit; white-space: pre-wrap !important;">' + textWithBr + '</div>';
+        }
+
+        if (e.clipboardData) {
+            e.clipboardData.setData('text/plain', plainText);
+            e.clipboardData.setData('text/html', htmlPayload);
+            e.preventDefault();
+        }
+    }
+
+    document.addEventListener('copy', handleCopy, true);
+
+    window.attachShadowCopySanitizer = function(shadowRoot) {
+        if (shadowRoot) {
+            shadowRoot.addEventListener('copy', handleCopy, true);
+        }
+    };
+}
+
+/* =============================================================
    Bootstrap
    ============================================================= */
 document.addEventListener('DOMContentLoaded', () => {
@@ -543,6 +716,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initSmtpPortSync();
     initAutoRefresh();
     initUnreadChecker();
+    initCopySanitizer();
 });
 
 // Expose for inline use

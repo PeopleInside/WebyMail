@@ -196,9 +196,15 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
     <div style="background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:10px;box-shadow:var(--wm-shadow);width:min(720px,96vw);max-height:80vh;display:flex;flex-direction:column">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;border-bottom:1px solid var(--wm-border)">
             <span style="font-weight:600;font-size:.95rem">Original Email Headers</span>
-            <button id="headers-modal-close" class="btn btn-ghost btn-icon" title="Close">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
+            <div style="display:flex;align-items:center;gap:.5rem">
+                <button id="copy-headers-btn" class="btn btn-ghost btn-sm" title="Copy headers to clipboard">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    <span>Copy</span>
+                </button>
+                <button id="headers-modal-close" class="btn btn-ghost btn-icon" title="Close">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
         </div>
         <div style="overflow:auto;padding:1rem">
             <pre id="headers-content" aria-live="polite" aria-busy="true" style="font-family:monospace;font-size:.8rem;line-height:1.6;white-space:pre-wrap;word-break:break-all;margin:0;color:var(--wm-text)">Loading…</pre>
@@ -251,8 +257,8 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
         '#wm-shadow-wrapper pre,#wm-shadow-wrapper code{white-space:pre-wrap;word-break:break-word;}',
         '#wm-shadow-wrapper blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--wm-border, #d8e0e8);}',
         '#wm-shadow-wrapper a{word-break:break-word;}',
-        '#wm-shadow-wrapper[data-theme="dark"]{background:var(--wm-surface,#161b22);}',
-        '#wm-shadow-wrapper[data-theme="dark"] body,#wm-shadow-wrapper[data-theme="dark"] html{background:var(--wm-surface,#161b22)!important;}'
+        '#wm-shadow-wrapper[data-theme="dark"]{background:transparent;}',
+        '#wm-shadow-wrapper[data-theme="dark"] body,#wm-shadow-wrapper[data-theme="dark"] html{background:transparent!important;}'
     ].join('\n');
 
     if (btn && modal) {
@@ -273,6 +279,64 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
 
         close.addEventListener('click', function() { modal.style.display = 'none'; });
         modal.addEventListener('click', function(e) { if (e.target === modal) modal.style.display = 'none'; });
+
+        var copyHeadersBtn = document.getElementById('copy-headers-btn');
+        if (copyHeadersBtn) {
+            copyHeadersBtn.addEventListener('click', function() {
+                var text = pre ? pre.textContent : '';
+                if (!text || text === 'Loading…') return;
+                var updateFeedback = function() {
+                    var span = copyHeadersBtn.querySelector('span');
+                    if (span) {
+                        var orig = span.textContent;
+                        span.textContent = 'Copied!';
+                        setTimeout(function() { span.textContent = orig; }, 2000);
+                    }
+                };
+
+                var safeText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                var htmlContent = '<pre style="background: transparent !important; background-color: transparent !important; color: inherit !important; font-family: monospace, monospace; font-size: 13px; line-height: 1.5; white-space: pre-wrap !important; word-break: break-all; margin: 0; padding: 0;">' + safeText.replace(/\r?\n/g, '<br>') + '</pre>';
+
+                if (navigator.clipboard && typeof navigator.clipboard.write === 'function' && typeof ClipboardItem !== 'undefined') {
+                    try {
+                        var blobText = new Blob([text], { type: 'text/plain' });
+                        var blobHtml = new Blob([htmlContent], { type: 'text/html' });
+                        var item = new ClipboardItem({
+                            'text/plain': blobText,
+                            'text/html': blobHtml
+                        });
+                        navigator.clipboard.write([item]).then(updateFeedback).catch(function() {
+                            execCopy();
+                        });
+                    } catch (err) {
+                        execCopy();
+                    }
+                } else {
+                    execCopy();
+                }
+
+                function execCopy() {
+                    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                        navigator.clipboard.writeText(text).then(updateFeedback).catch(function() {
+                            selectAndCopy();
+                        });
+                    } else {
+                        selectAndCopy();
+                    }
+                }
+
+                function selectAndCopy() {
+                    var range = document.createRange();
+                    range.selectNodeContents(pre);
+                    var sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    document.execCommand('copy');
+                    sel.removeAllRanges();
+                    updateFeedback();
+                }
+            });
+        }
     }
 
     // Shadow DOM Email Body logic
@@ -299,6 +363,10 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
                     
                     // Sync theme immediately
                     syncTheme();
+
+                    if (typeof window.attachShadowCopySanitizer === 'function') {
+                        window.attachShadowCopySanitizer(shadowRoot);
+                    }
                     
                     // Ensure all links open in new tab
                     shadowRoot.querySelectorAll('a').forEach(function(a) {
