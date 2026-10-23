@@ -3,27 +3,39 @@ name: Build Custom Release ZIP
 on:
   push:
     tags:
-      - '3.5.4'
-      - 'v3.5.4'
+      - '*' # Si attiva automaticamente per QUALSIASI nuovo tag creato
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    # Permessi necessari per scrivere sul repository e creare la release
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Create ZIP with specific root folder
         run: |
-          # git archive crea uno ZIP con tutti i file prefissati dalla cartella "WebyMail/"
-          git archive --format=zip --prefix=WebyMail/ -o WebyMail-3.5.4.zip HEAD
+          # Definiamo le variabili dinamiche
+          REPO_NAME="${{ github.event.repository.name }}"
+          TAG_NAME="${{ github.ref_name }}"
+          ZIP_NAME="${REPO_NAME}-${TAG_NAME}.zip"
+          
+          echo "Creazione dell'archivio: ${ZIP_NAME}"
+          
+          # git archive crea lo ZIP includendo tutti i file dentro una cartella radice 
+          # che ha esattamente il nome del repository (es. WebyMail/)
+          git archive --format=zip --prefix="${REPO_NAME}/" -o "${ZIP_NAME}" HEAD
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: Release 3.5.4
-          files: WebyMail-3.5.4.zip
+          name: Release ${{ github.ref_name }}
+          files: ${{ github.event.repository.name }}-${{ github.ref_name }}.zip
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
