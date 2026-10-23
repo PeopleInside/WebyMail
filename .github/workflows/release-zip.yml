@@ -1,0 +1,29 @@
+name: Build Custom Release ZIP
+
+on:
+  push:
+    tags:
+      - '3.5.4'
+      - 'v3.5.4'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create ZIP with specific root folder
+        run: |
+          # git archive crea uno ZIP con tutti i file prefissati dalla cartella "WebyMail/"
+          git archive --format=zip --prefix=WebyMail/ -o WebyMail-3.5.4.zip HEAD
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release 3.5.4
+          files: WebyMail-3.5.4.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
