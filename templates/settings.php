@@ -544,7 +544,7 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
             <div class="wm-card-body" style="padding:0">
                 <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--wm-border)">
                     <p style="font-size:.82rem;color:var(--wm-text-muted);margin:0">
-                        You can have up to 30 active sessions. The oldest session is automatically removed when you exceed this limit.
+                        Active login sessions remain permanently valid and listed here until their expiration date (up to 6 or 12 months) or until you explicitly revoke them.
                     </p>
                 </div>
                 <?php foreach ($sessions as $s): ?>
@@ -553,20 +553,32 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                     $ip = Config::decrypt($s['ip_address']);
                     $ua = $s['user_agent'];
                 ?>
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border)">
-                    <div style="flex:1">
-                        <div style="font-size:.85rem;font-weight:600;display:flex;align-items:center;gap:.5rem">
-                            <?= htmlspecialchars($ip) ?>
+                <?php 
+                    $remMonths = (int) ($s['remember_me'] ?? 0);
+                    $expiresAt = (int) ($s['expires_at'] ?? 0);
+                    $diffSec = $expiresAt - time();
+                    $daysLeft = max(0, (int) ceil($diffSec / 86400));
+                    $hoursLeft = max(0, (int) ceil($diffSec / 3600));
+                    $expiryText = ($daysLeft > 1) ? "{$daysLeft} days left" : "{$hoursLeft} hours left";
+                    $durationLabel = ($remMonths === 12) ? '12 Months' : (($remMonths === 6 || $remMonths === 1) ? '6 Months' : '24 Hours');
+                    $durationBadgeClass = ($remMonths === 12) ? 'badge-info' : (($remMonths === 6 || $remMonths === 1) ? 'badge-primary' : 'badge-neutral');
+                ?>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.25rem;border-bottom:1px solid var(--wm-border);gap:1rem">
+                    <div style="flex:1;min-width:0">
+                        <div style="font-size:.85rem;font-weight:600;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+                            <span><?= htmlspecialchars($ip) ?></span>
                             <?php if ($isCurrent): ?>
-                            <span class="badge badge-success" style="font-size:.65rem;padding:.1rem .4rem">Current Session</span>
+                            <span class="badge badge-success" style="font-size:.65rem;padding:.15rem .45rem">Current Session</span>
                             <?php endif; ?>
+                            <span class="badge <?= $durationBadgeClass ?>" style="font-size:.65rem;padding:.15rem .45rem"><?= $durationLabel ?> (<?= $expiryText ?>)</span>
                         </div>
-                        <div style="font-size:.72rem;color:var(--wm-text-muted);margin-top:.15rem">
-                            Logged in: <?= date('Y-m-d H:i:s', (int)$s['created_at']) ?> • 
-                            Last seen: <?= date('Y-m-d H:i:s', (int)$s['last_seen']) ?>
+                        <div style="font-size:.72rem;color:var(--wm-text-muted);margin-top:.25rem;display:flex;gap:.75rem;flex-wrap:wrap">
+                            <span>Started: <?= date('M j, Y H:i', (int)$s['created_at']) ?></span>
+                            <span>Last active: <?= date('M j, Y H:i', (int)$s['last_seen']) ?></span>
+                            <span>Expires: <?= date('M j, Y', $expiresAt) ?></span>
                         </div>
-                        <div style="font-size:.7rem;color:var(--wm-text-muted);margin-top:.1rem;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= htmlspecialchars($ua) ?>">
-                            <?= htmlspecialchars($ua) ?>
+                        <div style="font-size:.7rem;color:var(--wm-text-muted);margin-top:.15rem;max-width:550px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= htmlspecialchars($ua) ?>">
+                            💻 <?= htmlspecialchars($ua) ?>
                         </div>
                     </div>
                     <div style="margin-left:1rem">

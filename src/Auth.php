@@ -42,7 +42,7 @@ class Auth
         int    $smtpPort,
         bool   $smtpSsl,
         bool   $smtpStarttls,
-        bool   $rememberMe = false,
+        bool|int|string $rememberMe = false,
         bool   $allowInsecureImap = false,
         bool   $allowInsecureSmtp = false
     ): array {
@@ -161,7 +161,7 @@ class Auth
 
         $userId    = (int) $pending['user_id'];
         $accountId = (int) $pending['account_id'];
-        $rememberMe = (bool) ($pending['remember_me'] ?? false);
+        $rememberMe = $pending['remember_me'] ?? false;
 
         // IP-level rate limiting (shared with the IMAP login counter)
         $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';

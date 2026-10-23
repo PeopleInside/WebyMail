@@ -90,11 +90,22 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
         <div class="wm-mail-check">
             <input type="checkbox" class="mail-checkbox" data-uid="<?= (int)$msg['uid'] ?>">
         </div>
-        <div class="wm-mail-from">
+        <div class="wm-mail-from" style="display:flex;align-items:center;gap:.45rem;min-width:0">
+            <?php 
+                $senderStr = (string)($msg['from'] ?? '');
+                $cleanSender = trim(preg_replace('/<.*?>/', '', $senderStr), " \t\n\r\0\x0B\"'");
+                $senderInitial = strtoupper(substr($cleanSender ?: 'M', 0, 1));
+                $avatarColors = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#4f46e5', '#ea580c'];
+                $colorIdx = abs(crc32($senderStr)) % count($avatarColors);
+                $avatarBg = $avatarColors[$colorIdx];
+            ?>
+            <div class="wm-sender-avatar" style="width:24px;height:24px;border-radius:50%;background:<?= $avatarBg ?>;color:#ffffff;display:inline-flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;flex-shrink:0;box-shadow:0 1px 2px rgba(0,0,0,0.1)">
+                <?= $senderInitial ?>
+            </div>
             <?php if (!$msg['is_read']): ?>
-            <span style="display:inline-block;width:8px;height:8px;background:var(--wm-primary);border-radius:50%;margin-right:6px;vertical-align:middle" title="Unread"></span>
+            <span style="display:inline-block;width:7px;height:7px;background:var(--wm-primary);border-radius:50%;flex-shrink:0" title="Unread"></span>
             <?php endif; ?>
-            <?= htmlspecialchars($msg['from']) ?>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= htmlspecialchars($msg['from']) ?></span>
         </div>
         <div class="wm-mail-date"><?= htmlspecialchars($msg['date']) ?></div>
         <div class="wm-mail-subject">

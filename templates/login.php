@@ -192,15 +192,45 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                     </div>
                     <?php endif; ?>
 
-                    <button type="submit" class="btn btn-primary w-100" style="margin-top:.25rem">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-                        Sign in
-                    </button>
+                    <!-- Remember Me / Session Persistence Options -->
+                    <div class="wm-remember-section" style="margin-top:1.25rem;margin-bottom:1rem">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.45rem">
+                            <label style="font-size:.75rem;font-weight:600;color:var(--wm-text-muted);text-transform:uppercase;letter-spacing:.04em;margin:0">
+                                Session Duration
+                            </label>
+                            <span style="font-size:.72rem;color:var(--wm-text-muted)">Secure cookie persistence</span>
+                        </div>
+                        <div class="wm-duration-grid" style="display:grid;grid-template-columns:repeat(3, 1fr);gap:.45rem">
+                            <label class="wm-duration-choice" style="cursor:pointer;margin:0">
+                                <input type="radio" name="remember_me" value="0" style="position:absolute;opacity:0;pointer-events:none">
+                                <div class="wm-duration-pill" data-duration="0">
+                                    <div class="wm-duration-name">24 Hours</div>
+                                    <div class="wm-duration-sub">Shared PC</div>
+                                </div>
+                            </label>
+                            <label class="wm-duration-choice" style="cursor:pointer;margin:0">
+                                <input type="radio" name="remember_me" value="6" checked style="position:absolute;opacity:0;pointer-events:none">
+                                <div class="wm-duration-pill active" data-duration="6">
+                                    <span class="wm-duration-tag">Popular</span>
+                                    <div class="wm-duration-name">6 Months</div>
+                                    <div class="wm-duration-sub">Personal device</div>
+                                </div>
+                            </label>
+                            <label class="wm-duration-choice" style="cursor:pointer;margin:0">
+                                <input type="radio" name="remember_me" value="12" style="position:absolute;opacity:0;pointer-events:none">
+                                <div class="wm-duration-pill" data-duration="12">
+                                    <span class="wm-duration-tag" style="background:var(--wm-info);color:#fff">1 Year</span>
+                                    <div class="wm-duration-name">12 Months</div>
+                                    <div class="wm-duration-sub">Extended login</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
 
-                    <label style="display:flex;align-items:center;gap:.5rem;margin-top:.75rem;font-size:.82rem;color:var(--wm-text-muted);cursor:pointer;justify-content:center">
-                        <input type="checkbox" name="remember_me" value="1">
-                        Stay logged in for 6 months
-                    </label>
+                    <button type="submit" class="btn btn-primary w-100 btn-lg" style="margin-top:.5rem;padding:.75rem 1rem;font-weight:600;display:flex;align-items:center;justify-content:center;gap:.6rem;border-radius:10px;box-shadow:0 4px 12px rgba(37,99,235,.25)">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                        Sign in to Mailbox
+                    </button>
                 </form>
             </div>
         </div>
@@ -257,5 +287,18 @@ document.getElementById('username')?.addEventListener('blur', function() {
         }
     });
 })();
+
+// Session duration radio pill selection
+document.querySelectorAll('input[name="remember_me"]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+        document.querySelectorAll('.wm-duration-pill').forEach(function(pill) {
+            pill.classList.remove('active');
+        });
+        var parentPill = this.closest('.wm-duration-choice')?.querySelector('.wm-duration-pill');
+        if (parentPill) {
+            parentPill.classList.add('active');
+        }
+    });
+});
 </script>
 <script nonce="<?= $cspNonce ?>" src="assets/js/pow.js"></script>

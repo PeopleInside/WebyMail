@@ -10,9 +10,10 @@ class Session
 {
     private const COOKIE_NAME           = 'wm_session';
     private const LIFETIME_DEFAULT      = 86400;        // 24 hours  (no "remember me")
-    private const LIFETIME_EXTENDED     = 15552000;     // 6 months  ("remember me")
+    private const LIFETIME_6_MONTHS     = 15552000;     // 6 months (180 days)
+    private const LIFETIME_12_MONTHS    = 31536000;     // 12 months (365 days / 1 year)
     private const IDLE_TIMEOUT_DEFAULT  = 7200;         // 2 hours   (no "remember me")
-    private const IDLE_TIMEOUT_EXTENDED = 15552000;     // 6 months  ("remember me")
+    private const IDLE_TIMEOUT_REMEMBERED = 0;          // 0 = no idle disconnection for remembered logins
 
     private Database $db;
     private int $lifetime;
@@ -20,15 +21,15 @@ class Session
     public function __construct()
     {
         $this->db       = Database::getInstance();
-        $this->lifetime = (int) Config::get('session_lifetime', 15552000); // 6 months default
+        $this->lifetime = (int) Config::get('session_lifetime', self::LIFETIME_6_MONTHS);
     }
 
     /**
      * Create a new session and set the cookie.
-     * @param bool $rememberMe  When true the session lasts 6 months with a 30-day idle
-     *                          timeout; when false it lasts 24 hours with a 2-hour idle timeout.
+     * @param bool|int|string $rememberMe When true/'6'/'6m' lasts 6 months; when '12'/'12m' lasts 12 months;
+     *                                    when false/0 lasts 24 hours with a 2-hour idle timeout.
      */
-    public function create(int $userId, int $accountId, bool $rememberMe = false): string
+    public function create(int $userId, int $accountId, bool|int|string $rememberMe = false): string
     {
         // Regenerate the PHP native session ID to prevent session fixation attacks.
         if (session_status() === PHP_SESSION_ACTIVE) {
@@ -37,19 +38,23 @@ class Session
 
         $this->cleanup();
 
-        // Enforce 30-session limit
-        $sessions = $this->db->fetchAll(
-            'SELECT token FROM sessions WHERE user_id = ? ORDER BY created_at ASC',
-            [$userId]
-        );
-        if (count($sessions) >= 30) {
-            $oldest = $sessions[0]['token'];
-            $this->db->query('DELETE FROM sessions WHERE token = ?', [$oldest]);
+        // Determine session duration from rememberMe selection
+        $rememberMonths = 0;
+        $remStr = strtolower(trim((string)$rememberMe));
+        if ($remStr === '12' || $remStr === '12m' || $remStr === '1year' || $rememberMe === 12) {
+            $rememberMonths = 12;
+            $absoluteLifetime = self::LIFETIME_12_MONTHS;
+        } elseif ($remStr === '6' || $remStr === '6m' || $remStr === '1' || $remStr === 'true' || $rememberMe === true || $rememberMe === 6) {
+            $rememberMonths = 6;
+            $absoluteLifetime = self::LIFETIME_6_MONTHS;
+        } else {
+            $rememberMonths = 0;
+            $absoluteLifetime = self::LIFETIME_DEFAULT; // 24 hours
         }
 
-        // Lifetime and idle timeout depend on "remember me"
-        $absoluteLifetime = $rememberMe ? self::LIFETIME_EXTENDED     : self::LIFETIME_DEFAULT;
-        $idleTimeout      = $rememberMe ? self::IDLE_TIMEOUT_EXTENDED  : self::IDLE_TIMEOUT_DEFAULT;
+        // Sessions remain active until they expire (expires_at) or are explicitly revoked by the user.
+        // We set idle_timeout to 0 so sessions are not prematurely removed from the active sessions page.
+        $idleTimeout = 0;
 
         $token     = bin2hex(random_bytes(32));
         $expiresAt = time() + $absoluteLifetime;
@@ -59,7 +64,7 @@ class Session
         $this->db->query(
             'INSERT INTO sessions (token, user_id, account_id, ip_address, user_agent, expires_at, remember_me, idle_timeout)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [$token, $userId, $accountId, $ip, $ua, $expiresAt, (int) $rememberMe, $idleTimeout]
+            [$token, $userId, ($accountId > 0 ? $accountId : null), $ip, $ua, $expiresAt, $rememberMonths, $idleTimeout]
         );
 
         $this->setCookie($token, $expiresAt);
@@ -72,7 +77,7 @@ class Session
     public function getAllForUser(int $userId): array
     {
         return $this->db->fetchAll(
-            'SELECT token, ip_address, user_agent, created_at, last_seen, expires_at
+            'SELECT token, ip_address, user_agent, created_at, last_seen, expires_at, remember_me
              FROM sessions
              WHERE user_id = ? AND expires_at > ?
              ORDER BY last_seen DESC',
@@ -125,33 +130,56 @@ class Session
             return null;
         }
 
-        // Idle-timeout check: if the session has been inactive for longer than its
-        // idle_timeout, treat it as expired and destroy it.
-        $idleTimeout = (int) ($row['idle_timeout'] ?? 0);
-        if ($idleTimeout > 0 && (time() - (int) $row['last_seen']) > $idleTimeout) {
-            $this->destroy();
-            return null;
-        }
+        // Sessions remain in the database and visible in active sessions until they reach
+        // expires_at or are explicitly revoked by the user.
+        // We do not delete session records on temporary inactivity.
 
-        // Fingerprint validation: User-Agent check (tolerant to device emulation)
+        // Fingerprint validation: User-Agent browser family & platform check.
+        // We compare stable platform and browser family rather than major/minor version
+        // numbers so that automatic monthly browser updates (e.g. Chrome/Edge/Firefox)
+        // do not invalidate the user's 6 or 12 month persistent session.
         $currentUa = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
         $storedFp  = $this->normalizeUserAgent($row['user_agent'] ?? '');
         $currentFp = $this->normalizeUserAgent($currentUa);
-        $uaMatches = ($storedFp !== '' && $currentFp !== '')
-            ? ($storedFp === $currentFp)
-            : ($row['user_agent'] === $currentUa);
+        
+        $uaMatches = true;
+        if ($storedFp !== '' && $currentFp !== '') {
+            $uaMatches = ($storedFp === $currentFp);
+        }
 
         if (!$uaMatches) {
+            // Log security warning instead of permanently wiping session on minor emulation or agent differences
+            error_log(sprintf('WebyMail session UA mismatch: stored [%s] vs current [%s]', $storedFp, $currentFp));
             $this->destroy();
             return null;
         }
 
-        // Refresh last_seen periodically (every 5 minutes) to avoid DB write on every request
-        if (time() - (int)$row['last_seen'] > 300) {
-            $this->db->query(
-                'UPDATE sessions SET last_seen = ? WHERE token = ?',
-                [time(), $token]
-            );
+        // Refresh last_seen periodically (every 5 minutes) to avoid DB write on every request.
+        // Also slide/extend the session expiration for active remembered logins.
+        $now = time();
+        $lastSeen = (int) $row['last_seen'];
+        if ($now - $lastSeen > 300) {
+            $rememberMonths = (int) ($row['remember_me'] ?? 0);
+            $expiresAt = (int) $row['expires_at'];
+
+            // Sliding session: if user is remembered (6 or 12 months) and more than 7 days have passed,
+            // extend the expiry so continuous active use never expires unexpectedly.
+            if ($rememberMonths > 0 && ($now - $lastSeen) > 604800) {
+                $extensionLifetime = ($rememberMonths >= 12) ? self::LIFETIME_12_MONTHS : self::LIFETIME_6_MONTHS;
+                $newExpiresAt = $now + $extensionLifetime;
+                $this->db->query(
+                    'UPDATE sessions SET last_seen = ?, expires_at = ? WHERE token = ?',
+                    [$now, $newExpiresAt, $token]
+                );
+                $this->setCookie($token, $newExpiresAt);
+                $row['expires_at'] = $newExpiresAt;
+            } else {
+                $this->db->query(
+                    'UPDATE sessions SET last_seen = ? WHERE token = ?',
+                    [$now, $token]
+                );
+            }
+            $row['last_seen'] = $now;
         }
 
         return $row;
@@ -230,73 +258,90 @@ class Session
         $this->db->query('DELETE FROM sessions WHERE expires_at <= ?', [time()]);
     }
 
-    private function isSecure(): bool
+    public function isSecure(): bool
     {
-        if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+        if (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off') {
+            return true;
+        }
+        if (!empty($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443) {
+            return true;
+        }
+        $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+        $forwardedSsl   = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL']   ?? ''));
+        if (str_contains($forwardedProto, 'https') || $forwardedSsl === 'on') {
+            return true;
+        }
+        if (!empty($_SERVER['HTTP_CF_VISITOR']) && str_contains($_SERVER['HTTP_CF_VISITOR'], 'https')) {
             return true;
         }
 
-        // Only trust X-Forwarded-* headers from explicitly configured trusted proxies.
+        // Trust X-Forwarded-* headers from explicitly configured trusted proxies
         $trustedProxies = array_filter(array_map('trim', explode(',', (string) Config::get('trusted_proxies', ''))));
         if (!empty($trustedProxies)) {
             $remoteIp = $_SERVER['REMOTE_ADDR'] ?? '';
-            if (in_array($remoteIp, $trustedProxies, true)) {
-                $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
-                $forwardedSsl   = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL']   ?? ''));
-                if (str_contains($forwardedProto, 'https') || $forwardedSsl === 'on') {
-                    return true;
-                }
+            if (in_array($remoteIp, $trustedProxies, true) && str_contains($forwardedProto, 'https')) {
+                return true;
             }
         }
 
         return false;
     }
 
-    private function setCookie(string $value, int $expires): void
+    public function setCookie(string $value, int $expires): void
     {
         $secure = $this->isSecure();
+        // Use SameSite=Lax so that navigations from bookmarks, email clients, or external links
+        // properly send the session cookie on top-level GET requests without logging the user out.
         setcookie(self::COOKIE_NAME, $value, [
             'expires'  => $expires,
             'path'     => '/',
             'secure'   => $secure,
             'httponly' => true,
-            'samesite' => 'Strict',
+            'samesite' => 'Lax',
         ]);
     }
 
     /**
-     * Reduce a User-Agent string to a stable fingerprint so that
-     * developer tools' device emulation (which tweaks the UA string)
-     * does not invalidate the session. We still keep browser family
-     * and major version to guard against cross-browser reuse.
+     * Reduce a User-Agent string to a stable fingerprint combining platform and
+     * browser family. Unlike comparing exact version numbers (which change every 4
+     * weeks with automatic browser updates and invalidate sessions), this provides
+     * session hijacking protection without breaking long-lived persistent logins.
      */
-    private function normalizeUserAgent(string $ua): string
+    public function normalizeUserAgent(string $ua): string
     {
         $ua = trim($ua);
         if ($ua === '') {
             return '';
         }
 
-        $ua = preg_replace('/\s+/', ' ', $ua);
-
-        $patterns = [
-            'edg'     => '/Edg[A-Za-z]*\/(\d+)/i',
-            'chrome'  => '/Chrome\/(\d+)/i',
-            'firefox' => '/Firefox\/(\d+)/i',
-            'safari'  => '/Version\/(\d+)[^ ]* Safari\//i',
-        ];
-
-        foreach ($patterns as $label => $pattern) {
-            if (preg_match($pattern, $ua, $m)) {
-                return $label . ':' . $m[1];
-            }
+        // Detect platform family
+        $platform = 'other';
+        if (stripos($ua, 'Windows') !== false) {
+            $platform = 'win';
+        } elseif (stripos($ua, 'iPhone') !== false || stripos($ua, 'iPad') !== false || stripos($ua, 'iPod') !== false) {
+            $platform = 'ios';
+        } elseif (stripos($ua, 'Macintosh') !== false || stripos($ua, 'Mac OS') !== false) {
+            $platform = 'mac';
+        } elseif (stripos($ua, 'Android') !== false) {
+            $platform = 'android';
+        } elseif (stripos($ua, 'Linux') !== false) {
+            $platform = 'linux';
         }
 
-        if (preg_match('/AppleWebKit\/(\d+)/i', $ua, $m)) {
-            return 'webkit:' . $m[1];
+        // Detect browser family
+        $browser = 'other';
+        if (stripos($ua, 'Edg') !== false) {
+            $browser = 'edge';
+        } elseif (stripos($ua, 'OPR') !== false || stripos($ua, 'Opera') !== false) {
+            $browser = 'opera';
+        } elseif (stripos($ua, 'Chrome') !== false || stripos($ua, 'CriOS') !== false) {
+            $browser = 'chrome';
+        } elseif (stripos($ua, 'Firefox') !== false || stripos($ua, 'FxiOS') !== false) {
+            $browser = 'firefox';
+        } elseif (stripos($ua, 'Safari') !== false && stripos($ua, 'Chrome') === false) {
+            $browser = 'safari';
         }
 
-        // Fallback: keep a trimmed prefix for uncommon browsers so the fingerprint is still consistent
-        return substr($ua, 0, 80);
+        return $platform . ':' . $browser;
     }
 }

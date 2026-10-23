@@ -180,10 +180,24 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
                     <div class="wm-attachment-name" title="<?= htmlspecialchars($att['filename']) ?>"><?= htmlspecialchars($att['filename']) ?></div>
                     <div class="wm-attachment-size"><?= number_format($att['size'] / 1024, 1) ?> KB</div>
                 </div>
-                <a href="?action=attachment&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&section=<?= urlencode($att['section']) ?>&name=<?= urlencode($att['filename']) ?>" 
-                   class="wm-attachment-download" download title="Download">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                </a>
+                <div style="display:flex;align-items:center;gap:.35rem">
+                    <?php if ($ext === 'eml'): ?>
+                    <button type="button" class="btn btn-primary btn-xs preview-eml-btn" 
+                            data-folder="<?= $folderEnc ?>" 
+                            data-msg="<?= $msgNo ?>" 
+                            data-section="<?= urlencode($att['section']) ?>" 
+                            data-name="<?= htmlspecialchars($att['filename']) ?>"
+                            style="display:inline-flex;align-items:center;gap:.3rem"
+                            title="Preview this email without downloading">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        Preview
+                    </button>
+                    <?php endif; ?>
+                    <a href="?action=attachment&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&section=<?= urlencode($att['section']) ?>&name=<?= urlencode($att['filename']) ?>" 
+                       class="wm-attachment-download" download title="Download">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </a>
+                </div>
             </div>
             <?php endforeach; ?>
         </div>
@@ -208,6 +222,55 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
         </div>
         <div style="overflow:auto;padding:1rem">
             <pre id="headers-content" aria-live="polite" aria-busy="true" style="font-family:monospace;font-size:.8rem;line-height:1.6;white-space:pre-wrap;word-break:break-all;margin:0;color:var(--wm-text)">Loading…</pre>
+        </div>
+    </div>
+</div>
+
+<!-- EML Preview Modal (In-browser viewer without downloading) -->
+<div id="eml-preview-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:1rem">
+    <div style="background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:12px;box-shadow:var(--wm-shadow);width:min(900px,96vw);max-height:88vh;display:flex;flex-direction:column;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--wm-border);background:var(--wm-surface-2)">
+            <div style="display:flex;align-items:center;gap:.6rem;overflow:hidden">
+                <span class="badge badge-primary" style="font-size:.72rem;padding:.2rem .5rem">.EML PREVIEW</span>
+                <span id="eml-modal-filename" style="font-weight:600;font-size:.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">message.eml</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:.5rem">
+                <a id="eml-modal-newtab" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-ghost btn-sm" title="Open in new window">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    <span>Full Tab</span>
+                </a>
+                <a id="eml-modal-download" href="#" class="btn btn-ghost btn-sm" download title="Download .eml">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Download</span>
+                </a>
+                <button type="button" id="eml-modal-close" class="btn btn-ghost btn-icon" title="Close">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+        </div>
+        <div id="eml-modal-meta" style="padding:.9rem 1.25rem;border-bottom:1px solid var(--wm-border);background:var(--wm-surface)">
+            <h2 id="eml-modal-subject" style="font-size:1.15rem;font-weight:700;margin:0 0 .5rem;line-height:1.3">Loading...</h2>
+            <div style="display:grid;grid-template-columns:auto 1fr;gap:.3rem .85rem;font-size:.825rem;color:var(--wm-text)">
+                <span style="color:var(--wm-text-muted);font-weight:600">From:</span>
+                <span id="eml-modal-from">-</span>
+                <span style="color:var(--wm-text-muted);font-weight:600">To:</span>
+                <span id="eml-modal-to">-</span>
+                <span id="eml-modal-cc-label" style="color:var(--wm-text-muted);font-weight:600;display:none">Cc:</span>
+                <span id="eml-modal-cc" style="display:none">-</span>
+                <span style="color:var(--wm-text-muted);font-weight:600">Date:</span>
+                <span id="eml-modal-date">-</span>
+            </div>
+        </div>
+        <div id="eml-modal-nested-att" style="display:none;padding:.6rem 1.25rem;background:var(--wm-bg);border-bottom:1px solid var(--wm-border);font-size:.8rem;gap:.5rem;align-items:center;flex-wrap:wrap">
+            <span style="font-weight:600;color:var(--wm-text-muted)">Nested attachments:</span>
+            <div id="eml-modal-nested-list" style="display:inline-flex;gap:.4rem;flex-wrap:wrap"></div>
+        </div>
+        <div style="flex:1;overflow:auto;padding:1.25rem;background:var(--wm-surface);position:relative">
+            <div id="eml-modal-loading" style="display:flex;align-items:center;justify-content:center;gap:.75rem;padding:3rem;color:var(--wm-text-muted)">
+                <div class="spinner"></div>
+                <span>Parsing and loading .eml content...</span>
+            </div>
+            <div id="eml-modal-body" style="line-height:1.6"></div>
         </div>
     </div>
 </div>
@@ -419,5 +482,109 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
             });
         }
     }
+
+    // EML Preview Modal logic
+    var emlModal = document.getElementById('eml-preview-modal');
+    var emlClose = document.getElementById('eml-modal-close');
+    var emlBtns  = document.querySelectorAll('.preview-eml-btn');
+    var emlLoading = document.getElementById('eml-modal-loading');
+    var emlBody = document.getElementById('eml-modal-body');
+    var emlSubject = document.getElementById('eml-modal-subject');
+    var emlFrom = document.getElementById('eml-modal-from');
+    var emlTo = document.getElementById('eml-modal-to');
+    var emlCc = document.getElementById('eml-modal-cc');
+    var emlCcLabel = document.getElementById('eml-modal-cc-label');
+    var emlDate = document.getElementById('eml-modal-date');
+    var emlFilename = document.getElementById('eml-modal-filename');
+    var emlNewTab = document.getElementById('eml-modal-newtab');
+    var emlDownload = document.getElementById('eml-modal-download');
+    var emlNestedAtt = document.getElementById('eml-modal-nested-att');
+    var emlNestedList = document.getElementById('eml-modal-nested-list');
+
+    if (emlModal && emlClose) {
+        emlClose.addEventListener('click', function() { emlModal.style.display = 'none'; });
+        emlModal.addEventListener('click', function(e) { if (e.target === emlModal) emlModal.style.display = 'none'; });
+        document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && emlModal.style.display === 'flex') emlModal.style.display = 'none'; });
+    }
+
+    emlBtns.forEach(function(b) {
+        b.addEventListener('click', function() {
+            var f = b.getAttribute('data-folder');
+            var m = b.getAttribute('data-msg');
+            var s = b.getAttribute('data-section');
+            var name = b.getAttribute('data-name') || 'attachment.eml';
+
+            emlFilename.textContent = name;
+            emlSubject.textContent = 'Loading...';
+            emlFrom.textContent = '-';
+            emlTo.textContent = '-';
+            emlDate.textContent = '-';
+            if (emlCc) emlCc.style.display = 'none';
+            if (emlCcLabel) emlCcLabel.style.display = 'none';
+            emlBody.innerHTML = '';
+            emlNestedAtt.style.display = 'none';
+            emlNestedList.innerHTML = '';
+            emlLoading.style.display = 'flex';
+
+            var baseParams = 'folder=' + f + '&msg=' + m + '&section=' + s + '&name=' + encodeURIComponent(name);
+            emlNewTab.href = '?action=preview_eml&' + baseParams;
+            emlDownload.href = '?action=attachment&' + baseParams;
+
+            emlModal.style.display = 'flex';
+
+            fetch('?action=preview_eml&' + baseParams + '&json=1', {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                emlLoading.style.display = 'none';
+                if (!res.ok || !res.eml) {
+                    emlBody.innerHTML = '<div style="color:var(--wm-danger);padding:1rem">Failed to load .eml: ' + (res.error || 'Unknown error') + '</div>';
+                    return;
+                }
+                var eml = res.eml;
+                emlSubject.textContent = eml.subject || '(No subject)';
+                emlFrom.textContent = eml.from || 'Unknown';
+                emlTo.textContent = eml.to || 'Unknown';
+                emlDate.textContent = eml.date || '';
+
+                if (eml.cc) {
+                    emlCc.textContent = eml.cc;
+                    emlCc.style.display = 'inline';
+                    emlCcLabel.style.display = 'inline';
+                }
+
+                if (eml.has_html && eml.body_html) {
+                    emlBody.innerHTML = eml.body_html;
+                } else if (eml.body_text) {
+                    var p = document.createElement('pre');
+                    p.style.whiteSpace = 'pre-wrap';
+                    p.style.fontFamily = 'inherit';
+                    p.style.fontSize = '.9rem';
+                    p.textContent = eml.body_text;
+                    emlBody.appendChild(p);
+                } else {
+                    emlBody.innerHTML = '<div style="color:var(--wm-text-muted);font-style:italic">Empty email content</div>';
+                }
+
+                // Nested attachments
+                if (eml.attachments && eml.attachments.length > 0) {
+                    emlNestedList.innerHTML = '';
+                    eml.attachments.forEach(function(att) {
+                        var chip = document.createElement('span');
+                        chip.className = 'badge badge-neutral';
+                        chip.style.fontSize = '.75rem';
+                        chip.textContent = '📎 ' + att.filename + ' (' + (Math.round(att.size / 102.4) / 10) + ' KB)';
+                        emlNestedList.appendChild(chip);
+                    });
+                    emlNestedAtt.style.display = 'flex';
+                }
+            })
+            .catch(function(err) {
+                emlLoading.style.display = 'none';
+                emlBody.innerHTML = '<div style="color:var(--wm-danger);padding:1rem">Failed to preview email: ' + err.message + '</div>';
+            });
+        });
+    });
 })();
 </script>

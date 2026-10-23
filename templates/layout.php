@@ -204,13 +204,38 @@
             <button type="button" id="new-folder-btn" title="New folder"
                     style="background:none;border:none;cursor:pointer;color:var(--wm-text-muted);padding:.1rem .3rem;font-size:1rem;line-height:1">+</button>
         </div>
+        <?php 
+        $getFolderIcon = static function(string $name): string {
+            $n = strtolower($name);
+            if (str_contains($n, 'inbox')) {
+                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>';
+            }
+            if (str_contains($n, 'sent') || str_contains($n, 'inviata')) {
+                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
+            }
+            if (str_contains($n, 'draft') || str_contains($n, 'bozz')) {
+                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+            }
+            if (str_contains($n, 'trash') || str_contains($n, 'deleted') || str_contains($n, 'cestino')) {
+                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+            }
+            if (str_contains($n, 'spam') || str_contains($n, 'junk')) {
+                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+            }
+            if (str_contains($n, 'archive')) {
+                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>';
+            }
+            return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+        };
+        ?>
         <?php foreach ($folders ?? [] as $f): ?>
         <div class="wm-sidebar-folder-row" style="display:flex;align-items:center;position:relative">
             <a href="?action=inbox&folder=<?= urlencode($f['name']) ?>"
                class="<?= ($currentFolder ?? 'INBOX') === $f['name'] ? 'active' : '' ?>"
                target="_self"
-               style="flex:1;min-width:0">
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= htmlspecialchars($f['display']) ?></span>
+               style="flex:1;min-width:0;display:flex;align-items:center;gap:.65rem">
+                <?= $getFolderIcon($f['name']) ?>
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1"><?= htmlspecialchars($f['display']) ?></span>
                 <span class="badge" data-folder-unread="<?= htmlspecialchars($f['name']) ?>" <?= empty($f['unread']) ? 'style="display:none"' : '' ?>><?= (int)$f['unread'] ?></span>
             </a>
             <?php if (strtoupper($f['name']) !== 'INBOX'): ?>

@@ -33,22 +33,28 @@ if (!isset($cspNonce)) {
 
 function isRequestSecure(): bool
 {
-    if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    if (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off') {
+        return true;
+    }
+    if (!empty($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443) {
         return true;
     }
 
-    // Only trust X-Forwarded-* headers when a trusted proxy list is configured.
-    // Without this guard a client could send X-Forwarded-Proto: https on a plain
-    // HTTP connection, causing the session cookie to be set without the Secure flag.
+    $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+    $forwardedSsl   = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL']   ?? ''));
+    if (str_contains($forwardedProto, 'https') || $forwardedSsl === 'on') {
+        return true;
+    }
+    if (!empty($_SERVER['HTTP_CF_VISITOR']) && str_contains($_SERVER['HTTP_CF_VISITOR'], 'https')) {
+        return true;
+    }
+
+    // Trust X-Forwarded-* headers when a trusted proxy list is configured.
     $trustedProxies = array_filter(array_map('trim', explode(',', (string) Config::get('trusted_proxies', ''))));
     if (!empty($trustedProxies)) {
         $remoteIp = $_SERVER['REMOTE_ADDR'] ?? '';
-        if (in_array($remoteIp, $trustedProxies, true)) {
-            $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
-            $forwardedSsl   = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL']   ?? ''));
-            if (str_contains($forwardedProto, 'https') || $forwardedSsl === 'on') {
-                return true;
-            }
+        if (in_array($remoteIp, $trustedProxies, true) && str_contains($forwardedProto, 'https')) {
+            return true;
         }
     }
 
@@ -461,7 +467,7 @@ if ($action === 'login') {
             $result = $auth->loginWithImap(
                 $host, $port, $ssl, $username, $password,
                 $smtpHost, $smtpPort, $smtpSsl, $smtpTls,
-                !empty($_POST['remember_me']),
+                $_POST['remember_me'] ?? '0',
                 $allowImapInsecure,
                 $allowSmtpInsecure
             );
@@ -1585,6 +1591,74 @@ if ($action === 'attachment' || $action === 'download_all') {
     header('Content-Length: ' . strlen($data));
     echo $data;
     exit;
+}
+
+// ── Preview .eml Attachment (In-browser viewer) ───────────────────────────────
+if ($action === 'preview_eml') {
+    $msgNo   = (int) ($_GET['msg'] ?? 0);
+    $folder  = $_GET['folder'] ?? 'INBOX';
+    $section = $_GET['section'] ?? '';
+    $name    = basename($_GET['name'] ?? 'attachment.eml');
+
+    if ($section === '' || !preg_match('/^[0-9]+(\.[0-9]+)*$/', $section)) {
+        if (isAjax()) {
+            jsonResponse(['ok' => false, 'error' => 'Invalid attachment section.']);
+        }
+        http_response_code(400);
+        exit('Invalid attachment section.');
+    }
+
+    try {
+        $imap = $accountMgr->imapConnect($accountId);
+        $imap->selectFolder($folder);
+        $data = $imap->fetchAttachment($msgNo, $section);
+        $imap->disconnect();
+
+        if ($data === '') {
+            throw new Exception('EML attachment data is empty or could not be retrieved.');
+        }
+
+        $parsed = EmlParser::parse($data);
+        $theme = $session['theme'] ?? 'system';
+        $safeHtml = $parsed['body_html'] !== '' ? sanitizeHtml($parsed['body_html'], true, $theme) : '';
+
+        $emlData = [
+            'subject'     => $parsed['subject'],
+            'from'        => $parsed['from'],
+            'to'          => $parsed['to'],
+            'cc'          => $parsed['cc'],
+            'date'        => $parsed['date'],
+            'body_html'   => $safeHtml,
+            'body_text'   => $parsed['body_text'],
+            'has_html'    => !empty($safeHtml),
+            'attachments' => $parsed['attachments'],
+            'filename'    => $name,
+            'section'     => $section,
+            'size'        => strlen($data),
+        ];
+
+        if (isAjax() || !empty($_GET['json'])) {
+            jsonResponse(['ok' => true, 'eml' => $emlData]);
+        }
+
+        // Standalone preview
+        render('view_eml', [
+            'eml'       => $emlData,
+            'filename'  => $name,
+            'folder'    => $folder,
+            'msgNo'     => $msgNo,
+            'section'   => $section,
+            'pageTitle' => pageTitle('Preview .eml - ' . $parsed['subject']),
+        ], true);
+        exit;
+    } catch (Throwable $e) {
+        error_log('Preview EML failed for user ' . $userId . ', folder ' . $folder . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        if (isAjax()) {
+            jsonResponse(['ok' => false, 'error' => 'Error previewing .eml attachment: ' . $e->getMessage()]);
+        }
+        http_response_code(500);
+        exit('Error previewing EML attachment.');
+    }
 }
 
 // ── Email Export (EML / ZIP) ──────────────────────────────────────────────────
