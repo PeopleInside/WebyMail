@@ -38,6 +38,9 @@ header('Expires: Sat, 26 Jul 1997 05:00:00 GMT');
 
 define('WEBYMAIL_ROOT', __DIR__);
 
+// Controllo preventivo dei requisiti di sistema (evita errori 500 o fallimenti criptici nel wizard)
+require_once __DIR__ . '/requirements_check.php';
+
 spl_autoload_register(function (string $class): void {
     $file = __DIR__ . '/src/' . $class . '.php';
     if (file_exists($file)) {
