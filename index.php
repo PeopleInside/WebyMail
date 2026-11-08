@@ -1,6 +1,9 @@
 <?php
 declare(strict_types=1);
 
+// Controllo preventivo dei requisiti di sistema (evita errori 500 silenziosi)
+require_once __DIR__ . '/requirements_check.php';
+
 ob_start();
 
 // Prevent caching for the whole app
