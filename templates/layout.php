@@ -265,8 +265,9 @@
         <?php endforeach; ?>
 
         <?php if (!empty($accounts) && count($accounts) > 1):
-            $inUnifiedMode = !empty($isUnified);
-            $activeUfolder = $unifiedFolder ?? 'inbox';
+            $inUnifiedMode   = !empty($isUnified);
+            $unifiedMenuOpen = $inUnifiedMode || !empty($unifiedSidebarOpen);
+            $activeUfolder   = $unifiedFolder ?? 'inbox';
             $navUnifiedFolders = !empty($unifiedFolders) ? $unifiedFolders : [
                 ['key' => 'inbox', 'label' => 'Inbox', 'unread' => 0],
                 ['key' => 'sent',  'label' => 'Sent',  'unread' => 0],
@@ -286,11 +287,11 @@
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.9"><rect x="3" y="4" width="18" height="16" rx="2"/><polyline points="3 10 9 10 11 13 13 13 15 10 21 10"/></svg>
                     <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">All Accounts</span>
                 </a>
-                <button type="button" id="unified-toggle" class="wm-unified-toggle <?= $inUnifiedMode ? 'expanded' : '' ?>" title="Toggle unified folders" aria-expanded="<?= $inUnifiedMode ? 'true' : 'false' ?>" style="background:transparent;border:none;color:var(--wm-sidebar-text,#c8d8e8);appearance:none;-webkit-appearance:none;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;padding:.4rem .65rem;margin-right:.25rem;border-radius:6px">
+                <button type="button" id="unified-toggle" class="wm-unified-toggle <?= $unifiedMenuOpen ? 'expanded' : '' ?>" title="Toggle unified folders" aria-expanded="<?= $unifiedMenuOpen ? 'true' : 'false' ?>" style="background:transparent;border:none;color:var(--wm-sidebar-text,#c8d8e8);appearance:none;-webkit-appearance:none;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;padding:.4rem .65rem;margin-right:.25rem;border-radius:6px">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                 </button>
             </div>
-            <div id="unified-subfolders" class="wm-unified-sub" style="display:<?= $inUnifiedMode ? 'block' : 'none' ?>">
+            <div id="unified-subfolders" class="wm-unified-sub" style="display:<?= $unifiedMenuOpen ? 'block' : 'none' ?>">
                 <?php foreach ($navUnifiedFolders as $uf):
                     $uKey   = (string) ($uf['key'] ?? 'inbox');
                     $uLabel = (string) ($uf['label'] ?? 'Inbox');
@@ -306,61 +307,68 @@
                 <?php endforeach; ?>
             </div>
         </div>
-        <?php endif; ?>
 
-        <?php if (!empty($isUnified) && !empty($unifiedAccountFolders) && count($accounts ?? []) > 1):
-            $otherAccGroups = array_values(array_filter($unifiedAccountFolders, static function (array $g) use ($curAccId): bool {
-                return (int) ($g['account_id'] ?? 0) !== $curAccId;
-            }));
-            if (!empty($otherAccGroups)):
-                $accDots = ['#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#2563eb'];
+        <?php
+            $accDots = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2'];
+            $hasUnifiedAccGroups = !empty($unifiedAccountFolders);
         ?>
-        <div class="wm-sidebar-section" style="display:flex;align-items:center;justify-content:space-between;margin-top:.75rem">
-            <span>Other Accounts</span>
-        </div>
-        <?php foreach ($otherAccGroups as $accIdx => $accGroup):
-            $gAccId   = (int) ($accGroup['account_id'] ?? 0);
-            $gLabel   = (string) ($accGroup['label'] ?? $accGroup['email'] ?? 'Account');
-            $gEmail   = (string) ($accGroup['email'] ?? '');
-            $gFolders = is_array($accGroup['folders'] ?? null) ? $accGroup['folders'] : [];
-            $gUnread  = (int) ($accGroup['unread_total'] ?? 0);
-            $gError   = $accGroup['error'] ?? null;
-            $gDot     = $accDots[$accIdx % count($accDots)];
-        ?>
-        <div class="wm-acc-group" data-account-id="<?= $gAccId ?>">
-            <button type="button"
-                    class="wm-acc-group-toggle"
-                    aria-expanded="false"
-                    title="<?= htmlspecialchars($gEmail) ?>">
-                <span class="wm-acc-dot" style="background:<?= $gDot ?>"></span>
-                <span class="wm-acc-label"><?= htmlspecialchars($gLabel) ?></span>
-                <?php if ($gError !== null): ?>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--wm-danger)" stroke-width="2.5" style="flex-shrink:0" title="<?= htmlspecialchars($gError) ?>"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                <?php elseif ($gUnread > 0): ?>
-                <span class="badge"><?= $gUnread ?></span>
-                <?php endif; ?>
-                <svg class="wm-acc-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-            </button>
-            <div class="wm-acc-group-folders" style="display:none">
-                <?php if ($gError !== null && empty($gFolders)): ?>
-                <div class="wm-acc-group-error"><?= htmlspecialchars($gError) ?></div>
-                <?php else: ?>
-                <?php foreach ($gFolders as $f): ?>
-                <a href="?action=inbox&account_id=<?= $gAccId ?>&folder=<?= urlencode($f['name']) ?>"
-                   target="_self"
-                   style="display:flex;align-items:center;gap:.6rem">
-                    <?= $getFolderIcon($f['name']) ?>
-                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1"><?= htmlspecialchars($f['display']) ?></span>
-                    <?php if (!empty($f['unread'])): ?>
-                    <span class="badge"><?= (int)$f['unread'] ?></span>
-                    <?php endif; ?>
-                </a>
+        <div id="unified-accounts-section" style="display:<?= ($unifiedMenuOpen && $hasUnifiedAccGroups) ? 'block' : 'none' ?>">
+            <div class="wm-sidebar-section" style="display:flex;align-items:center;justify-content:space-between;margin-top:.75rem">
+                <span>Unified Account and Folders</span>
+            </div>
+            <div id="unified-accounts-list">
+                <?php if ($hasUnifiedAccGroups): ?>
+                <?php foreach ($unifiedAccountFolders as $accIdx => $accGroup):
+                    $gAccId   = (int) ($accGroup['account_id'] ?? 0);
+                    $gLabel   = (string) ($accGroup['label'] ?? $accGroup['email'] ?? 'Account');
+                    $gEmail   = (string) ($accGroup['email'] ?? '');
+                    $gFolders = is_array($accGroup['folders'] ?? null) ? $accGroup['folders'] : [];
+                    $gUnread  = (int) ($accGroup['unread_total'] ?? 0);
+                    $gError   = $accGroup['error'] ?? null;
+                    $gDot     = $accDots[$accIdx % count($accDots)];
+                    $groupHasActiveFolder = empty($isUnified)
+                        && in_array($currentAction ?? 'inbox', ['inbox', 'view', 'search'], true)
+                        && $gAccId === $curAccId;
+                ?>
+                <div class="wm-acc-group" data-account-id="<?= $gAccId ?>" data-has-active="<?= $groupHasActiveFolder ? '1' : '0' ?>">
+                    <button type="button"
+                            class="wm-acc-group-toggle"
+                            aria-expanded="false"
+                            title="<?= htmlspecialchars($gEmail) ?>">
+                        <span class="wm-acc-dot" style="background:<?= $gDot ?>"></span>
+                        <span class="wm-acc-label"><?= htmlspecialchars($gLabel) ?></span>
+                        <?php if ($gError !== null): ?>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--wm-danger)" stroke-width="2.5" style="flex-shrink:0" title="<?= htmlspecialchars($gError) ?>"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <?php elseif ($gUnread > 0): ?>
+                        <span class="badge"><?= $gUnread ?></span>
+                        <?php endif; ?>
+                        <svg class="wm-acc-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    <div class="wm-acc-group-folders" style="display:none">
+                        <?php if ($gError !== null && empty($gFolders)): ?>
+                        <div class="wm-acc-group-error"><?= htmlspecialchars($gError) ?></div>
+                        <?php else: ?>
+                        <?php foreach ($gFolders as $f):
+                            $isGroupFolderActive = $groupHasActiveFolder && ($currentFolder ?? 'INBOX') === $f['name'];
+                        ?>
+                        <a href="?action=inbox&account_id=<?= $gAccId ?>&folder=<?= urlencode($f['name']) ?>"
+                           class="<?= $isGroupFolderActive ? 'active' : '' ?>"
+                           target="_self"
+                           style="display:flex;align-items:center;gap:.6rem">
+                            <?= $getFolderIcon($f['name']) ?>
+                            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1"><?= htmlspecialchars($f['display']) ?></span>
+                            <?php if (!empty($f['unread'])): ?>
+                            <span class="badge"><?= (int)$f['unread'] ?></span>
+                            <?php endif; ?>
+                        </a>
+                        <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
                 <?php endforeach; ?>
                 <?php endif; ?>
             </div>
         </div>
-        <?php endforeach; ?>
-        <?php endif; ?>
         <?php endif; ?>
 
         <!-- Folder management forms (hidden) -->
@@ -490,27 +498,44 @@ document.addEventListener('click', function() {
 
 // Unified sidebar subfolder & per-account accordion toggles
 (function() {
-    var toggle = document.getElementById('unified-toggle');
-    var sub    = document.getElementById('unified-subfolders');
-    if (toggle && sub) {
-        toggle.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            var isOpen = sub.style.display !== 'none';
-            sub.style.display = isOpen ? 'none' : 'block';
-            toggle.classList.toggle('expanded', !isOpen);
-            toggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
-        });
+    var toggle     = document.getElementById('unified-toggle');
+    var sub        = document.getElementById('unified-subfolders');
+    var accSection = document.getElementById('unified-accounts-section');
+    var accList    = document.getElementById('unified-accounts-list');
+    var accDots    = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2'];
+
+    function getFolderSvgHtml(name) {
+        var n = (name || '').toLowerCase();
+        if (n.indexOf('inbox') !== -1) {
+            return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>';
+        }
+        if (n.indexOf('sent') !== -1 || n.indexOf('inviat') !== -1) {
+            return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
+        }
+        if (n.indexOf('draft') !== -1 || n.indexOf('bozz') !== -1) {
+            return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+        }
+        if (n.indexOf('trash') !== -1 || n.indexOf('deleted') !== -1 || n.indexOf('cestino') !== -1 || n.indexOf('eliminat') !== -1) {
+            return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+        }
+        if (n.indexOf('spam') !== -1 || n.indexOf('junk') !== -1 || n.indexOf('indesiderat') !== -1) {
+            return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+        }
+        if (n.indexOf('archive') !== -1 || n.indexOf('archivio') !== -1) {
+            return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>';
+        }
+        return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
     }
 
-    document.querySelectorAll('.wm-acc-group').forEach(function(group) {
-        var accId  = group.dataset.accountId || '';
-        var btn    = group.querySelector('.wm-acc-group-toggle');
-        var list   = group.querySelector('.wm-acc-group-folders');
+    function bindAccountGroup(group) {
+        var accId = group.dataset.accountId || '';
+        var btn   = group.querySelector('.wm-acc-group-toggle');
+        var list  = group.querySelector('.wm-acc-group-folders');
         if (!btn || !list) return;
 
         var stored = accId ? sessionStorage.getItem('wm_unified_acc_open_' + accId) : null;
-        if (stored === '1') {
+        var shouldOpen = stored === '1' || (stored === null && group.dataset.hasActive === '1');
+        if (shouldOpen) {
             list.style.display = 'block';
             btn.classList.add('expanded');
             btn.setAttribute('aria-expanded', 'true');
@@ -529,7 +554,145 @@ document.addEventListener('click', function() {
                 sessionStorage.setItem('wm_unified_acc_open_' + accId, isOpen ? '0' : '1');
             }
         });
-    });
+    }
+
+    function populateAccountGroups(accounts) {
+        if (!accList || !Array.isArray(accounts)) return;
+        accList.innerHTML = '';
+        accounts.forEach(function(accGroup, idx) {
+            var gAccId = parseInt(accGroup.account_id || 0, 10);
+            var group = document.createElement('div');
+            group.className = 'wm-acc-group';
+            group.dataset.accountId = String(gAccId);
+            group.dataset.hasActive = '0';
+
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'wm-acc-group-toggle';
+            btn.setAttribute('aria-expanded', 'false');
+            btn.title = accGroup.email || '';
+
+            var dot = document.createElement('span');
+            dot.className = 'wm-acc-dot';
+            dot.style.background = accDots[idx % accDots.length];
+            btn.appendChild(dot);
+
+            var lbl = document.createElement('span');
+            lbl.className = 'wm-acc-label';
+            lbl.textContent = accGroup.label || accGroup.email || 'Account';
+            btn.appendChild(lbl);
+
+            var unreadTotal = parseInt(accGroup.unread_total || 0, 10);
+            if (accGroup.error) {
+                var warn = document.createElement('span');
+                warn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--wm-danger)" stroke-width="2.5" style="flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+                if (warn.firstChild) {
+                    warn.firstChild.setAttribute('title', String(accGroup.error));
+                    btn.appendChild(warn.firstChild);
+                }
+            } else if (unreadTotal > 0) {
+                var badge = document.createElement('span');
+                badge.className = 'badge';
+                badge.textContent = String(unreadTotal);
+                btn.appendChild(badge);
+            }
+
+            var chevWrap = document.createElement('span');
+            chevWrap.innerHTML = '<svg class="wm-acc-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>';
+            if (chevWrap.firstChild) btn.appendChild(chevWrap.firstChild);
+
+            group.appendChild(btn);
+
+            var foldersDiv = document.createElement('div');
+            foldersDiv.className = 'wm-acc-group-folders';
+            foldersDiv.style.display = 'none';
+
+            var gFolders = Array.isArray(accGroup.folders) ? accGroup.folders : [];
+            if (accGroup.error && !gFolders.length) {
+                var errDiv = document.createElement('div');
+                errDiv.className = 'wm-acc-group-error';
+                errDiv.textContent = String(accGroup.error);
+                foldersDiv.appendChild(errDiv);
+            } else {
+                gFolders.forEach(function(f) {
+                    var a = document.createElement('a');
+                    a.href = '?action=inbox&account_id=' + encodeURIComponent(String(gAccId)) + '&folder=' + encodeURIComponent(String(f.name || 'INBOX'));
+                    a.target = '_self';
+                    a.style.display = 'flex';
+                    a.style.alignItems = 'center';
+                    a.style.gap = '.6rem';
+
+                    var iconWrap = document.createElement('span');
+                    iconWrap.innerHTML = getFolderSvgHtml(f.name || '');
+                    if (iconWrap.firstChild) a.appendChild(iconWrap.firstChild);
+
+                    var nameSpan = document.createElement('span');
+                    nameSpan.style.overflow = 'hidden';
+                    nameSpan.style.textOverflow = 'ellipsis';
+                    nameSpan.style.whiteSpace = 'nowrap';
+                    nameSpan.style.flex = '1';
+                    nameSpan.textContent = String(f.display || f.name || '');
+                    a.appendChild(nameSpan);
+
+                    var fUnread = parseInt(f.unread || 0, 10);
+                    if (fUnread > 0) {
+                        var fBadge = document.createElement('span');
+                        fBadge.className = 'badge';
+                        fBadge.textContent = String(fUnread);
+                        a.appendChild(fBadge);
+                    }
+                    foldersDiv.appendChild(a);
+                });
+            }
+
+            group.appendChild(foldersDiv);
+            accList.appendChild(group);
+            bindAccountGroup(group);
+        });
+    }
+
+    function persistUnifiedSidebarState(open) {
+        var csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        return fetch('?action=unified_sidebar_state', {
+            method: 'POST',
+            keepalive: true,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-Token': csrfToken
+            },
+            body: JSON.stringify({ open: !!open })
+        }).then(function(r) { return r.json(); }).catch(function() { return null; });
+    }
+
+    if (toggle && sub) {
+        toggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var nextOpen = sub.style.display === 'none';
+            sub.style.display = nextOpen ? 'block' : 'none';
+            toggle.classList.toggle('expanded', nextOpen);
+            toggle.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+
+            if (accSection) {
+                var hasGroups = accList && accList.querySelectorAll('.wm-acc-group').length > 0;
+                accSection.style.display = (nextOpen && hasGroups) ? 'block' : 'none';
+            }
+
+            persistUnifiedSidebarState(nextOpen).then(function(res) {
+                if (nextOpen && res && res.ok && accSection && accList) {
+                    if (accList.querySelectorAll('.wm-acc-group').length === 0 && Array.isArray(res.unifiedAccountFolders) && res.unifiedAccountFolders.length > 0) {
+                        populateAccountGroups(res.unifiedAccountFolders);
+                    }
+                    if (accList.querySelectorAll('.wm-acc-group').length > 0) {
+                        accSection.style.display = 'block';
+                    }
+                }
+            });
+        });
+    }
+
+    document.querySelectorAll('.wm-acc-group').forEach(bindAccountGroup);
 })();
 
 // Folder management

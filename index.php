@@ -310,6 +310,134 @@ function resolveUnifiedFoldersForAccount(ImapClient $imap, string $ufolder, ?arr
     return array_values(array_unique($matched));
 }
 
+function populateUnifiedSidebarCache(
+    Account $accountMgr,
+    array $accounts,
+    int $userId,
+    int $activeAccountId,
+    array $activeFolders = []
+): array {
+    if (count($accounts) <= 1) {
+        return ['unifiedFolders' => [], 'unifiedAccountFolders' => []];
+    }
+
+    $unifiedFoldersMap = [
+        'inbox' => ['key' => 'inbox', 'label' => 'Inbox', 'unread' => 0],
+        'sent'  => ['key' => 'sent',  'label' => 'Sent',  'unread' => 0],
+        'spam'  => ['key' => 'spam',  'label' => 'Spam',  'unread' => 0],
+        'trash' => ['key' => 'trash', 'label' => 'Trash', 'unread' => 0],
+    ];
+    $unifiedAccountFolders = [];
+
+    foreach ($accounts as $acc) {
+        $accId    = (int) ($acc['id'] ?? 0);
+        $accLabel = ($acc['label'] ?? '') !== '' ? (string) $acc['label'] : (string) ($acc['email'] ?? '');
+        $accEmail = (string) ($acc['email'] ?? '');
+        $accImap  = null;
+
+        try {
+            if ($accId === $activeAccountId && !empty($activeFolders)) {
+                $accFolders = $activeFolders;
+            } else {
+                $accImap = $accountMgr->imapConnect($accId);
+                if (($acc['validation_status'] ?? '') === 'invalid') {
+                    $accountMgr->setValidationStatus($accId, 'valid');
+                }
+                $accFolders = $accImap->getFolders();
+                if (count($accFolders) <= 20) {
+                    foreach ($accFolders as &$af) {
+                        $af['unread'] = $accImap->getUnreadCount($af['name']);
+                    }
+                    unset($af);
+                }
+                usort($accFolders, static function (array $a, array $b): int {
+                    $aIsInbox = strtoupper((string) ($a['name'] ?? '')) === 'INBOX';
+                    $bIsInbox = strtoupper((string) ($b['name'] ?? '')) === 'INBOX';
+                    if ($aIsInbox !== $bIsInbox) {
+                        return $aIsInbox ? -1 : 1;
+                    }
+                    return strnatcasecmp((string) ($a['display'] ?? ''), (string) ($b['display'] ?? ''));
+                });
+                $accImap->disconnect();
+                $accImap = null;
+            }
+
+            $accUnreadTotal = 0;
+            foreach ($accFolders as $af) {
+                $afUnread = (int) ($af['unread'] ?? 0);
+                $accUnreadTotal += $afUnread;
+                $cls = classifyFolderForUnified($af);
+                if ($cls === null) {
+                    continue;
+                }
+                $uKey = $cls['key'];
+                if (!isset($unifiedFoldersMap[$uKey])) {
+                    $unifiedFoldersMap[$uKey] = [
+                        'key'    => $uKey,
+                        'label'  => $cls['label'],
+                        'unread' => 0,
+                    ];
+                }
+                $unifiedFoldersMap[$uKey]['unread'] += $afUnread;
+            }
+
+            $unifiedAccountFolders[] = [
+                'account_id'   => $accId,
+                'label'        => $accLabel,
+                'email'        => $accEmail,
+                'folders'      => $accFolders,
+                'unread_total' => $accUnreadTotal,
+                'error'        => null,
+            ];
+        } catch (RuntimeException $e) {
+            if ($accImap !== null) {
+                try { $accImap->disconnect(); } catch (Throwable $ignored) {}
+            }
+            $errorMsg = $e->getMessage();
+            error_log('Unified sidebar cache failed for user ' . $userId . ', account ' . $accId . ' (' . $accEmail . '): ' . $errorMsg);
+            $isAuth = isImapAuthError($errorMsg);
+            if ($isAuth) {
+                $accountMgr->setValidationStatus($accId, 'invalid');
+            }
+            $unifiedAccountFolders[] = [
+                'account_id'   => $accId,
+                'label'        => $accLabel,
+                'email'        => $accEmail,
+                'folders'      => ($accId === $activeAccountId) ? $activeFolders : [],
+                'unread_total' => 0,
+                'error'        => $isAuth
+                    ? 'Authentication failed for this account. Please check your settings.'
+                    : 'Unable to load folders. Please check your account settings.',
+            ];
+        }
+    }
+
+    $unifiedFolders = array_values($unifiedFoldersMap);
+    $coreOrder = ['inbox' => 0, 'sent' => 1, 'spam' => 2, 'trash' => 3, 'drafts' => 4, 'archive' => 5];
+    usort($unifiedFolders, static function (array $a, array $b) use ($coreOrder): int {
+        $oa = $coreOrder[$a['key']] ?? 99;
+        $ob = $coreOrder[$b['key']] ?? 99;
+        if ($oa !== $ob) {
+            return $oa <=> $ob;
+        }
+        return strnatcasecmp($a['label'], $b['label']);
+    });
+
+    $_SESSION['unified_folders'] = [
+        'user_id' => $userId,
+        'folders' => $unifiedFolders,
+    ];
+    $_SESSION['unified_account_folders'] = [
+        'user_id'  => $userId,
+        'accounts' => $unifiedAccountFolders,
+    ];
+
+    return [
+        'unifiedFolders'        => $unifiedFolders,
+        'unifiedAccountFolders' => $unifiedAccountFolders,
+    ];
+}
+
 function resolveTargetAccountId(Account $accountMgr, int $userId, int $defaultAccountId, ?int $requestedId = null): int
 {
     if ($requestedId !== null && $requestedId > 0 && $requestedId !== $defaultAccountId) {
@@ -807,6 +935,21 @@ $unifiedFolder = $action === 'unified'
     : $fromUnified;
 $isUnified = ($action === 'unified') || ($fromUnified !== '' && in_array($action, ['view', 'compose', 'preview_eml'], true));
 
+if ($action === 'unified' && count($accounts) > 1) {
+    $_SESSION['unified_sidebar_open'] = [
+        'user_id' => $userId,
+        'open'    => true,
+    ];
+}
+
+$uSidebarState = $_SESSION['unified_sidebar_open'] ?? null;
+$unifiedSidebarOpen = $isUnified || (
+    count($accounts) > 1
+    && is_array($uSidebarState)
+    && (int) ($uSidebarState['user_id'] ?? 0) === $userId
+    && !empty($uSidebarState['open'])
+);
+
 $cachedUnifiedFolders = [];
 $uCache = $_SESSION['unified_folders'] ?? null;
 if (is_array($uCache) && (int) ($uCache['user_id'] ?? 0) === $userId && is_array($uCache['folders'] ?? null)) {
@@ -819,15 +962,48 @@ if (is_array($uaCache) && (int) ($uaCache['user_id'] ?? 0) === $userId && is_arr
     $cachedUnifiedAccountFolders = $uaCache['accounts'];
 }
 
+if (!empty($cachedUnifiedAccountFolders) && !empty($folders) && $action !== 'unified') {
+    $freshUnreadTotal = 0;
+    foreach ($folders as $ff) {
+        $freshUnreadTotal += (int) ($ff['unread'] ?? 0);
+    }
+    foreach ($cachedUnifiedAccountFolders as &$cachedAcc) {
+        if ((int) ($cachedAcc['account_id'] ?? 0) === $accountId) {
+            $cachedAcc['folders']      = $folders;
+            $cachedAcc['unread_total'] = $freshUnreadTotal;
+            $cachedAcc['error']        = null;
+            break;
+        }
+    }
+    unset($cachedAcc);
+    $_SESSION['unified_account_folders'] = [
+        'user_id'  => $userId,
+        'accounts' => $cachedUnifiedAccountFolders,
+    ];
+}
+
+if (
+    $unifiedSidebarOpen
+    && count($accounts) > 1
+    && !in_array($action, ['unified', 'unified_sidebar_state'], true)
+    && (empty($cachedUnifiedAccountFolders) || empty($cachedUnifiedFolders))
+) {
+    $refreshed = populateUnifiedSidebarCache($accountMgr, $accounts, $userId, $accountId, $folders);
+    $cachedUnifiedFolders        = $refreshed['unifiedFolders'];
+    $cachedUnifiedAccountFolders = $refreshed['unifiedAccountFolders'];
+}
+
 $layoutCommon = [
     'session'               => $session,
     'accounts'              => $accounts,
     'currentAccount'        => $currentAccount,
     'folders'               => $folders,
     'currentFolder'         => $currentFolder,
+    'currentAction'         => $action,
     'flash'                 => $flash,
     'setupBanner'           => $setupBanner,
     'isUnified'             => $isUnified,
+    'unifiedSidebarOpen'    => $unifiedSidebarOpen,
     'unifiedFolder'         => $unifiedFolder,
     'unifiedFolders'        => $cachedUnifiedFolders,
     'unifiedAccountFolders' => $cachedUnifiedAccountFolders,
@@ -854,6 +1030,27 @@ if ($action === 'switch_account') {
     }
     if (isAjax()) jsonResponse(['ok' => true]);
     redirect('?action=inbox');
+}
+
+// ── Unified sidebar open/close state (AJAX) ───────────────────────────────────
+if ($action === 'unified_sidebar_state' && isAjax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $body = json_decode(file_get_contents('php://input'), true) ?? [];
+    $open = !empty($body['open']);
+    $_SESSION['unified_sidebar_open'] = [
+        'user_id' => $userId,
+        'open'    => $open,
+    ];
+    if ($open && count($accounts) > 1 && (empty($cachedUnifiedAccountFolders) || empty($cachedUnifiedFolders))) {
+        $refreshed = populateUnifiedSidebarCache($accountMgr, $accounts, $userId, $accountId, $folders);
+        $cachedUnifiedFolders        = $refreshed['unifiedFolders'];
+        $cachedUnifiedAccountFolders = $refreshed['unifiedAccountFolders'];
+    }
+    jsonResponse([
+        'ok'                    => true,
+        'open'                  => $open,
+        'unifiedFolders'        => $cachedUnifiedFolders,
+        'unifiedAccountFolders' => $cachedUnifiedAccountFolders,
+    ]);
 }
 
 // ── Folder management ─────────────────────────────────────────────────────────
