@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '3.5.8';
+    public const VERSION = '3.5.9';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
@@ -680,24 +680,50 @@ class Config
      */
     public static function isDbInWebroot(): bool
     {
+        return self::isPathInWebroot(self::resolveDbPath());
+    }
+
+    public static function isPathInWebroot(string $candidatePath): bool
+    {
         $appRoot = realpath(dirname(__DIR__));
-        $dbPath  = self::resolveDbPath();
-        if ($appRoot === false || $dbPath === '') {
+        if ($appRoot === false || $candidatePath === '') {
             return false;
         }
 
-        // Case 1: DB inside the app root itself
-        if (str_starts_with($dbPath . '/', $appRoot . '/')) {
+        // Normalise relative segments without requiring the target file to exist yet
+        $normalized = str_replace('\\', '/', $candidatePath);
+        $parts = [];
+        foreach (explode('/', $normalized) as $seg) {
+            if ($seg === '' || $seg === '.') {
+                continue;
+            }
+            if ($seg === '..') {
+                array_pop($parts);
+            } else {
+                $parts[] = $seg;
+            }
+        }
+        $cleanPath = (str_starts_with($normalized, '/') ? '/' : '') . implode('/', $parts);
+
+        // Resolve existing parent directory symlink if present
+        $parent = dirname($cleanPath);
+        $realParent = @realpath($parent);
+        if ($realParent !== false) {
+            $cleanPath = rtrim($realParent, '/') . '/' . basename($cleanPath);
+        }
+
+        // Case 1: Path inside the app root itself
+        if (str_starts_with($cleanPath . '/', $appRoot . '/')) {
             return true;
         }
 
-        // Case 2: both app and DB share a common webroot container ancestor
+        // Case 2: both app and path share a common webroot container ancestor
         $webrootNames = ['public_html', 'www', 'wwwroot', 'htdocs', 'html', 'web', 'public', 'webroot', 'website'];
         $appParts     = array_values(array_filter(explode('/', $appRoot)));
         for ($i = 0, $n = count($appParts); $i < $n; $i++) {
             if (in_array(strtolower($appParts[$i]), $webrootNames, true)) {
                 $containerPath = '/' . implode('/', array_slice($appParts, 0, $i + 1));
-                if (str_starts_with($dbPath . '/', $containerPath . '/')) {
+                if (str_starts_with($cleanPath . '/', $containerPath . '/')) {
                     return true;
                 }
             }
@@ -748,6 +774,10 @@ class Config
             return ['ok' => false, 'error' => 'Current database file not found at: ' . $oldPath];
         }
 
+        if (preg_match('/[\x00-\x1F\x7F]/', $targetPath)) {
+            return ['ok' => false, 'error' => 'Invalid characters in target database path.'];
+        }
+
         // Resolve the target absolute path
         if (!str_starts_with($targetPath, '/') && !str_contains($targetPath, ':')) {
             $targetPath = dirname(__DIR__) . '/' . $targetPath;
@@ -755,6 +785,15 @@ class Config
 
         // Normalise (realpath won't work for a non-existent file, so we clean it manually)
         $targetPath = rtrim(str_replace(['\\', '//'], ['/', '/'], $targetPath), '/');
+
+        $ext = strtolower(pathinfo($targetPath, PATHINFO_EXTENSION));
+        if (!in_array($ext, ['db', 'sqlite', 'sqlite3'], true)) {
+            return ['ok' => false, 'error' => 'Database filename must end with .db, .sqlite, or .sqlite3.'];
+        }
+
+        if (self::isPathInWebroot($targetPath)) {
+            return ['ok' => false, 'error' => 'Target database path must be outside the webroot directory.'];
+        }
 
         if ($targetPath === $oldPath) {
             return ['ok' => false, 'error' => 'Target path is the same as the current database location.'];

@@ -36,6 +36,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                     Enter the 6-digit code from your authenticator app, or a recovery code.
                 </p>
                 <form method="post" action="?action=login2fa">
+                    <input type="hidden" name="login_2fa_csrf" value="<?= htmlspecialchars((string) ($twoFaCsrf ?? '')) ?>">
                     <div class="form-group">
                         <label for="code">Authentication code</label>
                         <input type="text" id="code" name="code" class="form-control"
