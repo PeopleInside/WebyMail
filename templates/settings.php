@@ -383,8 +383,6 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
 
                 <form method="post" action="?action=settings_save&tab=enable_2fa" style="margin-top:1.25rem">
                     <?= csrfInput() ?>
-                    <input type="hidden" name="totp_secret" value="<?= htmlspecialchars($totpSecret) ?>">
-                    <input type="hidden" name="recovery_codes" value="<?= htmlspecialchars(json_encode($recoveryCodes)) ?>">
                     <div class="alert alert-warning" style="margin-bottom:.5rem">
                         Save your recovery codes somewhere safe before continuing. You will not see them again.
                     </div>
@@ -549,7 +547,9 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                 </div>
                 <?php foreach ($sessions as $s): ?>
                 <?php 
-                    $isCurrent = ($_COOKIE['wm_session'] ?? '') === $s['token'];
+                    $cookieToken     = (string) ($_COOKIE['wm_session'] ?? '');
+                    $cookieTokenHash = $cookieToken !== '' ? hash('sha256', $cookieToken) : '';
+                    $isCurrent       = $cookieTokenHash !== '' && hash_equals((string) ($s['token'] ?? ''), $cookieTokenHash);
                     $ip = Config::decrypt($s['ip_address']);
                     $ua = $s['user_agent'];
                 ?>

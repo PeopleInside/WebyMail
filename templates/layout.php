@@ -8,11 +8,7 @@
     // from setup.php the function does not exist yet, so we define a fallback.
     if (!function_exists('isRequestSecure')) {
         function isRequestSecure(): bool {
-            $proto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
-            $ssl   = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL']   ?? ''));
-            return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-                || str_contains($proto, 'https')
-                || $ssl === 'on';
+            return Config::isRequestSecure();
         }
     }
     $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'WebyMail');
@@ -187,7 +183,7 @@
     </header>
 
     <!-- Sidebar -->
-    <nav class="wm-sidebar">
+    <nav class="wm-sidebar" data-user-id="<?= (int)($session['user_id'] ?? 0) ?>">
         <a href="?action=compose" class="btn btn-primary" target="_self" style="margin:.5rem .75rem .75rem;justify-content:center">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Compose
@@ -239,15 +235,17 @@
                     style="background:none;border:none;cursor:pointer;color:var(--wm-text-muted);padding:.1rem .3rem;font-size:1rem;line-height:1">+</button>
         </div>
         <?php if (count($accounts ?? []) > 1 && $curAccDisplay !== ''): ?>
-        <div class="wm-sidebar-account-tag" title="<?= htmlspecialchars($curAccEmail ?: $curAccDisplay) ?>">
+        <div class="wm-sidebar-account-tag" id="wm-sidebar-account-tag" title="<?= htmlspecialchars($curAccEmail ?: $curAccDisplay) ?>">
             <span class="wm-acc-dot" style="background:var(--wm-primary)"></span>
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= htmlspecialchars($curAccDisplay) ?></span>
         </div>
         <?php endif; ?>
+        <div id="wm-active-account-folders">
         <?php foreach ($folders ?? [] as $f): ?>
         <div class="wm-sidebar-folder-row" style="display:flex;align-items:center;position:relative">
             <a href="?action=inbox&folder=<?= urlencode($f['name']) ?>"
                class="<?= (empty($isUnified) && ($currentFolder ?? 'INBOX') === $f['name']) ? 'active' : '' ?>"
+               data-folder="<?= htmlspecialchars($f['name']) ?>"
                target="_self"
                style="flex:1;min-width:0;display:flex;align-items:center;gap:.65rem">
                 <?= $getFolderIcon($f['name']) ?>
@@ -263,6 +261,7 @@
             <?php endif; ?>
         </div>
         <?php endforeach; ?>
+        </div>
 
         <?php if (!empty($accounts) && count($accounts) > 1):
             $inUnifiedMode   = !empty($isUnified);
@@ -297,7 +296,7 @@
                     $uLabel = (string) ($uf['label'] ?? 'Inbox');
                     $uUnread = (int) ($uf['unread'] ?? 0);
                 ?>
-                <a href="?action=unified&ufolder=<?= urlencode($uKey) ?>" class="<?= ($inUnifiedMode && $activeUfolder === $uKey) ? 'active' : '' ?>" target="_self">
+                <a href="?action=unified&ufolder=<?= urlencode($uKey) ?>" class="<?= ($inUnifiedMode && $activeUfolder === $uKey) ? 'active' : '' ?>" data-ufolder="<?= htmlspecialchars($uKey) ?>" target="_self">
                     <?= $getFolderIcon($uLabel) ?>
                     <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1"><?= htmlspecialchars($uLabel) ?></span>
                     <?php if ($uUnread > 0): ?>
@@ -353,6 +352,8 @@
                         ?>
                         <a href="?action=inbox&account_id=<?= $gAccId ?>&folder=<?= urlencode($f['name']) ?>"
                            class="<?= $isGroupFolderActive ? 'active' : '' ?>"
+                           data-account-id="<?= $gAccId ?>"
+                           data-folder="<?= htmlspecialchars($f['name']) ?>"
                            target="_self"
                            style="display:flex;align-items:center;gap:.6rem">
                             <?= $getFolderIcon($f['name']) ?>
@@ -496,13 +497,37 @@ document.addEventListener('click', function() {
     if (m) m.style.display = 'none';
 });
 
-// Unified sidebar subfolder & per-account accordion toggles
+// Unified sidebar subfolder & per-account accordion toggles (persistent via localStorage)
 (function() {
+    var sidebarEl  = document.querySelector('.wm-sidebar');
+    var userIdTag  = sidebarEl ? ('u' + (sidebarEl.dataset.userId || '0') + '_') : 'u0_';
+    var UNIFIED_OPEN_KEY = 'wm_unified_sidebar_open_' + userIdTag;
     var toggle     = document.getElementById('unified-toggle');
     var sub        = document.getElementById('unified-subfolders');
     var accSection = document.getElementById('unified-accounts-section');
     var accList    = document.getElementById('unified-accounts-list');
     var accDots    = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2'];
+
+    function readStoredFlag(lsKey, legacySsKey) {
+        try {
+            var val = localStorage.getItem(lsKey);
+            if (val === '1' || val === '0') return val;
+            if (legacySsKey) {
+                var legacy = sessionStorage.getItem(legacySsKey);
+                if (legacy === '1' || legacy === '0') {
+                    localStorage.setItem(lsKey, legacy);
+                    return legacy;
+                }
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    function writeStoredFlag(lsKey, isOpen) {
+        try {
+            localStorage.setItem(lsKey, isOpen ? '1' : '0');
+        } catch (e) {}
+    }
 
     function getFolderSvgHtml(name) {
         var n = (name || '').toLowerCase();
@@ -527,13 +552,57 @@ document.addEventListener('click', function() {
         return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
     }
 
+    function populateUnifiedSubfolders(unifiedFolders) {
+        if (!sub || !Array.isArray(unifiedFolders) || unifiedFolders.length === 0) return;
+        var params = new URLSearchParams(window.location.search);
+        var inUnified = params.get('action') === 'unified';
+        var activeUfolder = inUnified ? (params.get('ufolder') || 'inbox').toLowerCase() : '';
+
+        sub.innerHTML = '';
+        unifiedFolders.forEach(function(uf) {
+            var uKey = String(uf.key || 'inbox');
+            var uLabel = String(uf.label || 'Inbox');
+            var uUnread = parseInt(uf.unread || 0, 10) || 0;
+
+            var a = document.createElement('a');
+            a.href = '?action=unified&ufolder=' + encodeURIComponent(uKey);
+            a.target = '_self';
+            a.dataset.ufolder = uKey;
+            if (inUnified && activeUfolder === uKey.toLowerCase()) {
+                a.className = 'active';
+            }
+
+            var iconWrap = document.createElement('span');
+            iconWrap.innerHTML = getFolderSvgHtml(uLabel);
+            if (iconWrap.firstChild) a.appendChild(iconWrap.firstChild);
+
+            var lblSpan = document.createElement('span');
+            lblSpan.style.overflow = 'hidden';
+            lblSpan.style.textOverflow = 'ellipsis';
+            lblSpan.style.whiteSpace = 'nowrap';
+            lblSpan.style.flex = '1';
+            lblSpan.textContent = uLabel;
+            a.appendChild(lblSpan);
+
+            if (uUnread > 0) {
+                var badge = document.createElement('span');
+                badge.className = 'badge';
+                badge.textContent = String(uUnread);
+                a.appendChild(badge);
+            }
+            sub.appendChild(a);
+        });
+    }
+
     function bindAccountGroup(group) {
         var accId = group.dataset.accountId || '';
         var btn   = group.querySelector('.wm-acc-group-toggle');
         var list  = group.querySelector('.wm-acc-group-folders');
         if (!btn || !list) return;
 
-        var stored = accId ? sessionStorage.getItem('wm_unified_acc_open_' + accId) : null;
+        var lsKey = accId ? ('wm_unified_acc_open_' + userIdTag + accId) : '';
+        var legacyKey = accId ? ('wm_unified_acc_open_' + accId) : '';
+        var stored = lsKey ? readStoredFlag(lsKey, legacyKey) : null;
         var shouldOpen = stored === '1' || (stored === null && group.dataset.hasActive === '1');
         if (shouldOpen) {
             list.style.display = 'block';
@@ -545,26 +614,35 @@ document.addEventListener('click', function() {
             btn.setAttribute('aria-expanded', 'false');
         }
 
+        if (btn.dataset.wmBound === '1') return;
+        btn.dataset.wmBound = '1';
         btn.addEventListener('click', function() {
             var isOpen = list.style.display !== 'none';
-            list.style.display = isOpen ? 'none' : 'block';
-            btn.classList.toggle('expanded', !isOpen);
-            btn.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
-            if (accId) {
-                sessionStorage.setItem('wm_unified_acc_open_' + accId, isOpen ? '0' : '1');
+            var nextOpen = !isOpen;
+            list.style.display = nextOpen ? 'block' : 'none';
+            btn.classList.toggle('expanded', nextOpen);
+            btn.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+            if (lsKey) {
+                writeStoredFlag(lsKey, nextOpen);
             }
         });
     }
 
     function populateAccountGroups(accounts) {
         if (!accList || !Array.isArray(accounts)) return;
+        var params = new URLSearchParams(window.location.search);
+        var curAction = params.get('action') || 'inbox';
+        var curFolder = params.get('folder') || 'INBOX';
+        var curAccParam = parseInt(params.get('account_id') || '0', 10);
+
         accList.innerHTML = '';
         accounts.forEach(function(accGroup, idx) {
             var gAccId = parseInt(accGroup.account_id || 0, 10);
             var group = document.createElement('div');
             group.className = 'wm-acc-group';
             group.dataset.accountId = String(gAccId);
-            group.dataset.hasActive = '0';
+            var isActiveAcc = (curAction === 'inbox' || curAction === 'view' || curAction === 'search') && curAccParam > 0 && curAccParam === gAccId;
+            group.dataset.hasActive = isActiveAcc ? '1' : '0';
 
             var btn = document.createElement('button');
             btn.type = 'button';
@@ -615,15 +693,21 @@ document.addEventListener('click', function() {
                 foldersDiv.appendChild(errDiv);
             } else {
                 gFolders.forEach(function(f) {
+                    var fName = String(f.name || 'INBOX');
                     var a = document.createElement('a');
-                    a.href = '?action=inbox&account_id=' + encodeURIComponent(String(gAccId)) + '&folder=' + encodeURIComponent(String(f.name || 'INBOX'));
+                    a.href = '?action=inbox&account_id=' + encodeURIComponent(String(gAccId)) + '&folder=' + encodeURIComponent(fName);
                     a.target = '_self';
+                    a.dataset.accountId = String(gAccId);
+                    a.dataset.folder = fName;
+                    if (isActiveAcc && curFolder === fName) {
+                        a.className = 'active';
+                    }
                     a.style.display = 'flex';
                     a.style.alignItems = 'center';
                     a.style.gap = '.6rem';
 
                     var iconWrap = document.createElement('span');
-                    iconWrap.innerHTML = getFolderSvgHtml(f.name || '');
+                    iconWrap.innerHTML = getFolderSvgHtml(fName);
                     if (iconWrap.firstChild) a.appendChild(iconWrap.firstChild);
 
                     var nameSpan = document.createElement('span');
@@ -631,7 +715,7 @@ document.addEventListener('click', function() {
                     nameSpan.style.textOverflow = 'ellipsis';
                     nameSpan.style.whiteSpace = 'nowrap';
                     nameSpan.style.flex = '1';
-                    nameSpan.textContent = String(f.display || f.name || '');
+                    nameSpan.textContent = String(f.display || fName);
                     a.appendChild(nameSpan);
 
                     var fUnread = parseInt(f.unread || 0, 10);
@@ -665,22 +749,25 @@ document.addEventListener('click', function() {
         }).then(function(r) { return r.json(); }).catch(function() { return null; });
     }
 
-    if (toggle && sub) {
-        toggle.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            var nextOpen = sub.style.display === 'none';
-            sub.style.display = nextOpen ? 'block' : 'none';
-            toggle.classList.toggle('expanded', nextOpen);
-            toggle.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+    function applyUnifiedOpenUi(nextOpen, shouldPersist) {
+        if (!toggle || !sub) return;
+        sub.style.display = nextOpen ? 'block' : 'none';
+        toggle.classList.toggle('expanded', nextOpen);
+        toggle.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
 
-            if (accSection) {
-                var hasGroups = accList && accList.querySelectorAll('.wm-acc-group').length > 0;
-                accSection.style.display = (nextOpen && hasGroups) ? 'block' : 'none';
-            }
+        if (accSection) {
+            var hasGroups = accList && accList.querySelectorAll('.wm-acc-group').length > 0;
+            accSection.style.display = (nextOpen && hasGroups) ? 'block' : 'none';
+        }
 
-            persistUnifiedSidebarState(nextOpen).then(function(res) {
-                if (nextOpen && res && res.ok && accSection && accList) {
+        if (!shouldPersist) return Promise.resolve(null);
+
+        return persistUnifiedSidebarState(nextOpen).then(function(res) {
+            if (nextOpen && res && res.ok) {
+                if (Array.isArray(res.unifiedFolders) && res.unifiedFolders.length > 0) {
+                    populateUnifiedSubfolders(res.unifiedFolders);
+                }
+                if (accSection && accList) {
                     if (accList.querySelectorAll('.wm-acc-group').length === 0 && Array.isArray(res.unifiedAccountFolders) && res.unifiedAccountFolders.length > 0) {
                         populateAccountGroups(res.unifiedAccountFolders);
                     }
@@ -688,11 +775,38 @@ document.addEventListener('click', function() {
                         accSection.style.display = 'block';
                     }
                 }
-            });
+            }
+            if (typeof window.wmRestoreSidebarScroll === 'function') {
+                window.wmRestoreSidebarScroll();
+            }
+            return res;
         });
     }
 
+    if (toggle && sub) {
+        toggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var nextOpen = sub.style.display === 'none';
+            writeStoredFlag(UNIFIED_OPEN_KEY, nextOpen);
+            applyUnifiedOpenUi(nextOpen, true);
+        });
+
+        // Restore persisted open/closed state on browser reopen while logged in
+        var storedUnified = readStoredFlag(UNIFIED_OPEN_KEY, null);
+        var inUnifiedMode = document.querySelector('.wm-unified-row.active') !== null;
+        if (inUnifiedMode) {
+            writeStoredFlag(UNIFIED_OPEN_KEY, true);
+        } else if (storedUnified === '1') {
+            var needsServerHydrate = sub.style.display === 'none' || !accList || accList.querySelectorAll('.wm-acc-group').length === 0;
+            applyUnifiedOpenUi(true, needsServerHydrate);
+        } else if (storedUnified === '0' && sub.style.display !== 'none') {
+            applyUnifiedOpenUi(false, true);
+        }
+    }
+
     document.querySelectorAll('.wm-acc-group').forEach(bindAccountGroup);
+    window.wmBindAccountGroup = bindAccountGroup;
 })();
 
 // Folder management
@@ -726,25 +840,30 @@ document.addEventListener('click', function() {
         });
     }
 
-    // Show folder menu buttons on hover
-    document.querySelectorAll('.wm-sidebar-folder-row').forEach(function(row) {
-        var btn = row.querySelector('.wm-folder-menu-btn');
-        if (!btn) return;
-        row.addEventListener('mouseenter', function() { btn.style.opacity = '1'; });
-        row.addEventListener('mouseleave', function() { btn.style.opacity = '0'; });
-    });
-
-    // Open context menu
-    document.querySelectorAll('.wm-folder-menu-btn').forEach(function(btn) {
-        btn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            activeFolder = btn.dataset.folder;
-            var rect = btn.getBoundingClientRect();
-            ctxMenu.style.top  = rect.bottom + 'px';
-            ctxMenu.style.left = rect.left + 'px';
-            ctxMenu.style.display = 'block';
+    function bindFolderMenuButtons() {
+        document.querySelectorAll('.wm-sidebar-folder-row').forEach(function(row) {
+            var btn = row.querySelector('.wm-folder-menu-btn');
+            if (!btn || row.dataset.wmHoverBound === '1') return;
+            row.dataset.wmHoverBound = '1';
+            row.addEventListener('mouseenter', function() { btn.style.opacity = '1'; });
+            row.addEventListener('mouseleave', function() { btn.style.opacity = '0'; });
         });
-    });
+
+        document.querySelectorAll('.wm-folder-menu-btn').forEach(function(btn) {
+            if (btn.dataset.wmMenuBound === '1') return;
+            btn.dataset.wmMenuBound = '1';
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                activeFolder = btn.dataset.folder;
+                var rect = btn.getBoundingClientRect();
+                ctxMenu.style.top  = rect.bottom + 'px';
+                ctxMenu.style.left = rect.left + 'px';
+                ctxMenu.style.display = 'block';
+            });
+        });
+    }
+    bindFolderMenuButtons();
+    window.wmBindFolderMenus = bindFolderMenuButtons;
 
     // Close context menu on outside click
     document.addEventListener('click', function() {

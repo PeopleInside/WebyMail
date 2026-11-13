@@ -90,13 +90,39 @@ $replyBase       = 'folder=' . $folderEnc . '&msg=' . (int)$msgNo . '&section=' 
         <?php endif; ?>
 
         <!-- Email Body -->
-        <div style="padding:1.5rem;background:var(--wm-surface)">
+        <div style="padding:0;background:var(--wm-surface)">
             <?php if (!empty($eml['has_html'])): ?>
-                <div class="wm-email-body" style="line-height:1.6">
-                    <?= $eml['body_html'] ?>
-                </div>
+                <iframe id="eml-standalone-frame"
+                        class="wm-eml-standalone-frame"
+                        sandbox="allow-popups allow-popups-to-escape-sandbox"
+                        referrerpolicy="no-referrer"
+                        srcdoc="<?= htmlspecialchars($eml['body_html'], ENT_QUOTES, 'UTF-8') ?>"
+                        title="Attached email preview"></iframe>
+                <script nonce="<?= $cspNonce ?>">
+                (function() {
+                    var frame = document.getElementById('eml-standalone-frame');
+                    if (!frame) return;
+                    var rawHtml = frame.getAttribute('srcdoc') || '';
+                    function sync() {
+                        var t = document.documentElement.getAttribute('data-theme') || 'system';
+                        if (t === 'system') {
+                            t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                        }
+                        var safeTheme = (t === 'dark') ? 'dark' : 'light';
+                        frame.srcdoc = rawHtml
+                            .replace(/<html([^>]*?)\sdata-theme=["'][^"']*["']/i, '<html$1 data-theme="' + safeTheme + '"')
+                            .replace(/(<div[^>]*\sid=["']wm-shadow-wrapper["'][^>]*?)\sdata-theme=["'][^"']*["']/i, '$1 data-theme="' + safeTheme + '"');
+                    }
+                    sync();
+                    var obs = new MutationObserver(sync);
+                    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+                    if (window.matchMedia) {
+                        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', sync);
+                    }
+                })();
+                </script>
             <?php else: ?>
-                <pre style="white-space:pre-wrap;font-family:inherit;font-size:.9rem;line-height:1.6;margin:0"><?= htmlspecialchars($eml['body_text']) ?></pre>
+                <pre style="white-space:pre-wrap;font-family:inherit;font-size:.9rem;line-height:1.6;margin:0;padding:1.5rem"><?= htmlspecialchars($eml['body_text']) ?></pre>
             <?php endif; ?>
         </div>
     </div>

@@ -93,15 +93,16 @@ class SmtpClient
 
     public function connect(string $host, int $port, bool $ssl, bool $starttls): void
     {
-        $proto  = $ssl ? 'ssl' : 'tcp';
-        $ctx    = stream_context_create([
+        $safeHost = HostValidator::validateHostAndPort($host, $port);
+        $proto    = $ssl ? 'ssl' : 'tcp';
+        $ctx      = stream_context_create([
             'ssl' => [
                 'verify_peer'      => $this->sslVerify,
                 'verify_peer_name' => $this->sslVerify,
             ],
         ]);
         $this->socket = @stream_socket_client(
-            "{$proto}://{$host}:{$port}",
+            "{$proto}://{$safeHost}:{$port}",
             $errno,
             $errstr,
             15,
@@ -110,7 +111,7 @@ class SmtpClient
         );
 
         if ($this->socket === false) {
-            throw new RuntimeException("Cannot connect to {$host}:{$port}: {$errstr}");
+            throw new RuntimeException("Cannot connect to {$safeHost}:{$port}: {$errstr}");
         }
 
         stream_set_timeout($this->socket, 15);
@@ -125,7 +126,11 @@ class SmtpClient
             $this->cmd('STARTTLS');
             $this->expect('220');
 
-            if (!stream_socket_enable_crypto($this->socket, true, STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT)) {
+            $cryptoMethod = STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT;
+            if (defined('STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT')) {
+                $cryptoMethod |= STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT;
+            }
+            if (!stream_socket_enable_crypto($this->socket, true, $cryptoMethod)) {
                 throw new RuntimeException('STARTTLS failed.');
             }
 

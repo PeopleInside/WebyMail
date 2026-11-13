@@ -40,6 +40,9 @@ class Account
 
     public function add(int $userId, array $data): int
     {
+        $data['imap_host'] = HostValidator::validateHostAndPort((string) ($data['imap_host'] ?? ''), (int) ($data['imap_port'] ?? 0));
+        $data['smtp_host'] = HostValidator::validateHostAndPort((string) ($data['smtp_host'] ?? ''), (int) ($data['smtp_port'] ?? 0));
+
         $status = 'valid';
         try {
             $this->validateCredentials($data);
@@ -79,7 +82,10 @@ class Account
     public function update(int $id, int $userId, array $data): bool
     {
         $existing = $this->get($id);
-        if (!$existing) return false;
+        if (!$existing || (int) $existing['user_id'] !== $userId) return false;
+
+        $data['imap_host'] = HostValidator::validateHostAndPort((string) ($data['imap_host'] ?? ''), (int) ($data['imap_port'] ?? 0));
+        $data['smtp_host'] = HostValidator::validateHostAndPort((string) ($data['smtp_host'] ?? ''), (int) ($data['smtp_port'] ?? 0));
 
         // If credentials changed, validate them
         $credsChanged = ($data['username'] !== $existing['username'] || 
@@ -139,11 +145,14 @@ class Account
 
     public function validateCredentials(array $data): void
     {
+        $imapHost = HostValidator::validateHostAndPort((string) ($data['imap_host'] ?? ''), (int) ($data['imap_port'] ?? 0));
+        $smtpHost = HostValidator::validateHostAndPort((string) ($data['smtp_host'] ?? ''), (int) ($data['smtp_port'] ?? 0));
+
         // IMAP check
         try {
             $imap = new ImapClient();
             $imap->connect(
-                $data['imap_host'],
+                $imapHost,
                 (int)$data['imap_port'],
                 (bool)$data['imap_ssl'],
                 $data['username'],
@@ -158,12 +167,12 @@ class Account
         // SMTP check
         try {
             $smtp = new SmtpClient();
+            $smtp->setSslVerify(!(bool)($data['allow_insecure_smtp'] ?? false));
             $smtp->connect(
-                $data['smtp_host'],
+                $smtpHost,
                 (int)$data['smtp_port'],
                 (bool)$data['smtp_ssl'],
-                (bool)$data['smtp_starttls'],
-                (bool)($data['allow_insecure_smtp'] ?? false)
+                (bool)$data['smtp_starttls']
             );
             $smtp->authenticate($data['username'], $data['password']);
             $smtp->quit();
@@ -183,15 +192,17 @@ class Account
 
         try {
             $this->validateCredentials([
-                'imap_host'     => $account['imap_host'],
-                'imap_port'     => $account['imap_port'],
-                'imap_ssl'      => $account['imap_ssl'],
-                'smtp_host'     => $account['smtp_host'],
-                'smtp_port'     => $account['smtp_port'],
-                'smtp_ssl'      => $account['smtp_ssl'],
-                'smtp_starttls' => $account['smtp_starttls'],
-                'username'      => $account['username'],
-                'password'      => $account['password_plain']
+                'imap_host'           => $account['imap_host'],
+                'imap_port'           => $account['imap_port'],
+                'imap_ssl'            => $account['imap_ssl'],
+                'smtp_host'           => $account['smtp_host'],
+                'smtp_port'           => $account['smtp_port'],
+                'smtp_ssl'            => $account['smtp_ssl'],
+                'smtp_starttls'       => $account['smtp_starttls'],
+                'username'            => $account['username'],
+                'password'            => $account['password_plain'],
+                'allow_insecure_imap' => (bool) ($account['allow_insecure_imap'] ?? false),
+                'allow_insecure_smtp' => (bool) ($account['allow_insecure_smtp'] ?? false),
             ]);
 
             $this->db->query("UPDATE accounts SET validation_status = 'valid' WHERE id = ?", [$accountId]);

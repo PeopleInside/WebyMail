@@ -57,6 +57,7 @@ class Session
         $idleTimeout = 0;
 
         $token     = bin2hex(random_bytes(32));
+        $tokenHash = hash('sha256', $token);
         $expiresAt = time() + $absoluteLifetime;
         $ip        = Config::encrypt($_SERVER['REMOTE_ADDR'] ?? '');
         $ua        = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
@@ -64,7 +65,7 @@ class Session
         $this->db->query(
             'INSERT INTO sessions (token, user_id, account_id, ip_address, user_agent, expires_at, remember_me, idle_timeout)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [$token, $userId, ($accountId > 0 ? $accountId : null), $ip, $ua, $expiresAt, $rememberMonths, $idleTimeout]
+            [$tokenHash, $userId, ($accountId > 0 ? $accountId : null), $ip, $ua, $expiresAt, $rememberMonths, $idleTimeout]
         );
 
         $this->setCookie($token, $expiresAt);
@@ -118,12 +119,13 @@ class Session
             return null;
         }
 
+        $tokenHash = hash('sha256', $token);
         $row = $this->db->fetch(
             'SELECT s.*, u.email, u.display_name, u.totp_enabled, u.signature, u.theme
              FROM sessions s
              JOIN users u ON u.id = s.user_id
              WHERE s.token = ? AND s.expires_at > ?',
-            [$token, time()]
+            [$tokenHash, time()]
         );
 
         if ($row === null) {
@@ -169,14 +171,14 @@ class Session
                 $newExpiresAt = $now + $extensionLifetime;
                 $this->db->query(
                     'UPDATE sessions SET last_seen = ?, expires_at = ? WHERE token = ?',
-                    [$now, $newExpiresAt, $token]
+                    [$now, $newExpiresAt, $tokenHash]
                 );
                 $this->setCookie($token, $newExpiresAt);
                 $row['expires_at'] = $newExpiresAt;
             } else {
                 $this->db->query(
                     'UPDATE sessions SET last_seen = ? WHERE token = ?',
-                    [$now, $token]
+                    [$now, $tokenHash]
                 );
             }
             $row['last_seen'] = $now;
@@ -191,8 +193,8 @@ class Session
     public function destroy(): void
     {
         $token = $_COOKIE[self::COOKIE_NAME] ?? '';
-        if ($token !== '') {
-            $this->db->query('DELETE FROM sessions WHERE token = ?', [$token]);
+        if ($token !== '' && ctype_xdigit($token) && strlen($token) === 64) {
+            $this->db->query('DELETE FROM sessions WHERE token = ?', [hash('sha256', $token)]);
         }
         $this->setCookie('', time() - 3600);
     }
@@ -216,7 +218,7 @@ class Session
         if ($isValidToken) {
             $this->db->query(
                 'DELETE FROM sessions WHERE user_id = ? AND token <> ?',
-                [$userId, $currentToken]
+                [$userId, hash('sha256', $currentToken)]
             );
             return;
         }
@@ -230,10 +232,10 @@ class Session
     public function switchAccount(int $accountId): void
     {
         $token = $_COOKIE[self::COOKIE_NAME] ?? '';
-        if ($token !== '') {
+        if ($token !== '' && ctype_xdigit($token) && strlen($token) === 64) {
             $this->db->query(
                 'UPDATE sessions SET account_id = ? WHERE token = ?',
-                [$accountId, $token]
+                [$accountId, hash('sha256', $token)]
             );
         }
     }
@@ -260,31 +262,7 @@ class Session
 
     public function isSecure(): bool
     {
-        if (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off') {
-            return true;
-        }
-        if (!empty($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443) {
-            return true;
-        }
-        $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
-        $forwardedSsl   = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL']   ?? ''));
-        if (str_contains($forwardedProto, 'https') || $forwardedSsl === 'on') {
-            return true;
-        }
-        if (!empty($_SERVER['HTTP_CF_VISITOR']) && str_contains($_SERVER['HTTP_CF_VISITOR'], 'https')) {
-            return true;
-        }
-
-        // Trust X-Forwarded-* headers from explicitly configured trusted proxies
-        $trustedProxies = array_filter(array_map('trim', explode(',', (string) Config::get('trusted_proxies', ''))));
-        if (!empty($trustedProxies)) {
-            $remoteIp = $_SERVER['REMOTE_ADDR'] ?? '';
-            if (in_array($remoteIp, $trustedProxies, true) && str_contains($forwardedProto, 'https')) {
-                return true;
-            }
-        }
-
-        return false;
+        return Config::isRequestSecure();
     }
 
     public function setCookie(string $value, int $expires): void

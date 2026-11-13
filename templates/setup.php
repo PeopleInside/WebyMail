@@ -195,7 +195,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                     </div>
 
                     <div class="form-group">
-                        <label>Favicon (ico, png, svg)</label>
+                        <label>Favicon (ico, png)</label>
                         <?php if ($fav = Config::get('favicon_path')): ?>
                             <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem">
                                 <div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:var(--wm-bg-subtle);border:1px solid var(--wm-border);border-radius:6px">
@@ -209,7 +209,7 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                             </div>
                         <?php endif; ?>
                         <div style="display:flex;gap:.5rem;align-items:center">
-                            <input type="file" name="favicon" id="favicon-input" class="form-control" accept=".ico,.png,.svg">
+                            <input type="file" name="favicon" id="favicon-input" class="form-control" accept=".ico,.png">
                             <button type="button" id="clear-favicon" class="btn btn-ghost btn-sm" style="display:none;white-space:nowrap;padding:.2rem .5rem;font-size:.75rem">✕ Clear</button>
                         </div>
                         <p class="form-hint">Optional. Upload a custom icon for the browser tab. If none is set, 📧 will be used.</p>
@@ -388,42 +388,6 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
                     </div>
                     <?php endif; ?>
 
-                    <?php if ($dbWebroot): ?>
-                    <div style="background:var(--wm-bg-subtle);border:1px solid var(--wm-danger);border-radius:8px;padding:.75rem">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem">
-                            <div style="display:flex;align-items:center;gap:.6rem">
-                                <div style="color:var(--wm-danger)">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                                </div>
-                                <div>
-                                    <div style="font-family:var(--wm-font-mono);font-size:.85rem">Database (<?= htmlspecialchars(basename(Config::resolveDbPath())) ?>)</div>
-                                    <div style="font-size:.7rem;color:var(--wm-text-muted)">
-                                        <?= htmlspecialchars(Config::resolveDbPath()) ?>
-                                    </div>
-                                </div>
-                            </div>
-                            <span style="font-size:.72rem;color:var(--wm-danger);font-weight:600;white-space:nowrap">INSECURE</span>
-                        </div>
-                        <div style="font-size:.78rem;color:var(--wm-text-muted);margin-bottom:.75rem">
-                            The database is inside a web-accessible directory. Move it outside the webroot before going live.
-                        </div>
-                        <form method="post" action="?action=setup" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end">
-                            <input type="hidden" name="step" value="move_database">
-                            <input type="hidden" name="setup_csrf" value="<?= htmlspecialchars($setupCsrfToken) ?>">
-                            <div style="flex:1;min-width:180px">
-                                <label style="font-size:.75rem;display:block;margin-bottom:.2rem">Move to path</label>
-                                <input type="text" name="db_target_path"
-                                       class="form-control" style="font-family:var(--wm-font-mono);font-size:.75rem"
-                                       value="<?= htmlspecialchars(Config::suggestSafeDbPath()) ?>">
-                            </div>
-                            <button type="submit" class="btn btn-danger btn-sm"
-                                    onclick="return confirm('Move the database to this path? The current file will be permanently deleted from the webroot.')">
-                                Move database
-                            </button>
-                        </form>
-                    </div>
-                    <?php endif; ?>
-
                     <div id="all-perms-setup" style="display:none;border-top:1px solid var(--wm-border);padding-top:.75rem">
                         <?php foreach ($permChecks as $check): ?>
                         <div style="display:flex;align-items:center;justify-content:space-between;padding:.5rem;border-bottom:1px solid var(--wm-border);font-size:.75rem">
@@ -500,8 +464,6 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
         });
     }
 
-    if (!sslCheck || !tlsCheck || !portInput) return;
-
     // Permissions visibility
     const showPermsBtn = document.getElementById('show-perms-setup-btn');
     const showPermsBtn2 = document.getElementById('show-perms-setup-btn-2');
@@ -522,6 +484,8 @@ $brandName = function_exists('appName') ? appName() : Config::get('app_name', 'W
             }
         });
     }
+
+    if (!sslCheck || !tlsCheck || !portInput) return;
 
     sslCheck.addEventListener('change', function() {
         if (this.checked) {

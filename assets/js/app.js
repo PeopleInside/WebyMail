@@ -148,7 +148,8 @@ function initMobileSearch() {
    ============================================================= */
 function initMailList() {
     const selectAll = document.getElementById('select-all');
-    if (!selectAll) return;
+    if (!selectAll || selectAll.dataset.wmBound === '1') return;
+    selectAll.dataset.wmBound = '1';
 
     selectAll.addEventListener('change', () => {
         document.querySelectorAll('.mail-checkbox').forEach(cb => {
@@ -159,6 +160,8 @@ function initMailList() {
     });
 
     document.querySelectorAll('.mail-checkbox').forEach(cb => {
+        if (cb.dataset.wmBound === '1') return;
+        cb.dataset.wmBound = '1';
         cb.addEventListener('change', () => {
             cb.closest('.wm-mail-row')?.classList.toggle('selected', cb.checked);
             updateBulkActions();
@@ -183,8 +186,14 @@ function getSelectedUids() {
    ============================================================= */
 function initMailRows() {
     document.querySelectorAll('.wm-mail-row[data-href]').forEach(row => {
+        if (row.dataset.wmRowBound === '1') return;
+        row.dataset.wmRowBound = '1';
         row.addEventListener('click', (e) => {
             if (e.target.type === 'checkbox') return;
+            const sidebar = document.querySelector('.wm-sidebar');
+            if (sidebar) {
+                try { sessionStorage.setItem('wm_sidebar_scroll_top', String(sidebar.scrollTop)); } catch (err) {}
+            }
             window.location.href = row.dataset.href;
         });
     });
@@ -256,6 +265,8 @@ async function apiPost(url, data) {
    ============================================================= */
 function initAccountSwitcher() {
     document.querySelectorAll('[data-switch-account]').forEach(btn => {
+        if (btn.dataset.wmBound === '1') return;
+        btn.dataset.wmBound = '1';
         btn.addEventListener('click', async () => {
             const id = btn.dataset.switchAccount;
             await apiPost('?action=switch_account', { account_id: id });
@@ -264,7 +275,8 @@ function initAccountSwitcher() {
     });
 
     const select = document.querySelector('[data-account-select]');
-    if (select) {
+    if (select && select.dataset.wmBound !== '1') {
+        select.dataset.wmBound = '1';
         select.addEventListener('change', async (e) => {
             const id = e.target.value;
             await apiPost('?action=switch_account', { account_id: id });
@@ -480,8 +492,14 @@ window.updateFolderUnread = function(folderName, count) {
    ============================================================= */
 function initUnreadChecker() {
     const CHECK_INTERVAL = 60000; // 1 minute
-    const originalTitle = document.title;
+    let baseTitle = String(document.title || '').replace(/^\(\d+\)\s*/, '');
     let lastCounts = null;
+
+    window.wmSetBaseTitle = function(newTitle) {
+        if (typeof newTitle === 'string' && newTitle !== '') {
+            baseTitle = newTitle.replace(/^\(\d+\)\s*/, '');
+        }
+    };
 
     function check() {
         fetch('?action=check_unread', {
@@ -506,9 +524,9 @@ function initUnreadChecker() {
                 }
                 // Update tab title
                 if (parsedInboxUnread > 0) {
-                    document.title = `(${parsedInboxUnread}) ${originalTitle}`;
+                    document.title = `(${parsedInboxUnread}) ${baseTitle}`;
                 } else {
-                    document.title = originalTitle;
+                    document.title = baseTitle;
                 }
 
                 if (countChanged && getCurrentFolder() === 'INBOX' && isInboxListView() && isSafeToRefreshInboxView()) {
@@ -700,6 +718,517 @@ function initCopySanitizer() {
 }
 
 /* =============================================================
+   Inbox & Unified toolbar initializers (safe after partial swap)
+   ============================================================= */
+function reloadCurrentMailView() {
+    if (typeof window.wmNavigatePartial === 'function') {
+        window.wmNavigatePartial(window.location.href, { pushHistory: false, preserveMainScroll: true });
+    } else {
+        window.location.reload();
+    }
+}
+
+function initInboxView() {
+    const toolbar = document.getElementById('inbox-toolbar');
+    if (!toolbar || toolbar.dataset.wmBound === '1') return;
+    toolbar.dataset.wmBound = '1';
+
+    const folder       = toolbar.dataset.folder || 'INBOX';
+    const isTrash      = toolbar.dataset.isTrash === '1';
+    const exportZipUrl = toolbar.dataset.exportZipUrl || ('?action=export_zip&folder=' + encodeURIComponent(folder));
+
+    function bulkAction(action) {
+        const uids = getSelectedUids();
+        if (!uids.length) return;
+
+        if (action === 'delete') {
+            const msg = isTrash
+                ? 'Permanently delete selected messages? This cannot be undone.'
+                : 'Move selected messages to Trash?';
+            if (!confirm(msg)) return;
+        }
+
+        apiPost('?action=bulk', {
+            action: action,
+            uids:   uids,
+            folder: folder
+        }).then(res => {
+            if (res.ok) {
+                if (res.redirect) window.location.href = res.redirect;
+                else reloadCurrentMailView();
+            } else {
+                alert(res.error || 'Action failed.');
+            }
+        });
+    }
+
+    function bulkMove() {
+        const uids = getSelectedUids();
+        const destination = document.getElementById('bulk-move-destination');
+        if (!uids.length) return;
+        if (!destination || !destination.value) {
+            alert('Select a destination folder.');
+            return;
+        }
+        if (!confirm('Move the selected messages to "' + destination.options[destination.selectedIndex].text + '"?')) {
+            return;
+        }
+
+        apiPost('?action=bulk', {
+            action: 'move',
+            uids: uids,
+            folder: folder,
+            destination: destination.value
+        }).then(res => {
+            if (res.ok) {
+                if (res.redirect) window.location.href = res.redirect;
+                else reloadCurrentMailView();
+            } else {
+                alert(res.error || 'Action failed.');
+            }
+        });
+    }
+
+    function bulkCopy() {
+        const uids = getSelectedUids();
+        const destination = document.getElementById('bulk-move-destination');
+        if (!uids.length) return;
+        if (!destination || !destination.value) {
+            alert('Select a destination folder.');
+            return;
+        }
+        if (!confirm('Copy the selected messages to "' + destination.options[destination.selectedIndex].text + '"?')) {
+            return;
+        }
+
+        apiPost('?action=bulk', {
+            action: 'copy',
+            uids: uids,
+            folder: folder,
+            destination: destination.value
+        }).then(res => {
+            if (res.ok) {
+                reloadCurrentMailView();
+            } else {
+                alert(res.error || 'Action failed.');
+            }
+        });
+    }
+
+    function bulkExport() {
+        const uids = getSelectedUids();
+        if (!uids.length) return;
+        window.location.href = exportZipUrl + '&uids=' + encodeURIComponent(uids.join(','));
+    }
+
+    document.getElementById('bulk-read')?.addEventListener('click', () => bulkAction('read'));
+    document.getElementById('bulk-unread')?.addEventListener('click', () => bulkAction('unread'));
+    document.getElementById('bulk-export')?.addEventListener('click', bulkExport);
+    document.getElementById('bulk-move')?.addEventListener('click', bulkMove);
+    document.getElementById('bulk-copy')?.addEventListener('click', bulkCopy);
+    document.getElementById('bulk-delete')?.addEventListener('click', () => bulkAction('delete'));
+    document.getElementById('refresh-btn')?.addEventListener('click', reloadCurrentMailView);
+
+    const importBtn   = document.getElementById('import-eml-btn');
+    const importInput = document.getElementById('eml-file-input');
+    const importForm  = document.getElementById('import-eml-form');
+    if (importBtn && importInput) {
+        importBtn.addEventListener('click', () => importInput.click());
+    }
+    if (importInput && importForm) {
+        importInput.addEventListener('change', () => importForm.submit());
+    }
+
+    const emptyForm = document.getElementById('empty-folder-form');
+    if (emptyForm) {
+        emptyForm.addEventListener('submit', function(e) {
+            if (!confirm('Are you sure you want to permanently empty this folder? All emails will be deleted and this action cannot be undone.')) {
+                e.preventDefault();
+            }
+        });
+    }
+}
+
+function initUnifiedView() {
+    const toolbar = document.getElementById('unified-toolbar');
+    if (!toolbar || toolbar.dataset.wmBound === '1') return;
+    toolbar.dataset.wmBound = '1';
+
+    const isTrash = toolbar.dataset.isTrash === '1';
+
+    function getSelectedUnifiedItems() {
+        return Array.from(document.querySelectorAll('.mail-checkbox:checked')).map(cb => ({
+            uid: parseInt(cb.dataset.uid || '0', 10),
+            account_id: parseInt(cb.dataset.accountId || '0', 10),
+            folder: cb.dataset.folder || 'INBOX'
+        })).filter(item => item.uid > 0 && item.account_id > 0);
+    }
+
+    function runUnifiedBulk(action) {
+        const items = getSelectedUnifiedItems();
+        if (!items.length) return;
+
+        if (action === 'delete') {
+            const msg = isTrash
+                ? 'Permanently delete selected messages? This cannot be undone.'
+                : 'Move selected messages to Trash?';
+            if (!confirm(msg)) return;
+        }
+
+        apiPost('?action=unified_bulk', {
+            action: action,
+            items: items
+        }).then(res => {
+            if (res.ok) {
+                if (res.errors && res.errors.length) {
+                    alert(res.errors.join('\n'));
+                }
+                reloadCurrentMailView();
+            } else {
+                alert(res.error || 'Action failed.');
+            }
+        }).catch(() => {
+            alert('Action failed.');
+        });
+    }
+
+    document.getElementById('unified-bulk-read')?.addEventListener('click', () => runUnifiedBulk('read'));
+    document.getElementById('unified-bulk-unread')?.addEventListener('click', () => runUnifiedBulk('unread'));
+    document.getElementById('unified-bulk-delete')?.addEventListener('click', () => runUnifiedBulk('delete'));
+    document.getElementById('refresh-btn')?.addEventListener('click', reloadCurrentMailView);
+}
+
+/* =============================================================
+   Partial right-pane navigation & sidebar scroll preservation
+   ============================================================= */
+function initPartialNavigation() {
+    const SIDEBAR_SCROLL_KEY = 'wm_sidebar_scroll_top';
+    const sidebar = document.querySelector('.wm-sidebar');
+    const mainEl  = document.querySelector('main.wm-main');
+    if (!sidebar || !mainEl) return;
+
+    function saveSidebarScroll() {
+        try {
+            sessionStorage.setItem(SIDEBAR_SCROLL_KEY, String(sidebar.scrollTop));
+        } catch (err) {}
+    }
+
+    function restoreSidebarScroll() {
+        try {
+            const saved = sessionStorage.getItem(SIDEBAR_SCROLL_KEY);
+            if (saved !== null) {
+                const pos = parseFloat(saved);
+                if (Number.isFinite(pos) && pos >= 0) {
+                    sidebar.scrollTop = pos;
+                }
+            }
+        } catch (err) {}
+    }
+
+    window.wmRestoreSidebarScroll = restoreSidebarScroll;
+
+    // Persist scroll position across full page reloads (e.g., opening email / compose / settings)
+    let scrollTimer = null;
+    sidebar.addEventListener('scroll', () => {
+        if (scrollTimer) return;
+        scrollTimer = setTimeout(() => {
+            scrollTimer = null;
+            saveSidebarScroll();
+        }, 100);
+    }, { passive: true });
+    window.addEventListener('pagehide', saveSidebarScroll);
+    restoreSidebarScroll();
+    requestAnimationFrame(restoreSidebarScroll);
+
+    let activeAbort = null;
+    let navSeq = 0;
+
+    function isPartialMailUrl(urlObj) {
+        if (!urlObj || urlObj.origin !== window.location.origin) return false;
+        const action = urlObj.searchParams.get('action') || 'inbox';
+        return action === 'inbox' || action === 'unified' || action === 'search';
+    }
+
+    function updateSidebarActiveStates(urlObj, nextDoc) {
+        const action = urlObj.searchParams.get('action') || 'inbox';
+
+        // Sync #unified-subfolders links/unread badges while preserving open/closed display state
+        const curUnifiedSub  = document.getElementById('unified-subfolders');
+        const nextUnifiedSub = nextDoc.getElementById('unified-subfolders');
+        if (curUnifiedSub && nextUnifiedSub) {
+            const wasHidden = curUnifiedSub.style.display === 'none';
+            curUnifiedSub.innerHTML = nextUnifiedSub.innerHTML;
+            curUnifiedSub.style.display = wasHidden ? 'none' : 'block';
+        }
+
+        const unifiedRow  = document.querySelector('.wm-unified-row');
+        const unifiedLink = document.querySelector('.wm-unified-link');
+
+        if (action === 'unified') {
+            const ufolder = (urlObj.searchParams.get('ufolder') || 'inbox').toLowerCase();
+            document.querySelectorAll('#wm-active-account-folders a.active').forEach(a => a.classList.remove('active'));
+            document.querySelectorAll('#unified-accounts-list .wm-acc-group-folders a.active').forEach(a => a.classList.remove('active'));
+            document.querySelectorAll('#unified-accounts-list .wm-acc-group').forEach(g => {
+                g.dataset.hasActive = '0';
+            });
+            unifiedRow?.classList.add('active');
+            unifiedLink?.classList.add('active');
+            if (curUnifiedSub) {
+                curUnifiedSub.querySelectorAll('a').forEach(a => {
+                    const key = (a.dataset.ufolder || '').toLowerCase();
+                    a.classList.toggle('active', key === ufolder);
+                });
+            }
+            return;
+        }
+
+        unifiedRow?.classList.remove('active');
+        unifiedLink?.classList.remove('active');
+        if (curUnifiedSub) {
+            curUnifiedSub.querySelectorAll('a.active').forEach(a => a.classList.remove('active'));
+        }
+
+        const targetFolder = urlObj.searchParams.get('folder') || 'INBOX';
+        let targetAccId = parseInt(urlObj.searchParams.get('account_id') || '0', 10);
+        if (!targetAccId) {
+            const nextActiveGroup = nextDoc.querySelector('#unified-accounts-list .wm-acc-group[data-has-active="1"]');
+            if (nextActiveGroup) {
+                targetAccId = parseInt(nextActiveGroup.dataset.accountId || '0', 10);
+            }
+        }
+
+        document.querySelectorAll('#wm-active-account-folders a').forEach(a => {
+            const fName = a.dataset.folder || '';
+            a.classList.toggle('active', fName === targetFolder);
+        });
+
+        document.querySelectorAll('#unified-accounts-list .wm-acc-group').forEach(group => {
+            const gAccId = parseInt(group.dataset.accountId || '0', 10);
+            const isTargetAcc = targetAccId > 0 && gAccId === targetAccId;
+            group.dataset.hasActive = isTargetAcc ? '1' : '0';
+            group.querySelectorAll('.wm-acc-group-folders a').forEach(a => {
+                const fName = a.dataset.folder || '';
+                a.classList.toggle('active', isTargetAcc && fName === targetFolder);
+            });
+        });
+    }
+
+    async function navigatePartial(rawUrl, options = {}) {
+        // Leave compose page via full navigation so any draft/editor state cleans up normally
+        if (document.getElementById('compose-form')) {
+            saveSidebarScroll();
+            window.location.href = rawUrl;
+            return;
+        }
+
+        let urlObj;
+        try {
+            urlObj = new URL(rawUrl, window.location.href);
+        } catch (err) {
+            window.location.href = rawUrl;
+            return;
+        }
+
+        if (!isPartialMailUrl(urlObj)) {
+            saveSidebarScroll();
+            window.location.href = urlObj.href;
+            return;
+        }
+
+        const pushHistory        = options.pushHistory !== false;
+        const preserveMainScroll = options.preserveMainScroll === true;
+        const mySeq = ++navSeq;
+
+        if (activeAbort) {
+            activeAbort.abort();
+        }
+        activeAbort = new AbortController();
+
+        const savedScrollTop = sidebar.scrollTop;
+        const currentMainList = document.getElementById('mail-list');
+        const prevMainListScroll = currentMainList ? currentMainList.scrollTop : 0;
+
+        mainEl.classList.add('is-loading');
+
+        try {
+            const response = await fetch(urlObj.pathname + urlObj.search, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+                signal: activeAbort.signal
+            });
+            if (mySeq !== navSeq) return;
+
+            if (!response.ok) {
+                window.location.href = urlObj.href;
+                return;
+            }
+
+            const finalUrl = response.url ? new URL(response.url, window.location.href) : urlObj;
+            if (!isPartialMailUrl(finalUrl)) {
+                window.location.href = finalUrl.href;
+                return;
+            }
+
+            const html = await response.text();
+            if (mySeq !== navSeq) return;
+
+            const nextDoc  = new DOMParser().parseFromString(html, 'text/html');
+            const nextMain = nextDoc.querySelector('main.wm-main');
+            if (!nextMain) {
+                window.location.href = finalUrl.href;
+                return;
+            }
+
+            // Swap only the right-hand main pane
+            mainEl.innerHTML = nextMain.innerHTML;
+            if (nextDoc.title) {
+                document.title = nextDoc.title;
+                if (typeof window.wmSetBaseTitle === 'function') {
+                    window.wmSetBaseTitle(nextDoc.title);
+                }
+            }
+
+            // Sync top active account label/folders with exact scroll-delta compensation
+            const curAccTag      = document.getElementById('wm-sidebar-account-tag');
+            const nextAccTag     = nextDoc.getElementById('wm-sidebar-account-tag');
+            const curTopFolders  = document.getElementById('wm-active-account-folders');
+            const nextTopFolders = nextDoc.getElementById('wm-active-account-folders');
+
+            let topBefore = 0;
+            if (savedScrollTop > 0) {
+                topBefore = (curAccTag ? curAccTag.offsetHeight : 0) + (curTopFolders ? curTopFolders.offsetHeight : 0);
+            }
+
+            if (curAccTag && nextAccTag) {
+                curAccTag.title = nextAccTag.title;
+                curAccTag.innerHTML = nextAccTag.innerHTML;
+            }
+            if (curTopFolders && nextTopFolders) {
+                curTopFolders.innerHTML = nextTopFolders.innerHTML;
+                if (typeof window.wmBindFolderMenus === 'function') {
+                    window.wmBindFolderMenus();
+                }
+            }
+
+            let topAfter = 0;
+            if (savedScrollTop > 0) {
+                topAfter = (curAccTag ? curAccTag.offsetHeight : 0) + (curTopFolders ? curTopFolders.offsetHeight : 0);
+            }
+
+            // Update active highlights without touching expanded/collapsed user choices
+            updateSidebarActiveStates(finalUrl, nextDoc);
+
+            // Sync topbar user badge & menu if account switched
+            const curUserBtn  = document.getElementById('user-menu-btn');
+            const nextUserBtn = nextDoc.getElementById('user-menu-btn');
+            if (curUserBtn && nextUserBtn) {
+                curUserBtn.innerHTML = nextUserBtn.innerHTML;
+            }
+            const curUserMenu  = document.getElementById('user-menu');
+            const nextUserMenu = nextDoc.getElementById('user-menu');
+            if (curUserMenu && nextUserMenu) {
+                curUserMenu.innerHTML = nextUserMenu.innerHTML;
+                initAccountSwitcher();
+            }
+
+            if (pushHistory) {
+                window.history.pushState({ wmPartialUrl: finalUrl.pathname + finalUrl.search }, '', finalUrl.pathname + finalUrl.search);
+            }
+
+            // Keep sidebar scroll locked cleanly at the exact visual position
+            const targetScrollTop = Math.max(0, savedScrollTop + (topAfter - topBefore));
+            sidebar.scrollTop = targetScrollTop;
+            requestAnimationFrame(() => {
+                sidebar.scrollTop = targetScrollTop;
+            });
+            try { sessionStorage.setItem(SIDEBAR_SCROLL_KEY, String(targetScrollTop)); } catch (err) {}
+
+            // Scroll main list cleanly
+            const newMailList = document.getElementById('mail-list');
+            if (newMailList && preserveMainScroll) {
+                newMailList.scrollTop = prevMainListScroll;
+            } else {
+                mainEl.scrollTop = 0;
+                if (newMailList) newMailList.scrollTop = 0;
+            }
+
+            // Re-bind view handlers
+            initMailList();
+            initMailRows();
+            initInboxView();
+            initUnifiedView();
+            initAlerts();
+
+            // On mobile drawer, close drawer after picking a folder
+            if (window.innerWidth <= 768 && sidebar.classList.contains('open')) {
+                sidebar.classList.remove('open');
+                const backdrop = document.querySelector('.wm-sidebar-backdrop');
+                if (backdrop) backdrop.style.display = 'none';
+            }
+        } catch (err) {
+            if (err && err.name === 'AbortError') return;
+            window.location.href = urlObj.href;
+        } finally {
+            if (mySeq === navSeq) {
+                mainEl.classList.remove('is-loading');
+            }
+        }
+    }
+
+    window.wmNavigatePartial = navigatePartial;
+
+    // Intercept folder clicks in left sidebar
+    sidebar.addEventListener('click', (e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        const link = e.target.closest('a[href]');
+        if (!link || !sidebar.contains(link)) return;
+        if (link.target && link.target !== '_self') return;
+
+        let urlObj;
+        try {
+            urlObj = new URL(link.getAttribute('href'), window.location.href);
+        } catch (err) {
+            return;
+        }
+        if (!isPartialMailUrl(urlObj)) {
+            saveSidebarScroll();
+            return;
+        }
+
+        e.preventDefault();
+        navigatePartial(urlObj.href, { pushHistory: true });
+    });
+
+    // Intercept pagination, unified tabs, and back-to-folder links inside right pane
+    mainEl.addEventListener('click', (e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        const link = e.target.closest('.wm-pagination a[href], .wm-unified-tabs a[href], .wm-toolbar a[href]');
+        if (!link || !mainEl.contains(link)) return;
+        if (link.hasAttribute('download') || (link.target && link.target !== '_self')) return;
+
+        let urlObj;
+        try {
+            urlObj = new URL(link.getAttribute('href'), window.location.href);
+        } catch (err) {
+            return;
+        }
+        if (!isPartialMailUrl(urlObj)) return;
+
+        e.preventDefault();
+        navigatePartial(urlObj.href, { pushHistory: true });
+    });
+
+    window.addEventListener('popstate', () => {
+        const curUrl = new URL(window.location.href);
+        if (isPartialMailUrl(curUrl)) {
+            navigatePartial(curUrl.href, { pushHistory: false });
+        } else {
+            window.location.reload();
+        }
+    });
+}
+
+/* =============================================================
    Bootstrap
    ============================================================= */
 document.addEventListener('DOMContentLoaded', () => {
@@ -708,6 +1237,9 @@ document.addEventListener('DOMContentLoaded', () => {
     initMobileSearch();
     initMailList();
     initMailRows();
+    initInboxView();
+    initUnifiedView();
+    initPartialNavigation();
     initImageProtection();
     initCompose();
     initAccountSwitcher();

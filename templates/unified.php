@@ -49,7 +49,7 @@ if (!empty($unifiedFolders)) {
 }
 ?>
 
-<div class="wm-toolbar">
+<div class="wm-toolbar" id="unified-toolbar" data-is-trash="<?= $isTrash ? '1' : '0' ?>">
     <input type="checkbox" id="select-all" title="Select all">
 
     <div id="bulk-bar" style="display:none;align-items:center;gap:.5rem">
@@ -196,52 +196,3 @@ if (!empty($unifiedFolders)) {
 </div>
 <?php endif; ?>
 </div>
-
-<script nonce="<?= $cspNonce ?>">
-(function() {
-    function getSelectedUnifiedItems() {
-        return Array.from(document.querySelectorAll('.mail-checkbox:checked')).map(function(cb) {
-            return {
-                uid: parseInt(cb.dataset.uid || '0', 10),
-                account_id: parseInt(cb.dataset.accountId || '0', 10),
-                folder: cb.dataset.folder || 'INBOX'
-            };
-        }).filter(function(item) {
-            return item.uid > 0 && item.account_id > 0;
-        });
-    }
-
-    function runUnifiedBulk(action) {
-        var items = getSelectedUnifiedItems();
-        if (!items.length) return;
-
-        if (action === 'delete') {
-            var msg = <?= $isTrash
-                ? json_encode('Permanently delete selected messages? This cannot be undone.')
-                : json_encode('Move selected messages to Trash?') ?>;
-            if (!confirm(msg)) return;
-        }
-
-        apiPost('?action=unified_bulk', {
-            action: action,
-            items: items
-        }).then(function(res) {
-            if (res.ok) {
-                if (res.errors && res.errors.length) {
-                    alert(res.errors.join('\n'));
-                }
-                window.location.reload();
-            } else {
-                alert(res.error || 'Action failed.');
-            }
-        }).catch(function() {
-            alert('Action failed.');
-        });
-    }
-
-    document.getElementById('unified-bulk-read')?.addEventListener('click', function() { runUnifiedBulk('read'); });
-    document.getElementById('unified-bulk-unread')?.addEventListener('click', function() { runUnifiedBulk('unread'); });
-    document.getElementById('unified-bulk-delete')?.addEventListener('click', function() { runUnifiedBulk('delete'); });
-    document.getElementById('refresh-btn')?.addEventListener('click', function() { window.location.reload(); });
-})();
-</script>

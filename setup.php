@@ -1,8 +1,30 @@
 <?php
 declare(strict_types=1);
 
-// Session must be started before any header() calls.
+require_once __DIR__ . '/requirements_check.php';
+
+spl_autoload_register(function (string $class): void {
+    $file = __DIR__ . '/src/' . $class . '.php';
+    if (file_exists($file)) {
+        require_once $file;
+    }
+});
+
+require_once __DIR__ . '/src/Config.php';
+
+// Configure secure session cookie params BEFORE starting the PHP session.
 if (session_status() === PHP_SESSION_NONE) {
+    $secure = Config::isRequestSecure();
+    if ($secure) {
+        header('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
+    }
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'secure'   => $secure,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
     session_start();
 }
 
@@ -38,18 +60,6 @@ header('Expires: Sat, 26 Jul 1997 05:00:00 GMT');
 
 define('WEBYMAIL_ROOT', __DIR__);
 
-// Controllo preventivo dei requisiti di sistema (evita errori 500 o fallimenti criptici nel wizard)
-require_once __DIR__ . '/requirements_check.php';
-
-spl_autoload_register(function (string $class): void {
-    $file = __DIR__ . '/src/' . $class . '.php';
-    if (file_exists($file)) {
-        require_once $file;
-    }
-});
-
-require_once __DIR__ . '/src/Config.php';
-
 // Persist ?force=1 into the session so it survives POST redirects
 // (form actions use ?action=setup which drops the force query param).
 if (($_GET['force'] ?? '') === '1') {
@@ -66,13 +76,6 @@ if (Config::get('setup_complete') && !$isForced && ($_GET['action'] ?? '') !== '
 // Re-running setup on an already-configured installation (force=1) requires
 // an active authenticated session to prevent unauthorised reconfiguration.
 if ($isForced && Config::get('setup_complete')) {
-    spl_autoload_register(function (string $class): void {
-        $file = __DIR__ . '/src/' . $class . '.php';
-        if (file_exists($file)) {
-            require_once $file;
-        }
-    }, prepend: true);
-
     $sessionObj = new Session();
     $currentSession = $sessionObj->current();
     if ($currentSession === null || (int)$currentSession['user_id'] !== 1) {
@@ -136,87 +139,148 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $hideServer = !empty($_POST['hide_server_on_login']);
         $removeFavicon = !empty($_POST['remove_favicon']);
 
-        Config::set('app_name',       $appName);
-        Config::set('imap_host',      $imapHost);
-        Config::set('imap_port',      $imapPort);
-        Config::set('imap_ssl',       $imapSsl);
-        Config::set('smtp_host',      $smtpHost);
-        Config::set('smtp_port',      $smtpPort);
-        Config::set('smtp_ssl',       $smtpSsl);
-        Config::set('smtp_starttls',  $smtpTls);
-        Config::set('captcha_enabled', $captchaOn);
-        Config::set('2fa_enabled',     true); // Always enabled by default, can be disabled in config.php manually if needed
-        Config::set('timezone',       $timezone);
-        Config::set('hide_server_on_login', $hideServer);
-        Config::set('setup_complete', true);
-        Config::set('version', null); // Ensure version is removed from config.php
-        Config::set('update_url', Config::UPDATE_URL);
-
-        // Cleanup obsolete keys
-        Config::set('altcha_hmac_key', null);
-        Config::set('altcha_enabled', null);
-
-        if ($removeFavicon) {
-            Config::set('favicon_path', null);
+        // Validate server hosts if specified (SSRF / syntax protection)
+        try {
+            if ($imapHost !== '') {
+                $imapHost = HostValidator::validateHostAndPort($imapHost, $imapPort);
+            }
+            if ($smtpHost !== '') {
+                $smtpHost = HostValidator::validateHostAndPort($smtpHost, $smtpPort);
+            }
+        } catch (InvalidArgumentException $e) {
+            $error = $e->getMessage();
+            $step  = 'server';
         }
 
-        // Handle Favicon upload
-        if (!empty($_FILES['favicon']['name']) && $_FILES['favicon']['error'] === UPLOAD_ERR_OK) {
-            $ext = strtolower(pathinfo($_FILES['favicon']['name'], PATHINFO_EXTENSION));
-            if (in_array($ext, ['ico', 'png', 'svg'])) {
+        // Validate Favicon upload (allow only raster .ico / .png with verified MIME; no .svg)
+        $pendingFavicon = null;
+        if ($error === null && !empty($_FILES['favicon']['name']) && $_FILES['favicon']['error'] === UPLOAD_ERR_OK) {
+            $tmpFile  = $_FILES['favicon']['tmp_name'] ?? '';
+            $fileSize = (int) ($_FILES['favicon']['size'] ?? 0);
+            $ext      = strtolower(pathinfo((string) $_FILES['favicon']['name'], PATHINFO_EXTENSION));
+            if (!in_array($ext, ['ico', 'png'], true)) {
+                $error = 'Invalid favicon format. Only .ico and .png files are allowed.';
+                $step  = 'server';
+            } elseif ($fileSize <= 0 || $fileSize > 524288) {
+                $error = 'Favicon file must be under 512 KB.';
+                $step  = 'server';
+            } elseif ($tmpFile !== '' && is_uploaded_file($tmpFile)) {
+                $mime = '';
+                if (function_exists('finfo_open')) {
+                    $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+                    if ($finfo) {
+                        $mime = strtolower((string) @finfo_file($finfo, $tmpFile));
+                        @finfo_close($finfo);
+                    }
+                }
+                if ($ext === 'png') {
+                    $imgInfo = @getimagesize($tmpFile);
+                    if ($imgInfo === false || ($imgInfo[2] ?? 0) !== IMAGETYPE_PNG || ($mime !== '' && $mime !== 'image/png')) {
+                        $error = 'Uploaded PNG favicon is invalid.';
+                        $step  = 'server';
+                    } else {
+                        $pendingFavicon = ['tmp' => $tmpFile, 'ext' => 'png'];
+                    }
+                } else {
+                    $allowedIcoMimes = ['image/x-icon', 'image/vnd.microsoft.icon', 'image/ico', 'application/octet-stream'];
+                    $rawHead = @file_get_contents($tmpFile, false, null, 0, 4);
+                    $isIcoMagic = ($rawHead !== false && strlen($rawHead) === 4 && ($rawHead === "\x00\x00\x01\x00" || $rawHead === "\x00\x00\x02\x00"));
+                    if (!$isIcoMagic || ($mime !== '' && !in_array($mime, $allowedIcoMimes, true))) {
+                        $error = 'Uploaded ICO favicon is invalid.';
+                        $step  = 'server';
+                    } else {
+                        $pendingFavicon = ['tmp' => $tmpFile, 'ext' => 'ico'];
+                    }
+                }
+            }
+        }
+
+        if ($error === null) {
+            Config::set('app_name',       $appName);
+            Config::set('imap_host',      $imapHost);
+            Config::set('imap_port',      $imapPort);
+            Config::set('imap_ssl',       $imapSsl);
+            Config::set('smtp_host',      $smtpHost);
+            Config::set('smtp_port',      $smtpPort);
+            Config::set('smtp_ssl',       $smtpSsl);
+            Config::set('smtp_starttls',  $smtpTls);
+            Config::set('captcha_enabled', $captchaOn);
+            Config::set('2fa_enabled',     true); // Always enabled by default, can be disabled in config.php manually if needed
+            Config::set('timezone',       $timezone);
+            Config::set('hide_server_on_login', $hideServer);
+            Config::set('setup_complete', true);
+            Config::set('version', null); // Ensure version is removed from config.php
+            Config::set('update_url', Config::UPDATE_URL);
+
+            // Cleanup obsolete keys
+            Config::set('altcha_hmac_key', null);
+            Config::set('altcha_enabled', null);
+
+            if ($removeFavicon) {
+                Config::set('favicon_path', null);
+            }
+
+            if ($pendingFavicon !== null) {
                 $imgDir = __DIR__ . '/assets/img';
                 if (!is_dir($imgDir)) {
                     mkdir($imgDir, 0755, true);
                 }
-                $faviconPath = 'assets/img/favicon.' . $ext;
-                if (move_uploaded_file($_FILES['favicon']['tmp_name'], __DIR__ . '/' . $faviconPath)) {
+                foreach (['ico', 'png', 'svg'] as $oldExt) {
+                    $oldFile = $imgDir . '/favicon.' . $oldExt;
+                    if (is_file($oldFile)) {
+                        @unlink($oldFile);
+                    }
+                }
+                $faviconPath = 'assets/img/favicon.' . $pendingFavicon['ext'];
+                if (move_uploaded_file($pendingFavicon['tmp'], __DIR__ . '/' . $faviconPath)) {
+                    @chmod(__DIR__ . '/' . $faviconPath, 0644);
                     Config::set('favicon_path', $faviconPath);
                 }
             }
-        }
 
-        // Ensure data directory is writable
-        $dataDir = __DIR__ . '/data';
-        if (!is_dir($dataDir) && !mkdir($dataDir, 0750, true)) {
-            $error = 'Cannot create data/ directory. Please create it manually and make it writable.';
-            $step  = 'server';
-        } else {
-            Config::save();
-
-            // Database backup before schema modifications (if database exists)
-            $dbPath = Config::resolveDbPath();
-            if (is_file($dbPath)) {
-                // Save backup in the same directory as the database
-                $backupDir = dirname($dbPath);
-                
-                if (is_dir($backupDir) && is_writable($backupDir)) {
-                    $backupFile = $backupDir . '/webymail_backup_' . date('Ymd_His') . '.db';
-                    @copy($dbPath, $backupFile);
-                    // Also copy WAL/SHM if they exist, to ensure a complete backup
-                    foreach (['-wal', '-shm'] as $suffix) {
-                        if (is_file($dbPath . $suffix)) {
-                            @copy($dbPath . $suffix, $backupFile . $suffix);
-                        }
-                    }
-
-                    // Maintain only 5 backups
-                    Config::rotateBackups($backupDir, 5);
-                }
-            }
-
-            // Initialise the database (creates the SQLite file + schema)
-            try {
-                Database::getInstance();
-            } catch (Exception $e) {
-                error_log('Database initialisation failed during setup: ' . $e->getMessage());
-                $error = 'Database initialisation failed. Please confirm the data directory is writable and try again.';
+            // Ensure data directory is writable
+            $dataDir = __DIR__ . '/data';
+            if (!is_dir($dataDir) && !mkdir($dataDir, 0750, true)) {
+                $error = 'Cannot create data/ directory. Please create it manually and make it writable.';
                 $step  = 'server';
-            }
+            } else {
+                Config::save();
 
-            if ($error === null) {
-                $step = 'security';
-                $sys = Config::checkSystem();
-                $securityChecks = $sys['security'];
+                // Database backup before schema modifications (if database exists)
+                $dbPath = Config::resolveDbPath();
+                if (is_file($dbPath)) {
+                    // Save backup in the same directory as the database
+                    $backupDir = dirname($dbPath);
+
+                    if (is_dir($backupDir) && is_writable($backupDir)) {
+                        $backupFile = $backupDir . '/webymail_backup_' . date('Ymd_His') . '.db';
+                        @copy($dbPath, $backupFile);
+                        // Also copy WAL/SHM if they exist, to ensure a complete backup
+                        foreach (['-wal', '-shm'] as $suffix) {
+                            if (is_file($dbPath . $suffix)) {
+                                @copy($dbPath . $suffix, $backupFile . $suffix);
+                            }
+                        }
+
+                        // Maintain only 5 backups
+                        Config::rotateBackups($backupDir, 5);
+                    }
+                }
+
+                // Initialise the database (creates the SQLite file + schema)
+                try {
+                    Database::getInstance();
+                } catch (Exception $e) {
+                    error_log('Database initialisation failed during setup: ' . $e->getMessage());
+                    $error = 'Database initialisation failed. Please confirm the data directory is writable and try again.';
+                    $step  = 'server';
+                }
+
+                if ($error === null) {
+                    $step = 'security';
+                    $sys = Config::checkSystem();
+                    $securityChecks = $sys['security'];
+                }
             }
         }
     } elseif ($step === 'finish') {
