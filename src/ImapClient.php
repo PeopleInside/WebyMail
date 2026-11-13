@@ -542,8 +542,11 @@ class ImapClient
             if ($headers === false) $headers = '';
             if ($body === false) $body = '';
             
-            // Encapsulated messages are usually not encoded themselves (the parts inside are)
-            return $headers . "\r\n" . $this->decodeBodyPart($body, $part->encoding ?? 0);
+            $decodedBody = $this->decodeBodyPart($body, $part->encoding ?? 0);
+            if ($headers !== '') {
+                return rtrim($headers, "\r\n") . "\r\n\r\n" . ltrim($decodedBody, "\r\n");
+            }
+            return $decodedBody;
         }
 
         $encoding = $part ? ($part->encoding ?? 0) : 0;
@@ -665,6 +668,7 @@ class ImapClient
             'subject' => $this->decodeHeader($ov->subject ?? '(no subject)'),
             'from'    => $this->decodeHeader($ov->from ?? ''),
             'date'    => isset($ov->udate) ? date('d M Y H:i', $ov->udate) : '',
+            'timestamp' => (int) ($ov->udate ?? 0),
             'is_read' => (bool) $ov->seen,
             'is_flagged' => (bool) ($ov->flagged ?? false),
             'size'    => (int) ($ov->size ?? 0),

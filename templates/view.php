@@ -5,13 +5,22 @@
  * @var string $folder
  * @var bool   $hasExternal  true if email body contains external URLs
  */
-$folder    = $folder ?? 'INBOX';
-$folderEnc = urlencode($folder);
-$msgNo     = (int) ($message['msg_no'] ?? 0);
-$hasHtml   = !empty($message['body_html']);
-$isInbox   = strtoupper($folder) === 'INBOX';
-$moveActionUrl = '?action=move&folder=' . rawurlencode($folder) . '&msg=' . rawurlencode((string) $msgNo);
-$moveTargets = array_values(array_filter($folders ?? [], static function (array $item) use ($folder): bool {
+$folder          = $folder ?? 'INBOX';
+$folderEnc       = urlencode($folder);
+$msgNo           = (int) ($message['msg_no'] ?? 0);
+$hasHtml         = !empty($message['body_html']);
+$isInbox         = strtoupper($folder) === 'INBOX';
+$activeSessAccId = (int) ($session['account_id'] ?? 0);
+$targetAccountId = (int) ($targetAccountId ?? $activeSessAccId);
+$fromUnified     = (string) ($fromUnified ?? '');
+$accountParam    = ($targetAccountId > 0 && ($targetAccountId !== $activeSessAccId || $fromUnified !== ''))
+    ? '&account_id=' . $targetAccountId
+    : '';
+$unifiedParam    = $fromUnified !== '' ? '&from_unified=' . urlencode($fromUnified) : '';
+$backUrl         = $fromUnified !== '' ? '?action=unified&ufolder=' . urlencode($fromUnified) : '?action=inbox&folder=' . $folderEnc;
+$moveActionUrl   = '?action=move&folder=' . rawurlencode($folder) . '&msg=' . rawurlencode((string) $msgNo) . $accountParam . $unifiedParam;
+$copyActionUrl   = '?action=copy&folder=' . rawurlencode($folder) . '&msg=' . rawurlencode((string) $msgNo) . $accountParam . $unifiedParam;
+$moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], static function (array $item) use ($folder): bool {
     return ($item['name'] ?? '') !== $folder;
 }));
 ?>
@@ -19,32 +28,32 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
 <!-- Toolbar -->
 <div class="wm-toolbar">
     <div class="wm-toolbar-content">
-    <a href="?action=inbox&folder=<?= $folderEnc ?>" class="btn btn-ghost btn-sm" target="_self">
+    <a href="<?= htmlspecialchars($backUrl) ?>" class="btn btn-ghost btn-sm" target="_self">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
         Back
     </a>
 
     <?php if ($isDraft ?? false): ?>
-    <a href="?action=compose&edit_draft=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-primary btn-sm" title="Resume Draft" target="_self">
+    <a href="?action=compose&edit_draft=<?= $msgNo ?>&folder=<?= $folderEnc ?><?= $accountParam ?><?= $unifiedParam ?>" class="btn btn-primary btn-sm" title="Resume Draft" target="_self">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         Resume
     </a>
     <?php else: ?>
-    <a href="?action=compose&reply=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-outline btn-sm" title="Reply" target="_self">
+    <a href="?action=compose&reply=<?= $msgNo ?>&folder=<?= $folderEnc ?><?= $accountParam ?><?= $unifiedParam ?>" class="btn btn-outline btn-sm" title="Reply" target="_self">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
         Reply
     </a>
-    <a href="?action=compose&reply_all=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-outline btn-sm" title="Reply All" target="_self">
+    <a href="?action=compose&reply_all=<?= $msgNo ?>&folder=<?= $folderEnc ?><?= $accountParam ?><?= $unifiedParam ?>" class="btn btn-outline btn-sm" title="Reply All" target="_self">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 17 2 12 7 7"/><polyline points="12 17 7 12 12 7"/><path d="M22 18v-2a4 4 0 00-4-4H2"/></svg>
         Reply All
     </a>
-    <a href="?action=compose&forward=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-outline btn-sm" title="Forward" target="_self">
+    <a href="?action=compose&forward=<?= $msgNo ?>&folder=<?= $folderEnc ?><?= $accountParam ?><?= $unifiedParam ?>" class="btn btn-outline btn-sm" title="Forward" target="_self">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 014-4h12"/></svg>
         Forward
     </a>
     <?php endif; ?>
 
-    <a href="?action=export_eml&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" class="btn btn-outline btn-sm" title="Download as .eml">
+    <a href="?action=export_eml&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?><?= $accountParam ?>" class="btn btn-outline btn-sm" title="Download as .eml">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Export
     </a>
@@ -65,12 +74,12 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
                 <?php endforeach; ?>
             </select>
             <button class="btn btn-ghost btn-sm" type="submit" title="Move message">Move</button>
-            <button class="btn btn-ghost btn-sm" type="submit" title="Copy message" formaction="?action=copy&folder=<?= rawurlencode($folder) ?>&msg=<?= $msgNo ?>">Copy</button>
+            <button class="btn btn-ghost btn-sm" type="submit" title="Copy message" formaction="<?= htmlspecialchars($copyActionUrl) ?>">Copy</button>
         </form>
         <?php endif; ?>
 
         <?php if ($isInbox): ?>
-    <form method="post" action="?action=spam&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" style="display:inline">
+    <form method="post" action="?action=spam&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?><?= $accountParam ?><?= $unifiedParam ?>" style="display:inline">
         <?= csrfInput() ?>
         <button class="btn btn-ghost btn-sm text-danger" title="Mark as spam">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
@@ -79,7 +88,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
     </form>
     <?php endif; ?>
 
-    <form method="post" action="?action=delete&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" style="display:inline" id="delete-msg-form">
+    <form method="post" action="?action=delete&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?><?= $accountParam ?><?= $unifiedParam ?>" style="display:inline" id="delete-msg-form">
         <?= csrfInput() ?>
         <button class="btn btn-ghost btn-sm text-danger" title="Delete">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
@@ -104,7 +113,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
 <div class="wm-img-banner wm-read-receipt-banner">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
     <span>The sender has requested a read receipt.</span>
-    <a href="?action=compose&reply=<?= $msgNo ?>&folder=<?= $folderEnc ?>" class="btn btn-primary btn-sm" style="margin-left:auto" target="_self">Send a reply</a>
+    <a href="?action=compose&reply=<?= $msgNo ?>&folder=<?= $folderEnc ?><?= $accountParam ?><?= $unifiedParam ?>" class="btn btn-primary btn-sm" style="margin-left:auto" target="_self">Send a reply</a>
 </div>
 <?php endif; ?>
 
@@ -119,6 +128,9 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
         <?= htmlspecialchars($message['subject'] ?? '(no subject)') ?>
     </div>
     <div class="wm-view-meta">
+        <?php if (($fromUnified !== '' || $targetAccountId !== $activeSessAccId) && !empty($targetAccount)): ?>
+        <span><strong>Account:</strong> <?= htmlspecialchars(($targetAccount['label'] ?: $targetAccount['email']) . ' (' . $targetAccount['email'] . ')') ?></span>
+        <?php endif; ?>
         <span><strong>From:</strong> <?= htmlspecialchars($message['from'] ?? '') ?></span>
         <span><strong>To:</strong> <?= htmlspecialchars($message['to'] ?? '') ?></span>
         <?php if (!empty($message['cc'])): ?>
@@ -156,7 +168,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
         <div class="wm-attachments-header">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
             <span>Attachments (<?= count($message['attachments']) ?>)</span>
-            <a href="?action=download_all&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>" class="btn btn-ghost btn-xs" title="Download all as ZIP">
+            <a href="?action=download_all&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?><?= $accountParam ?>" class="btn btn-ghost btn-xs" title="Download all as ZIP">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </a>
         </div>
@@ -180,20 +192,30 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
                     <div class="wm-attachment-name" title="<?= htmlspecialchars($att['filename']) ?>"><?= htmlspecialchars($att['filename']) ?></div>
                     <div class="wm-attachment-size"><?= number_format($att['size'] / 1024, 1) ?> KB</div>
                 </div>
-                <div style="display:flex;align-items:center;gap:.35rem">
+                <div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap">
                     <?php if ($ext === 'eml'): ?>
                     <button type="button" class="btn btn-primary btn-xs preview-eml-btn" 
                             data-folder="<?= $folderEnc ?>" 
                             data-msg="<?= $msgNo ?>" 
                             data-section="<?= urlencode($att['section']) ?>" 
                             data-name="<?= htmlspecialchars($att['filename']) ?>"
+                            data-account="<?= $targetAccountId ?>"
+                            data-unified="<?= htmlspecialchars($fromUnified) ?>"
                             style="display:inline-flex;align-items:center;gap:.3rem"
                             title="Preview this email without downloading">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         Preview
                     </button>
+                    <a href="?action=compose&reply_eml=1&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&section=<?= urlencode($att['section']) ?>&images=1<?= $accountParam ?><?= $unifiedParam ?>"
+                       class="btn btn-outline btn-xs eml-reply-link"
+                       target="_self"
+                       style="display:inline-flex;align-items:center;gap:.3rem"
+                       title="Reply directly to this attached email">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+                        Reply
+                    </a>
                     <?php endif; ?>
-                    <a href="?action=attachment&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&section=<?= urlencode($att['section']) ?>&name=<?= urlencode($att['filename']) ?>" 
+                    <a href="?action=attachment&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&section=<?= urlencode($att['section']) ?>&name=<?= urlencode($att['filename']) ?><?= $accountParam ?>" 
                        class="wm-attachment-download" download title="Download">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     </a>
@@ -234,7 +256,19 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
                 <span class="badge badge-primary" style="font-size:.72rem;padding:.2rem .5rem">.EML PREVIEW</span>
                 <span id="eml-modal-filename" style="font-weight:600;font-size:.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">message.eml</span>
             </div>
-            <div style="display:flex;align-items:center;gap:.5rem">
+            <div style="display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;justify-content:flex-end">
+                <a id="eml-modal-reply" href="#" target="_self" class="btn btn-primary btn-sm" title="Reply to attached email">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+                    <span>Reply</span>
+                </a>
+                <a id="eml-modal-reply-all" href="#" target="_self" class="btn btn-outline btn-sm" title="Reply All to attached email">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="7 17 2 12 7 7"/><polyline points="12 17 7 12 12 7"/><path d="M22 18v-2a4 4 0 00-4-4H2"/></svg>
+                    <span>Reply All</span>
+                </a>
+                <a id="eml-modal-forward" href="#" target="_self" class="btn btn-outline btn-sm" title="Forward attached email">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 014-4h12"/></svg>
+                    <span>Forward</span>
+                </a>
                 <a id="eml-modal-newtab" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-ghost btn-sm" title="Open in new window">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                     <span>Full Tab</span>
@@ -328,7 +362,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
         btn.addEventListener('click', function() {
             modal.style.display = 'flex';
             if (loaded) return;
-            fetch('?action=email_headers&folder=' + <?= json_encode($folderEnc) ?> + '&msg=<?= $msgNo ?>', {
+            fetch('?action=email_headers&folder=' + <?= json_encode($folderEnc) ?> + '&msg=<?= $msgNo ?>' + <?= json_encode($accountParam) ?>, {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             })
             .then(function(r) { return r.json(); })
@@ -409,7 +443,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
         var shadowRoot = shadowHost.shadowRoot || shadowHost.attachShadow({ mode: 'open' });
         
         function loadEmailBody(showImages) {
-            var url = '?action=email_body&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&images=' + (showImages ? '1' : '0');
+            var url = '?action=email_body&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&images=' + (showImages ? '1' : '0') + <?= json_encode($accountParam) ?>;
             
             // Show loading state in the main DOM (not shadow)
             shadowHost.innerHTML = '<div class="wm-email-loading"><div class="spinner"></div><span>Loading message content...</span></div>';
@@ -498,6 +532,9 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
     var emlFilename = document.getElementById('eml-modal-filename');
     var emlNewTab = document.getElementById('eml-modal-newtab');
     var emlDownload = document.getElementById('eml-modal-download');
+    var emlReply = document.getElementById('eml-modal-reply');
+    var emlReplyAll = document.getElementById('eml-modal-reply-all');
+    var emlForward = document.getElementById('eml-modal-forward');
     var emlNestedAtt = document.getElementById('eml-modal-nested-att');
     var emlNestedList = document.getElementById('eml-modal-nested-list');
 
@@ -513,6 +550,8 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
             var m = b.getAttribute('data-msg');
             var s = b.getAttribute('data-section');
             var name = b.getAttribute('data-name') || 'attachment.eml';
+            var acc = b.getAttribute('data-account') || '';
+            var uni = b.getAttribute('data-unified') || '';
 
             emlFilename.textContent = name;
             emlSubject.textContent = 'Loading...';
@@ -526,9 +565,16 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
             emlNestedList.innerHTML = '';
             emlLoading.style.display = 'flex';
 
-            var baseParams = 'folder=' + f + '&msg=' + m + '&section=' + s + '&name=' + encodeURIComponent(name);
-            emlNewTab.href = '?action=preview_eml&' + baseParams;
+            var extraAcc = acc ? '&account_id=' + encodeURIComponent(acc) : '';
+            var extraUni = uni ? '&from_unified=' + encodeURIComponent(uni) : '';
+            var coreParams = 'folder=' + f + '&msg=' + m + '&section=' + s + extraAcc;
+            var baseParams = coreParams + '&name=' + encodeURIComponent(name);
+
+            emlNewTab.href = '?action=preview_eml&' + baseParams + extraUni;
             emlDownload.href = '?action=attachment&' + baseParams;
+            if (emlReply) emlReply.href = '?action=compose&reply_eml=1&' + coreParams + '&images=1' + extraUni;
+            if (emlReplyAll) emlReplyAll.href = '?action=compose&reply_eml=1&reply_all=1&' + coreParams + '&images=1' + extraUni;
+            if (emlForward) emlForward.href = '?action=compose&forward_eml=1&' + coreParams + '&images=1' + extraUni;
 
             emlModal.style.display = 'flex';
 

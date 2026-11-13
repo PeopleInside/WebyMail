@@ -25,11 +25,13 @@ class EmlParser
 
         $parsedBody = self::parseBody($bodyText, $contentType, $headers['content-transfer-encoding'] ?? '');
 
-        $subject = self::decodeMimeHeader($headers['subject'] ?? '(No subject)');
-        $from    = self::decodeMimeHeader($headers['from'] ?? 'Unknown');
-        $to      = self::decodeMimeHeader($headers['to'] ?? '');
-        $cc      = self::decodeMimeHeader($headers['cc'] ?? '');
-        $date    = $headers['date'] ?? '';
+        $subject   = self::decodeMimeHeader($headers['subject'] ?? '(No subject)');
+        $from      = self::decodeMimeHeader($headers['from'] ?? 'Unknown');
+        $to        = self::decodeMimeHeader($headers['to'] ?? '');
+        $cc        = self::decodeMimeHeader($headers['cc'] ?? '');
+        $replyTo   = self::decodeMimeHeader($headers['reply-to'] ?? '');
+        $messageId = trim((string)($headers['message-id'] ?? ''));
+        $date      = $headers['date'] ?? '';
         if ($date !== '') {
             $ts = strtotime($date);
             if ($ts !== false && $ts > 0) {
@@ -42,6 +44,8 @@ class EmlParser
             'from'        => $from,
             'to'          => $to,
             'cc'          => $cc,
+            'reply_to'    => $replyTo,
+            'message_id'  => $messageId,
             'date'        => $date,
             'body_html'   => $parsedBody['html'],
             'body_text'   => $parsedBody['text'],
@@ -229,6 +233,21 @@ class EmlParser
      */
     public static function decodeMimeHeader(string $str): string
     {
+        if ($str === '') {
+            return '';
+        }
+        if (function_exists('imap_mime_header_decode')) {
+            $decoded = @imap_mime_header_decode($str);
+            if (is_array($decoded) && !empty($decoded)) {
+                $out = '';
+                foreach ($decoded as $part) {
+                    $charset = (!isset($part->charset) || $part->charset === 'default') ? 'UTF-8' : $part->charset;
+                    $text = @mb_convert_encoding($part->text, 'UTF-8', $charset);
+                    $out .= ($text !== false) ? $text : $part->text;
+                }
+                return $out;
+            }
+        }
         if (function_exists('mb_decode_mimeheader')) {
             return mb_decode_mimeheader($str);
         }
