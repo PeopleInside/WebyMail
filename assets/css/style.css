@@ -1709,6 +1709,10 @@ input:autofill {
     opacity: .9;
 }
 
+.wm-acc-group-folders a.active {
+    opacity: 1;
+}
+
 .wm-acc-group-error {
     padding: .3rem 1rem .4rem 1.75rem;
     font-size: .75rem;
