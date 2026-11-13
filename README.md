@@ -49,6 +49,26 @@ https://github.com/PeopleInside/WebyMail/releases
 - When upgrading, preserve your existing `config/config.php` and the directory containing your database and `app_secret.wm`.
 - Existing installations will automatically migrate the `app_secret` from `config/config.php` to the new external file upon first run.
 
+### Production Hardening Checklist
+- **HTTPS & Reverse Proxy**: Serve WebyMail exclusively over HTTPS. If running behind a reverse proxy (Cloudflare, Nginx, Traefik), configure `'trusted_proxies'` in `config/config.php` so forwarded HTTPS and client IP headers are trusted only from your proxy.
+- **Database Outside Webroot**: Store your SQLite database and `app_secret.wm` outside the web-accessible directory (configurable via setup or **Settings → System & Maintenance** by the primary administrator).
+- **Web Server Rules**: On Apache, `.htaccess` files protect `config/`, `data/`, `src/`, and `templates/`. On Nginx or other servers, explicitly deny HTTP access to those directories and to `.db` / `.wm` / `.json` files.
+- **Remove `setup.php`**: Ensure `setup.php` is removed once installation is complete.
+- **Quick Fix Actions**: If the security banner alerts logged-in users to insecure file permissions or disabled login CAPTCHA, clicking **Fix Permissions** or **Enable CAPTCHA** in **Settings → System & Maintenance** safely applies the recommended hardening automatically.
+
+## Changelog (Recent)
+
+### 3.5.9
+- Added missing `debugErrorMessage()` helper in `index.php` so failed login and account validation errors safely return generic messages in production without triggering HTTP 500 errors.
+- Hardened `Config::moveDatabase()` (extension checks, control-character filtering, webroot rejection) and restricted database relocation/warning dismissal to the primary administrator (`user_id === 1`), while keeping safe **Fix Permissions** and **Enable CAPTCHA** actions working for any logged-in user via the security alert banner.
+- Normalized email/username casing in `Auth` rate-limiting and user lookups (`LOWER(...)`), added session-bound CSRF protection on `login2fa`, sanitized SMTP sender headers (`From:`, `Disposition-Notification-To:`) and folder management inputs, validated account email addresses, and hardened `sanitizeHtml()` against HTML comments and legacy raw-text tags.
+- Updated documentation (`README.md` and `SECURITY.md`).
+
+### 3.5.8
+- Preserved left-sidebar scroll position on folder navigation and persisted expanded/collapsed unified account states across browser restarts.
+- Added non-standard unified folders under Unified Accounts in the sidebar.
+- Isolated HTML email and `.eml` attachment previews inside `<iframe sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer">`, hardened SSRF / private-host validation (`HostValidator`), bound existing primary accounts against arbitrary IMAP host login takeover, and hardened `Config::isRequestSecure()` and TOTP enrollment.
+
 **Light mode** 
 ![Light](https://github.com/user-attachments/assets/b93bbbd8-2350-494b-8125-9b5066266d83)
 <img width="1919" height="953" alt="Screenshot 2026-03-01 173625" src="https://github.com/user-attachments/assets/cfcd40ed-5c0b-489a-baea-419f32c0e623" />

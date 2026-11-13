@@ -184,9 +184,10 @@ class SmtpClient
     {
         $date     = date('r');
         $msgId    = '<' . bin2hex(random_bytes(16)) . '@webymail>';
-        $fromFmt  = $msg['from_name']
-            ? '=?UTF-8?B?' . base64_encode($msg['from_name']) . '?= <' . $this->extractAddress($from) . '>'
-            : $from;
+        $cleanFrom = $this->sanitizeHeader($this->extractAddress($from));
+        $fromFmt   = !empty($msg['from_name'])
+            ? '=?UTF-8?B?' . base64_encode($this->sanitizeHeader((string) $msg['from_name'])) . '?= <' . $cleanFrom . '>'
+            : $cleanFrom;
 
         $headers  = "Date: {$date}\r\n";
         $headers .= "Message-ID: {$msgId}\r\n";
@@ -301,7 +302,7 @@ class SmtpClient
 
     private function sanitizeHeader(string $value): string
     {
-        return str_replace(["\r", "\n"], '', $value);
+        return str_replace(["\r", "\n", "\0"], '', $value);
     }
 
     // -------------------------------------------------------------------------

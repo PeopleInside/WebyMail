@@ -67,7 +67,7 @@ class Auth
         // Prevent Account Takeover: if the user already exists with a primary account
         // bound to a specific IMAP host, do not allow authenticating against an arbitrary
         // user-supplied IMAP server.
-        $existingUser    = $this->db->fetch('SELECT * FROM users WHERE email = ?', [$username]);
+        $existingUser    = $this->db->fetch('SELECT * FROM users WHERE LOWER(email) = LOWER(?)', [$username]);
         $existingPrimary = $existingUser !== null
             ? $this->db->fetch('SELECT * FROM accounts WHERE user_id = ? AND is_primary = 1', [(int) $existingUser['id']])
             : null;
@@ -315,9 +315,10 @@ class Auth
             }
         }
 
-        // Check by Username
-        if ($username !== '') {
-            $rowUser = $this->db->fetch('SELECT * FROM login_attempts WHERE username = ?', [$username]);
+        // Check by Username (case-insensitive to prevent case-variation lockout bypass)
+        $normalizedUser = strtolower(trim($username));
+        if ($normalizedUser !== '') {
+            $rowUser = $this->db->fetch('SELECT * FROM login_attempts WHERE LOWER(username) = ? AND ip_address = \'\'', [$normalizedUser]);
             if ($rowUser) {
                 $attempts = (int) $rowUser['attempts'];
                 $last     = (int) $rowUser['last_attempt'];
@@ -325,7 +326,7 @@ class Auth
                     return true;
                 }
                 if ((time() - $last) >= $window) {
-                    $this->clearAttempts('', $username);
+                    $this->clearAttempts('', $normalizedUser);
                 }
             }
         }
@@ -349,18 +350,19 @@ class Auth
             );
         }
 
-        // Record for Username
-        if ($username !== '') {
-            $rowUser = $this->db->fetch('SELECT * FROM login_attempts WHERE username = ? AND ip_address = \'\'', [$username]);
+        // Record for Username (case-insensitive)
+        $normalizedUser = strtolower(trim($username));
+        if ($normalizedUser !== '') {
+            $rowUser = $this->db->fetch('SELECT * FROM login_attempts WHERE LOWER(username) = ? AND ip_address = \'\'', [$normalizedUser]);
             if ($rowUser) {
                 $this->db->query(
-                    'UPDATE login_attempts SET attempts = attempts + 1, last_attempt = ? WHERE username = ? AND ip_address = \'\'',
-                    [time(), $username]
+                    'UPDATE login_attempts SET attempts = attempts + 1, last_attempt = ? WHERE LOWER(username) = ? AND ip_address = \'\'',
+                    [time(), $normalizedUser]
                 );
             } else {
                 $this->db->query(
                     'INSERT INTO login_attempts (identifier, ip_address, username, attempts, last_attempt) VALUES (?, \'\', ?, 1, ?)',
-                    [self::ATTEMPT_IDENTIFIER_USER_PREFIX . strtolower($username), $username, time()]
+                    [self::ATTEMPT_IDENTIFIER_USER_PREFIX . $normalizedUser, $normalizedUser, time()]
                 );
             }
         }
@@ -371,8 +373,9 @@ class Auth
         if ($ip !== '') {
             $this->db->query('DELETE FROM login_attempts WHERE ip_address = ? AND username = \'\'', [$ip]);
         }
-        if ($username !== '') {
-            $this->db->query('DELETE FROM login_attempts WHERE username = ? AND ip_address = \'\'', [$username]);
+        $normalizedUser = strtolower(trim($username));
+        if ($normalizedUser !== '') {
+            $this->db->query('DELETE FROM login_attempts WHERE LOWER(username) = ? AND ip_address = \'\'', [$normalizedUser]);
         }
     }
 

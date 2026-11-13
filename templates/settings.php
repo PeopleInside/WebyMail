@@ -1152,11 +1152,14 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                                 The database is inside a web-accessible directory. On Nginx or misconfigured Apache servers the file could be downloaded directly, exposing encrypted passwords, TOTP secrets and session tokens.
                             </div>
                         </div>
+                        <?php if ((int)($user['id'] ?? 0) === 1): ?>
                         <form method="post" action="?action=settings_save&tab=dismiss_db_warning" style="flex-shrink:0">
                             <?= csrfInput() ?>
                             <button type="submit" class="btn btn-ghost btn-xs" title="Dismiss this warning (the risk remains)">Dismiss</button>
                         </form>
+                        <?php endif; ?>
                     </div>
+                    <?php if ((int)($user['id'] ?? 0) === 1): ?>
                 <form method="post" action="?action=move_database" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end" id="move-db-form">
                         <?= csrfInput() ?>
                         <div style="flex:1;min-width:220px">
@@ -1172,6 +1175,11 @@ $activeEmail     = $activeAccount['email'] ?? ($user['email'] ?? 'this account')
                             Move database
                         </button>
                     </form>
+                    <?php else: ?>
+                    <div style="font-size:.78rem;color:var(--wm-text-muted)">
+                        Please contact the primary administrator to move the database outside the webroot.
+                    </div>
+                    <?php endif; ?>
                 </div>
                 <?php endif; ?>
                 

@@ -131,6 +131,11 @@ function jsonResponse(array $data): never
     exit;
 }
 
+function debugErrorMessage(string $publicMessage, string $debugMessage): string
+{
+    return (bool) Config::get('debug', false) ? $debugMessage : $publicMessage;
+}
+
 function findFolderName(array $folders, array $candidates, string $fallback): string
 {
     /**
@@ -834,12 +839,16 @@ if ($action === 'login') {
         }
     }
 
+    if ($needs2fa && empty($_SESSION['login_2fa_csrf'])) {
+        $_SESSION['login_2fa_csrf'] = bin2hex(random_bytes(32));
+    }
     $challenge = $captchaEnabled ? $captcha->issue() : null;
     render('login', [
-        'error' => $error,
-        'needs2fa' => $needs2fa,
-        'challenge' => $challenge,
-        'pageTitle' => pageTitle('Login'),
+        'error'        => $error,
+        'needs2fa'     => $needs2fa,
+        'twoFaCsrf'    => $needs2fa ? (string) ($_SESSION['login_2fa_csrf'] ?? '') : '',
+        'challenge'    => $challenge,
+        'pageTitle'    => pageTitle('Login'),
     ], false);
     exit;
 }
@@ -847,9 +856,16 @@ if ($action === 'login') {
 // ── 2FA verification ──────────────────────────────────────────────────────────
 if ($action === 'login2fa') {
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $expectedCsrf  = (string) ($_SESSION['login_2fa_csrf'] ?? '');
+        $submittedCsrf = (string) ($_POST['login_2fa_csrf'] ?? '');
+        if ($expectedCsrf === '' || $submittedCsrf === '' || !hash_equals($expectedCsrf, $submittedCsrf)) {
+            flashSet('danger', 'Security token mismatch. Please try again.');
+            redirect('?action=login');
+        }
         $auth   = new Auth();
         $result = $auth->completeTwoFactor(trim($_POST['code'] ?? ''));
         if ($result['ok']) {
+            unset($_SESSION['login_2fa_csrf']);
             if (!empty($result['recovery_used'])) {
                 flashSet('warning', "Recovery code used. {$result['remaining']} code(s) remaining.");
             }
@@ -1097,7 +1113,7 @@ if ($action === 'unified_sidebar_state' && isAjax() && $_SERVER['REQUEST_METHOD'
 
 // ── Folder management ─────────────────────────────────────────────────────────
 if ($action === 'create_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $name = trim($_POST['name'] ?? '');
+    $name = preg_replace('/[\x00-\x1F\x7F]/', '', trim((string) ($_POST['name'] ?? ''))) ?? '';
     if ($name === '') {
         flashSet('danger', 'Folder name cannot be empty.');
         redirect('?action=inbox');
@@ -1116,8 +1132,8 @@ if ($action === 'create_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if ($action === 'rename_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $oldName = trim($_POST['old_name'] ?? '');
-    $newName = trim($_POST['new_name'] ?? '');
+    $oldName = preg_replace('/[\x00-\x1F\x7F]/', '', trim((string) ($_POST['old_name'] ?? ''))) ?? '';
+    $newName = preg_replace('/[\x00-\x1F\x7F]/', '', trim((string) ($_POST['new_name'] ?? ''))) ?? '';
     if ($oldName === '' || $newName === '') {
         flashSet('danger', 'Folder names cannot be empty.');
         redirect('?action=inbox');
@@ -1136,7 +1152,7 @@ if ($action === 'rename_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if ($action === 'delete_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $name = trim($_POST['name'] ?? '');
+    $name = preg_replace('/[\x00-\x1F\x7F]/', '', trim((string) ($_POST['name'] ?? ''))) ?? '';
     if (strtoupper($name) === 'INBOX') {
         flashSet('danger', 'Cannot delete INBOX.');
         redirect('?action=inbox');
@@ -1925,9 +1941,22 @@ function sanitizeHtml(string $html, bool $showImages, string $theme, bool $strip
             }
         }
 
+        // Strip HTML comments (prevents comment-smuggling / parser-differential mXSS)
+        $xpath = new DOMXPath($doc);
+        $comments = $xpath->query('//comment()');
+        if ($comments) {
+            for ($i = $comments->length - 1; $i >= 0; $i--) {
+                $c = $comments->item($i);
+                if ($c && $c->parentNode) {
+                    $c->parentNode->removeChild($c);
+                }
+            }
+        }
+
         static $dropSubtreeTags = [
             'script', 'style', 'svg', 'math', 'iframe', 'frame', 'frameset',
-            'object', 'embed', 'applet', 'noscript', 'template', 'title',
+            'object', 'embed', 'applet', 'noscript', 'noembed', 'noframes',
+            'xmp', 'plaintext', 'template', 'title',
             'meta', 'link', 'base', 'form', 'input', 'button', 'select',
             'option', 'optgroup', 'textarea', 'keygen', 'audio', 'video',
             'source', 'track', 'canvas', 'map', 'area', 'xml',
@@ -3501,6 +3530,15 @@ if ($action === 'settings_save') {
 
         case 'add_account':
             $mgr = new Account();
+            $accEmail = preg_replace('/[\x00-\x1F\x7F]/', '', trim((string) ($_POST['email'] ?? ''))) ?? '';
+            if ($accEmail === '' || filter_var($accEmail, FILTER_VALIDATE_EMAIL) === false) {
+                $err = 'Please enter a valid email address.';
+                if (isAjax()) {
+                    jsonResponse(['ok' => false, 'error' => $err]);
+                }
+                flashSet('danger', $err);
+                redirect('?action=settings&tab=accounts');
+            }
             $smtpSsl = !empty($_POST['smtp_ssl']);
             $smtpStarttls = !empty($_POST['smtp_starttls']);
             if ($smtpSsl) {
@@ -3510,7 +3548,7 @@ if ($action === 'settings_save') {
                 $newId = $mgr->add($userId, [
                     'label'         => trim($_POST['label']      ?? ''),
                     'sender_name'   => trim($_POST['sender_name'] ?? ''),
-                    'email'         => trim($_POST['email']      ?? ''),
+                    'email'         => $accEmail,
                     'imap_host'     => trim($_POST['imap_host']  ?? ''),
                     'imap_port'     => (int) ($_POST['imap_port'] ?? 993),
                     'imap_ssl'      => !empty($_POST['imap_ssl']),
@@ -3560,6 +3598,15 @@ if ($action === 'settings_save') {
                 redirect('?action=settings&tab=accounts');
             }
             $existing = $mgr->get($editId);
+            $accEmail = preg_replace('/[\x00-\x1F\x7F]/', '', trim((string) ($_POST['email'] ?? $existing['email']))) ?? '';
+            if ($accEmail === '' || filter_var($accEmail, FILTER_VALIDATE_EMAIL) === false) {
+                $err = 'Please enter a valid email address.';
+                if (isAjax()) {
+                    jsonResponse(['ok' => false, 'error' => $err]);
+                }
+                flashSet('danger', $err);
+                redirect('?action=settings&tab=accounts');
+            }
             $smtpSsl = !empty($_POST['smtp_ssl']);
             $smtpStarttls = !empty($_POST['smtp_starttls']);
             // SSL takes precedence: if both are checked, disable STARTTLS
@@ -3570,7 +3617,7 @@ if ($action === 'settings_save') {
                 'label'         => trim($_POST['label']       ?? $existing['label']),
                 'sender_name'   => trim($_POST['sender_name'] ?? $existing['sender_name'] ?? ''),
                 'signature'     => $existing['signature']     ?? '',
-                'email'         => trim($_POST['email']       ?? $existing['email']),
+                'email'         => $accEmail,
                 'imap_host'     => trim($_POST['imap_host']   ?? $existing['imap_host']),
                 'imap_port'     => (int) ($_POST['imap_port'] ?? $existing['imap_port']),
                 'imap_ssl'      => !empty($_POST['imap_ssl']),
@@ -3643,6 +3690,10 @@ if ($action === 'settings_save') {
             redirect('?action=settings&tab=system');
 
         case 'dismiss_db_warning':
+            if ($userId !== 1) {
+                flashSet('danger', 'Administrator privileges are required for this action.');
+                redirect('?action=settings&tab=system');
+            }
             Config::set('ignore_db_webroot_warning', true);
             Config::save();
             unset($_SESSION['system_check_cache']);
@@ -3667,6 +3718,10 @@ if ($action === 'fix_permissions' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ── Move database outside webroot ─────────────────────────────────────────────
 if ($action === 'move_database' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    if ($userId !== 1) {
+        flashSet('danger', 'Administrator privileges are required for this action.');
+        redirect('?action=settings&tab=profile');
+    }
     $targetPath = trim($_POST['db_target_path'] ?? '');
     if ($targetPath === '') {
         $targetPath = Config::suggestSafeDbPath();
