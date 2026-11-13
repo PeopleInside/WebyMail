@@ -62,8 +62,8 @@
         })();
     </script>
 
-    <link rel="stylesheet" href="assets/css/style.css">
-    <script nonce="<?= $cspNonce ?>" src="assets/js/app.js" defer></script>
+    <link rel="stylesheet" href="assets/css/style.css?v=<?= urlencode(Config::VERSION) ?>">
+    <script nonce="<?= $cspNonce ?>" src="assets/js/app.js?v=<?= urlencode(Config::VERSION) ?>" defer></script>
 
     <?php if (!empty($extraHead)) echo $extraHead; ?>
 </head>
@@ -138,6 +138,10 @@
             </button>
             <div id="user-menu" class="wm-user-menu" style="display:none;">
                 <?php if (!empty($accounts) && count($accounts) > 1): ?>
+                <a href="?action=unified&ufolder=inbox" target="_self" style="display:flex;align-items:center;gap:.6rem;padding:.6rem 1rem;font-size:.85rem;font-weight:600;color:var(--wm-primary);text-decoration:none;border-bottom:1px solid var(--wm-border)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><polyline points="3 10 9 10 11 13 13 13 15 10 21 10"/></svg>
+                    Unified Mailbox
+                </a>
                 <div style="padding:.6rem 1rem;font-size:.75rem;font-weight:600;color:var(--wm-text-muted);text-transform:uppercase;letter-spacing:.03em">
                     Accounts
                 </div>
@@ -194,6 +198,36 @@
             Contacts
         </button>
 
+        <?php
+        $getFolderIcon = static function(string $name): string {
+            $n = strtolower($name);
+            if (str_contains($n, 'inbox')) {
+                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>';
+            }
+            if (str_contains($n, 'sent') || str_contains($n, 'inviat')) {
+                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
+            }
+            if (str_contains($n, 'draft') || str_contains($n, 'bozz')) {
+                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+            }
+            if (str_contains($n, 'trash') || str_contains($n, 'deleted') || str_contains($n, 'cestino') || str_contains($n, 'eliminat')) {
+                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+            }
+            if (str_contains($n, 'spam') || str_contains($n, 'junk') || str_contains($n, 'indesiderat')) {
+                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+            }
+            if (str_contains($n, 'archive') || str_contains($n, 'archivio')) {
+                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>';
+            }
+            return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+        };
+        ?>
+        <?php
+            $curAccId      = (int) ($currentAccount['id'] ?? $session['account_id'] ?? 0);
+            $curAccLabel   = trim((string) ($currentAccount['label'] ?? ''));
+            $curAccEmail   = trim((string) ($currentAccount['email'] ?? ''));
+            $curAccDisplay = $curAccLabel !== '' ? $curAccLabel : $curAccEmail;
+        ?>
         <div class="wm-sidebar-section" style="display:flex;align-items:center;justify-content:space-between">
             <span style="display:flex;align-items:center;gap:.4rem">
                 Folders
@@ -204,34 +238,16 @@
             <button type="button" id="new-folder-btn" title="New folder"
                     style="background:none;border:none;cursor:pointer;color:var(--wm-text-muted);padding:.1rem .3rem;font-size:1rem;line-height:1">+</button>
         </div>
-        <?php 
-        $getFolderIcon = static function(string $name): string {
-            $n = strtolower($name);
-            if (str_contains($n, 'inbox')) {
-                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>';
-            }
-            if (str_contains($n, 'sent') || str_contains($n, 'inviata')) {
-                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
-            }
-            if (str_contains($n, 'draft') || str_contains($n, 'bozz')) {
-                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
-            }
-            if (str_contains($n, 'trash') || str_contains($n, 'deleted') || str_contains($n, 'cestino')) {
-                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
-            }
-            if (str_contains($n, 'spam') || str_contains($n, 'junk')) {
-                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
-            }
-            if (str_contains($n, 'archive')) {
-                return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>';
-            }
-            return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.85"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
-        };
-        ?>
+        <?php if (count($accounts ?? []) > 1 && $curAccDisplay !== ''): ?>
+        <div class="wm-sidebar-account-tag" title="<?= htmlspecialchars($curAccEmail ?: $curAccDisplay) ?>">
+            <span class="wm-acc-dot" style="background:var(--wm-primary)"></span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= htmlspecialchars($curAccDisplay) ?></span>
+        </div>
+        <?php endif; ?>
         <?php foreach ($folders ?? [] as $f): ?>
         <div class="wm-sidebar-folder-row" style="display:flex;align-items:center;position:relative">
             <a href="?action=inbox&folder=<?= urlencode($f['name']) ?>"
-               class="<?= ($currentFolder ?? 'INBOX') === $f['name'] ? 'active' : '' ?>"
+               class="<?= (empty($isUnified) && ($currentFolder ?? 'INBOX') === $f['name']) ? 'active' : '' ?>"
                target="_self"
                style="flex:1;min-width:0;display:flex;align-items:center;gap:.65rem">
                 <?= $getFolderIcon($f['name']) ?>
@@ -247,6 +263,105 @@
             <?php endif; ?>
         </div>
         <?php endforeach; ?>
+
+        <?php if (!empty($accounts) && count($accounts) > 1):
+            $inUnifiedMode = !empty($isUnified);
+            $activeUfolder = $unifiedFolder ?? 'inbox';
+            $navUnifiedFolders = !empty($unifiedFolders) ? $unifiedFolders : [
+                ['key' => 'inbox', 'label' => 'Inbox', 'unread' => 0],
+                ['key' => 'sent',  'label' => 'Sent',  'unread' => 0],
+                ['key' => 'spam',  'label' => 'Spam',  'unread' => 0],
+                ['key' => 'trash', 'label' => 'Trash', 'unread' => 0],
+            ];
+        ?>
+        <div class="wm-unified-nav">
+            <div class="wm-sidebar-section" style="margin-top:.25rem">
+                <span>Unified</span>
+            </div>
+            <div class="wm-unified-row <?= $inUnifiedMode ? 'active' : '' ?>" style="display:flex;align-items:center;position:relative">
+                <a href="?action=unified&ufolder=inbox"
+                   class="wm-unified-link <?= $inUnifiedMode ? 'active' : '' ?>"
+                   target="_self"
+                   style="flex:1;min-width:0;display:flex;align-items:center;gap:.6rem">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.9"><rect x="3" y="4" width="18" height="16" rx="2"/><polyline points="3 10 9 10 11 13 13 13 15 10 21 10"/></svg>
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">All Accounts</span>
+                </a>
+                <button type="button" id="unified-toggle" class="wm-unified-toggle <?= $inUnifiedMode ? 'expanded' : '' ?>" title="Toggle unified folders" aria-expanded="<?= $inUnifiedMode ? 'true' : 'false' ?>" style="background:transparent;border:none;color:var(--wm-sidebar-text,#c8d8e8);appearance:none;-webkit-appearance:none;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;padding:.4rem .65rem;margin-right:.25rem;border-radius:6px">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+            </div>
+            <div id="unified-subfolders" class="wm-unified-sub" style="display:<?= $inUnifiedMode ? 'block' : 'none' ?>">
+                <?php foreach ($navUnifiedFolders as $uf):
+                    $uKey   = (string) ($uf['key'] ?? 'inbox');
+                    $uLabel = (string) ($uf['label'] ?? 'Inbox');
+                    $uUnread = (int) ($uf['unread'] ?? 0);
+                ?>
+                <a href="?action=unified&ufolder=<?= urlencode($uKey) ?>" class="<?= ($inUnifiedMode && $activeUfolder === $uKey) ? 'active' : '' ?>" target="_self">
+                    <?= $getFolderIcon($uLabel) ?>
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1"><?= htmlspecialchars($uLabel) ?></span>
+                    <?php if ($uUnread > 0): ?>
+                    <span class="badge"><?= $uUnread ?></span>
+                    <?php endif; ?>
+                </a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if (!empty($isUnified) && !empty($unifiedAccountFolders) && count($accounts ?? []) > 1):
+            $otherAccGroups = array_values(array_filter($unifiedAccountFolders, static function (array $g) use ($curAccId): bool {
+                return (int) ($g['account_id'] ?? 0) !== $curAccId;
+            }));
+            if (!empty($otherAccGroups)):
+                $accDots = ['#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#2563eb'];
+        ?>
+        <div class="wm-sidebar-section" style="display:flex;align-items:center;justify-content:space-between;margin-top:.75rem">
+            <span>Other Accounts</span>
+        </div>
+        <?php foreach ($otherAccGroups as $accIdx => $accGroup):
+            $gAccId   = (int) ($accGroup['account_id'] ?? 0);
+            $gLabel   = (string) ($accGroup['label'] ?? $accGroup['email'] ?? 'Account');
+            $gEmail   = (string) ($accGroup['email'] ?? '');
+            $gFolders = is_array($accGroup['folders'] ?? null) ? $accGroup['folders'] : [];
+            $gUnread  = (int) ($accGroup['unread_total'] ?? 0);
+            $gError   = $accGroup['error'] ?? null;
+            $gDot     = $accDots[$accIdx % count($accDots)];
+        ?>
+        <div class="wm-acc-group" data-account-id="<?= $gAccId ?>">
+            <button type="button"
+                    class="wm-acc-group-toggle"
+                    aria-expanded="false"
+                    title="<?= htmlspecialchars($gEmail) ?>">
+                <span class="wm-acc-dot" style="background:<?= $gDot ?>"></span>
+                <span class="wm-acc-label"><?= htmlspecialchars($gLabel) ?></span>
+                <?php if ($gError !== null): ?>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--wm-danger)" stroke-width="2.5" style="flex-shrink:0" title="<?= htmlspecialchars($gError) ?>"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <?php elseif ($gUnread > 0): ?>
+                <span class="badge"><?= $gUnread ?></span>
+                <?php endif; ?>
+                <svg class="wm-acc-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="wm-acc-group-folders" style="display:none">
+                <?php if ($gError !== null && empty($gFolders)): ?>
+                <div class="wm-acc-group-error"><?= htmlspecialchars($gError) ?></div>
+                <?php else: ?>
+                <?php foreach ($gFolders as $f): ?>
+                <a href="?action=inbox&account_id=<?= $gAccId ?>&folder=<?= urlencode($f['name']) ?>"
+                   target="_self"
+                   style="display:flex;align-items:center;gap:.6rem">
+                    <?= $getFolderIcon($f['name']) ?>
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1"><?= htmlspecialchars($f['display']) ?></span>
+                    <?php if (!empty($f['unread'])): ?>
+                    <span class="badge"><?= (int)$f['unread'] ?></span>
+                    <?php endif; ?>
+                </a>
+                <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php endforeach; ?>
+        <?php endif; ?>
+        <?php endif; ?>
 
         <!-- Folder management forms (hidden) -->
         <form id="new-folder-form" method="post" action="?action=create_folder" target="_self"
@@ -372,6 +487,50 @@ document.addEventListener('click', function() {
     var m = document.getElementById('user-menu');
     if (m) m.style.display = 'none';
 });
+
+// Unified sidebar subfolder & per-account accordion toggles
+(function() {
+    var toggle = document.getElementById('unified-toggle');
+    var sub    = document.getElementById('unified-subfolders');
+    if (toggle && sub) {
+        toggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var isOpen = sub.style.display !== 'none';
+            sub.style.display = isOpen ? 'none' : 'block';
+            toggle.classList.toggle('expanded', !isOpen);
+            toggle.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+        });
+    }
+
+    document.querySelectorAll('.wm-acc-group').forEach(function(group) {
+        var accId  = group.dataset.accountId || '';
+        var btn    = group.querySelector('.wm-acc-group-toggle');
+        var list   = group.querySelector('.wm-acc-group-folders');
+        if (!btn || !list) return;
+
+        var stored = accId ? sessionStorage.getItem('wm_unified_acc_open_' + accId) : null;
+        if (stored === '1') {
+            list.style.display = 'block';
+            btn.classList.add('expanded');
+            btn.setAttribute('aria-expanded', 'true');
+        } else {
+            list.style.display = 'none';
+            btn.classList.remove('expanded');
+            btn.setAttribute('aria-expanded', 'false');
+        }
+
+        btn.addEventListener('click', function() {
+            var isOpen = list.style.display !== 'none';
+            list.style.display = isOpen ? 'none' : 'block';
+            btn.classList.toggle('expanded', !isOpen);
+            btn.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+            if (accId) {
+                sessionStorage.setItem('wm_unified_acc_open_' + accId, isOpen ? '0' : '1');
+            }
+        });
+    });
+})();
 
 // Folder management
 (function() {
@@ -560,6 +719,9 @@ document.addEventListener('click', function() {
                 </div>
             </form>
 
+            <!-- View Contact Detail Panel (Hidden by default) -->
+            <div id="contact-view-panel" style="display:none;background:var(--wm-surface-2);padding:1rem;border-radius:8px;margin-bottom:1rem;border:1px solid var(--wm-border)"></div>
+
             <div id="contacts-list-container" style="max-height:400px;overflow-y:auto">
                 <div class="wm-email-loading">
                     <div class="spinner"></div>
@@ -629,11 +791,110 @@ document.addEventListener('click', function() {
     var addToggle = document.getElementById('add-contact-toggle');
     var addForm = document.getElementById('add-contact-form');
     var cancelAdd = document.getElementById('cancel-add-contact');
+    var viewPanel = document.getElementById('contact-view-panel');
     var searchInput = document.getElementById('contact-search');
     var allContacts = [];
     var currentTargetInput = null;
 
+    function closeContactView() {
+        if (viewPanel) {
+            viewPanel.style.display = 'none';
+            viewPanel.innerHTML = '';
+        }
+        listContainer.style.display = '';
+    }
+
+    function openContactView(contact) {
+        if (!viewPanel || !contact) return;
+        addForm.style.display = 'none';
+        listContainer.style.display = 'none';
+        var initial = escapeHtml((contact.name || contact.email || '?').charAt(0).toUpperCase());
+        var hasNotes = !!(contact.notes && contact.notes.trim() !== '');
+        viewPanel.innerHTML = `
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;margin-bottom:1rem;padding-bottom:.75rem;border-bottom:1px solid var(--wm-border)">
+                <div style="display:flex;align-items:center;gap:.75rem;min-width:0">
+                    <div class="wm-account-avatar" style="width:42px;height:42px;font-size:1rem;flex-shrink:0">${initial}</div>
+                    <div style="min-width:0">
+                        <div style="font-weight:700;font-size:1rem;word-break:break-word">${escapeHtml(contact.name)}</div>
+                        <div style="font-size:.84rem;color:var(--wm-text-muted);word-break:break-all">${escapeHtml(contact.email)}</div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm close-contact-view" title="Back to contacts">← Back</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:.55rem;margin-bottom:1rem;font-size:.86rem">
+                ${contact.phone ? `<div><strong style="color:var(--wm-text-muted);font-size:.76rem;text-transform:uppercase;display:block">Phone</strong><span>📞 ${escapeHtml(contact.phone)}</span></div>` : ''}
+                ${contact.address ? `<div><strong style="color:var(--wm-text-muted);font-size:.76rem;text-transform:uppercase;display:block">Address</strong><span>📍 ${escapeHtml(contact.address)}</span></div>` : ''}
+                <div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.25rem">
+                        <strong style="color:var(--wm-text-muted);font-size:.76rem;text-transform:uppercase">Notes</strong>
+                        ${hasNotes ? `<button type="button" class="btn btn-ghost btn-xs copy-contact-notes">Copy notes</button>` : ''}
+                    </div>
+                    <div style="background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:6px;padding:.65rem .75rem;white-space:pre-wrap;word-break:break-word;max-height:220px;overflow-y:auto;line-height:1.45;${hasNotes ? '' : 'color:var(--wm-text-muted);font-style:italic'}">${hasNotes ? escapeHtml(contact.notes) : 'No notes saved for this contact.'}</div>
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:flex-end;gap:.5rem;flex-wrap:wrap">
+                ${currentTargetInput
+                    ? `<button type="button" class="btn btn-primary btn-sm use-contact" data-email="${escapeHtml(contact.email)}">Use Email</button>`
+                    : `<a href="?action=compose&to=${encodeURIComponent(contact.email)}" class="btn btn-outline btn-sm" target="_self">Compose</a>`
+                }
+                <button type="button" class="btn btn-outline btn-sm edit-from-view" data-id="${contact.id}">Edit</button>
+            </div>
+        `;
+        viewPanel.style.display = 'block';
+
+        var backBtn = viewPanel.querySelector('.close-contact-view');
+        if (backBtn) backBtn.addEventListener('click', closeContactView);
+
+        var copyBtn = viewPanel.querySelector('.copy-contact-notes');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', function() {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(contact.notes || '').then(function() {
+                        copyBtn.textContent = 'Copied!';
+                        setTimeout(function() { copyBtn.textContent = 'Copy notes'; }, 1500);
+                    });
+                }
+            });
+        }
+
+        var editFromView = viewPanel.querySelector('.edit-from-view');
+        if (editFromView) {
+            editFromView.addEventListener('click', function() {
+                closeContactView();
+                openContactEdit(contact);
+            });
+        }
+
+        var useFromView = viewPanel.querySelector('.use-contact');
+        if (useFromView && currentTargetInput) {
+            useFromView.addEventListener('click', function() {
+                var input = document.getElementById(currentTargetInput);
+                if (input) {
+                    var val = input.value.trim();
+                    input.value = val ? (val + ', ' + contact.email) : contact.email;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    hideModal();
+                }
+            });
+        }
+    }
+
+    function openContactEdit(contact) {
+        if (!contact) return;
+        closeContactView();
+        document.getElementById('contact-id').value = contact.id;
+        addForm.querySelector('input[name="name"]').value = contact.name;
+        addForm.querySelector('input[name="email"]').value = contact.email;
+        addForm.querySelector('input[name="phone"]').value = contact.phone || '';
+        addForm.querySelector('input[name="address"]').value = contact.address || '';
+        addForm.querySelector('textarea[name="notes"]').value = contact.notes || '';
+        document.getElementById('save-contact-btn').textContent = 'Update Contact';
+        addForm.style.display = 'block';
+        addForm.querySelector('input[name="name"]').focus();
+    }
+
     function loadContacts() {
+        closeContactView();
         listContainer.innerHTML = '<div class="wm-email-loading"><div class="spinner"></div><span>Loading contacts...</span></div>';
         fetch('?action=contacts_list', {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
@@ -656,18 +917,23 @@ document.addEventListener('click', function() {
         contacts.forEach(c => {
             var div = document.createElement('div');
             div.className = 'contact-item';
+            var notesPreview = c.notes ? c.notes.replace(/\s+/g, ' ').trim() : '';
             div.innerHTML = `
                 <div class="wm-account-avatar" style="width:36px;height:36px;font-size:.9rem">
-                    ${(c.name || c.email).charAt(0).toUpperCase()}
+                    ${escapeHtml((c.name || c.email).charAt(0).toUpperCase())}
                 </div>
                 <div class="contact-info">
                     <span class="contact-name">${escapeHtml(c.name)}</span>
                     <span class="contact-email">${escapeHtml(c.email)}</span>
                     ${c.phone ? `<span style="font-size:.75rem;display:block;color:var(--wm-text-muted)">📞 ${escapeHtml(c.phone)}</span>` : ''}
                     ${c.address ? `<span style="font-size:.75rem;display:block;color:var(--wm-text-muted)">📍 ${escapeHtml(c.address)}</span>` : ''}
+                    ${notesPreview ? `<span style="font-size:.75rem;display:block;color:var(--wm-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📝 ${escapeHtml(notesPreview)}</span>` : ''}
                 </div>
-                <div style="display:flex;gap:.25rem">
+                <div style="display:flex;gap:.25rem;flex-shrink:0">
                     ${currentTargetInput ? `<button type="button" class="btn btn-primary btn-sm use-contact" data-email="${escapeHtml(c.email)}">Use</button>` : ''}
+                    <button type="button" class="btn btn-ghost btn-sm view-contact" data-id="${c.id}" title="View contact & notes">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
                     <button type="button" class="btn btn-ghost btn-sm edit-contact" data-id="${c.id}" title="Edit">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
@@ -700,6 +966,7 @@ document.addEventListener('click', function() {
         modal.classList.remove('minimized');
         widget.style.display = 'none';
         addForm.style.display = 'none';
+        closeContactView();
         sessionStorage.setItem('wm_contacts_open', '0');
         sessionStorage.setItem('wm_contacts_minimized', '0');
     }
@@ -745,6 +1012,7 @@ document.addEventListener('click', function() {
     });
 
     addToggle.addEventListener('click', function() {
+        closeContactView();
         addForm.reset();
         document.getElementById('contact-id').value = '';
         document.getElementById('save-contact-btn').textContent = 'Save Contact';
@@ -781,21 +1049,19 @@ document.addEventListener('click', function() {
     });
 
     listContainer.addEventListener('click', function(e) {
+        var viewBtn = e.target.closest('.view-contact');
+        if (viewBtn) {
+            var id = parseInt(viewBtn.dataset.id, 10);
+            var contact = allContacts.find(c => parseInt(c.id, 10) === id);
+            if (contact) openContactView(contact);
+            return;
+        }
+
         var editBtn = e.target.closest('.edit-contact');
         if (editBtn) {
-            var id = parseInt(editBtn.dataset.id);
-            var contact = allContacts.find(c => c.id === id);
-            if (contact) {
-                document.getElementById('contact-id').value = contact.id;
-                addForm.querySelector('input[name="name"]').value = contact.name;
-                addForm.querySelector('input[name="email"]').value = contact.email;
-                addForm.querySelector('input[name="phone"]').value = contact.phone || '';
-                addForm.querySelector('input[name="address"]').value = contact.address || '';
-                addForm.querySelector('textarea[name="notes"]').value = contact.notes || '';
-                document.getElementById('save-contact-btn').textContent = 'Update Contact';
-                addForm.style.display = 'block';
-                addForm.querySelector('input[name="name"]').focus();
-            }
+            var id = parseInt(editBtn.dataset.id, 10);
+            var contact = allContacts.find(c => parseInt(c.id, 10) === id);
+            if (contact) openContactEdit(contact);
             return;
         }
 
@@ -828,15 +1094,19 @@ document.addEventListener('click', function() {
                 } else {
                     input.value = email;
                 }
-                modal.style.display = 'none';
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                hideModal();
             }
         }
     });
 
     searchInput.addEventListener('input', function() {
+        closeContactView();
         var q = searchInput.value.toLowerCase();
         var filtered = allContacts.filter(c => 
-            c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)
+            c.name.toLowerCase().includes(q)
+            || c.email.toLowerCase().includes(q)
+            || (c.notes || '').toLowerCase().includes(q)
         );
         renderContacts(filtered);
     });

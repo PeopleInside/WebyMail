@@ -134,6 +134,16 @@ class Database
                 attempts      INTEGER NOT NULL DEFAULT 1,
                 last_attempt  INTEGER NOT NULL DEFAULT (strftime('%s','now'))
             );
+
+            CREATE TABLE IF NOT EXISTS email_templates (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                name_enc    TEXT    NOT NULL,
+                subject_enc TEXT,
+                body_enc    TEXT,
+                created_at  INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                updated_at  INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+            );
         ");
 
         // 2. Lightweight migrations (ensure columns exist in case of upgrade)
@@ -179,6 +189,7 @@ class Database
             CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
             CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
             CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id);
+            CREATE INDEX IF NOT EXISTS idx_email_templates_user ON email_templates(user_id);
             CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip_address);
             CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts(username);
             CREATE INDEX IF NOT EXISTS idx_login_attempts_identifier ON login_attempts(identifier);

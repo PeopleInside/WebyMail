@@ -159,23 +159,39 @@ function jsonResponse(array $data): never
 function findFolderName(array $folders, array $candidates, string $fallback): string
 {
     /**
-     * Find the first folder whose display or name matches any candidate (case-insensitive).
+     * Find the first folder whose display, name, or last path segment matches any candidate (case-insensitive).
      * Falls back to the provided default if no match is found.
      */
     foreach ($folders as $f) {
+        $display = (string) ($f['display'] ?? '');
+        $name    = (string) ($f['name'] ?? '');
         foreach ($candidates as $cand) {
-            if (strcasecmp($f['display'], $cand) === 0 || strcasecmp($f['name'], $cand) === 0) {
-                return $f['name'];
+            if (strcasecmp($display, $cand) === 0 || strcasecmp($name, $cand) === 0) {
+                return $name;
+            }
+        }
+    }
+    foreach ($folders as $f) {
+        $name = (string) ($f['name'] ?? '');
+        $parts = preg_split('/[\.\\/]/', $name) ?: [$name];
+        $lastSegment = trim((string) end($parts));
+        foreach ($candidates as $cand) {
+            $candParts = preg_split('/[\.\\/]/', $cand) ?: [$cand];
+            $candLast = trim((string) end($candParts));
+            if ($lastSegment !== '' && strcasecmp($lastSegment, $candLast) === 0) {
+                return $name;
             }
         }
     }
     return $fallback;
 }
 
-const TRASH_FOLDER_VARIANTS = ['Trash', 'Deleted', 'Deleted Items', 'Cestino', 'Posta eliminata'];
-const SPAM_FOLDER_VARIANTS  = ['Spam', 'Junk', 'Junk E-mail', 'Junk Mail', 'Posta indesiderata', 'Antispam'];
-const SENT_FOLDER_VARIANTS  = ['Sent', 'Sent Items', 'Posta inviata', 'Inviata'];
-const DRAFTS_FOLDER_VARIANTS = ['Drafts', 'Bozze', 'Draft'];
+const TRASH_FOLDER_VARIANTS   = ['Trash', 'Deleted', 'Deleted Items', 'Deleted Messages', '[Gmail]/Trash', '[Gmail]/Cestino', 'Bin', 'Cestino', 'Posta eliminata', 'Posta cestinata', 'Eliminati'];
+const SPAM_FOLDER_VARIANTS    = ['Spam', 'Junk', 'Junk E-mail', 'Junk Mail', 'Bulk Mail', '[Gmail]/Spam', '[Gmail]/Posta indesiderata', 'Posta indesiderata', 'Indesiderata', 'Antispam'];
+const SENT_FOLDER_VARIANTS    = ['Sent', 'Sent Items', 'Sent Mail', 'Sent Messages', 'Sent Objects', '[Gmail]/Sent Mail', '[Gmail]/Posta inviata', 'Posta inviata', 'Inviata', 'Inviati', 'Inviate'];
+const DRAFTS_FOLDER_VARIANTS  = ['Drafts', 'Bozze', 'Draft', '[Gmail]/Drafts', '[Gmail]/Bozze'];
+const ARCHIVE_FOLDER_VARIANTS = ['Archive', 'Archives', 'Archivio', '[Gmail]/Archive', '[Gmail]/Archivio'];
+const UNIFIED_FOLDER_TYPES    = ['inbox', 'sent', 'spam', 'trash', 'drafts', 'archive'];
 
 function resolveTrashFolder(ImapClient $imap): string
 {
@@ -201,6 +217,166 @@ function resolveSentFolder(ImapClient $imap): string
 function resolveDraftsFolder(ImapClient $imap): string
 {
     return findFolderName($imap->getFolders(), DRAFTS_FOLDER_VARIANTS, 'Drafts');
+}
+
+function isValidUnifiedFolder(string $ufolder): bool
+{
+    $ufolder = trim($ufolder);
+    if (in_array(strtolower($ufolder), UNIFIED_FOLDER_TYPES, true)) {
+        return true;
+    }
+    if (str_starts_with(strtolower($ufolder), 'custom:')) {
+        $rest = substr($ufolder, 7);
+        return $rest !== '' && strlen($rest) <= 200 && !preg_match('/[\x00-\x1F\x7F]/', $rest);
+    }
+    return false;
+}
+
+function normalizeUnifiedFolder(string $ufolder): string
+{
+    $ufolder = preg_replace('/[\x00-\x1F\x7F]/', '', trim($ufolder));
+    $lower   = function_exists('mb_strtolower') ? mb_strtolower($ufolder, 'UTF-8') : strtolower($ufolder);
+    if (in_array($lower, UNIFIED_FOLDER_TYPES, true)) {
+        return $lower;
+    }
+    if (str_starts_with($lower, 'custom:') && strlen($lower) > 7) {
+        return $lower;
+    }
+    return 'inbox';
+}
+
+function classifyFolderForUnified(array $folder): ?array
+{
+    $name    = (string) ($folder['name'] ?? '');
+    $display = (string) ($folder['display'] ?? $name);
+    if (trim($name) === '' || in_array(strtolower(trim($name)), ['[gmail]', '[google mail]'], true)) {
+        return null;
+    }
+    if (strtoupper($name) === 'INBOX' || strcasecmp($display, 'Inbox') === 0) {
+        return ['key' => 'inbox', 'label' => 'Inbox'];
+    }
+    $single = [['name' => $name, 'display' => $display]];
+    if (findFolderName($single, SENT_FOLDER_VARIANTS, '') !== '') {
+        return ['key' => 'sent', 'label' => 'Sent'];
+    }
+    if (findFolderName($single, SPAM_FOLDER_VARIANTS, '') !== '') {
+        return ['key' => 'spam', 'label' => 'Spam'];
+    }
+    if (findFolderName($single, TRASH_FOLDER_VARIANTS, '') !== '') {
+        return ['key' => 'trash', 'label' => 'Trash'];
+    }
+    if (findFolderName($single, DRAFTS_FOLDER_VARIANTS, '') !== '') {
+        return ['key' => 'drafts', 'label' => 'Drafts'];
+    }
+    if (findFolderName($single, ARCHIVE_FOLDER_VARIANTS, '') !== '') {
+        return ['key' => 'archive', 'label' => 'Archive'];
+    }
+
+    $rel = trim(str_replace('\\', '/', $name));
+    $rel = preg_replace('/^(\[Gmail\]\/|\[Google Mail\]\/|INBOX[\.\/])/i', '', $rel) ?? $rel;
+    $rel = trim($rel, '/.');
+    if ($rel === '') {
+        $rel = trim($display) !== '' ? trim($display) : trim($name);
+    }
+    $relLabel = str_contains($rel, '/') ? implode(' / ', array_map('trim', explode('/', $rel))) : $rel;
+    $relLower = function_exists('mb_strtolower') ? mb_strtolower($rel, 'UTF-8') : strtolower($rel);
+    return ['key' => 'custom:' . $relLower, 'label' => $relLabel];
+}
+
+function resolveUnifiedFoldersForAccount(ImapClient $imap, string $ufolder, ?array $folders = null): array
+{
+    $folders = $folders ?? $imap->getFolders();
+    if ($ufolder === 'inbox') {
+        $matched = [];
+        foreach ($folders as $f) {
+            $name = (string) ($f['name'] ?? '');
+            if (strtoupper($name) === 'INBOX') {
+                $matched[] = $name;
+            }
+        }
+        return !empty($matched) ? array_values(array_unique($matched)) : ['INBOX'];
+    }
+
+    $matched = [];
+    foreach ($folders as $f) {
+        $cls = classifyFolderForUnified($f);
+        if ($cls !== null && $cls['key'] === $ufolder) {
+            $name = (string) ($f['name'] ?? '');
+            if ($name !== '') {
+                $matched[] = $name;
+            }
+        }
+    }
+    return array_values(array_unique($matched));
+}
+
+function resolveTargetAccountId(Account $accountMgr, int $userId, int $defaultAccountId, ?int $requestedId = null): int
+{
+    if ($requestedId !== null && $requestedId > 0 && $requestedId !== $defaultAccountId) {
+        if ($accountMgr->belongsToUser($requestedId, $userId)) {
+            return $requestedId;
+        }
+    }
+    return $defaultAccountId;
+}
+
+function isImapAuthError(string $errorMsg): bool
+{
+    $lower = strtolower($errorMsg);
+    return str_contains($lower, 'auth')
+        || str_contains($lower, 'login')
+        || str_contains($lower, 'credential')
+        || str_contains($lower, 'password');
+}
+
+function extractEmailAddressesList(string $header): array
+{
+    if (trim($header) === '') {
+        return [];
+    }
+    $results = [];
+    // Split on commas outside quotes
+    $parts = preg_split('/,(?=(?:[^"]*"[^"]*")*[^"]*$)/', $header) ?: [];
+    foreach ($parts as $part) {
+        $part = trim($part);
+        if ($part === '') {
+            continue;
+        }
+        if (preg_match('/<([^>\s]+@[^>\s]+)>/', $part, $m)) {
+            $email = strtolower(trim($m[1]));
+        } elseif (preg_match('/([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})/i', $part, $m)) {
+            $email = strtolower(trim($m[1]));
+        } else {
+            $email = '';
+        }
+        $results[] = ['raw' => $part, 'email' => $email];
+    }
+    return $results;
+}
+
+function buildReplyAllCc(string $origTo, string $origCc, string $replyAddress, string $ownEmail): string
+{
+    $exclude = [];
+    foreach (extractEmailAddressesList($replyAddress) as $item) {
+        if ($item['email'] !== '') {
+            $exclude[$item['email']] = true;
+        }
+    }
+    if ($ownEmail !== '') {
+        $exclude[strtolower(trim($ownEmail))] = true;
+    }
+
+    $seen = [];
+    $out  = [];
+    foreach (array_merge(extractEmailAddressesList($origTo), extractEmailAddressesList($origCc)) as $item) {
+        $key = $item['email'] !== '' ? $item['email'] : strtolower($item['raw']);
+        if ($key === '' || isset($exclude[$key]) || isset($seen[$key])) {
+            continue;
+        }
+        $seen[$key] = true;
+        $out[] = $item['raw'];
+    }
+    return implode(', ', $out);
 }
 
 function isTrashFolderEquivalent(string $folder, string $trash): bool
@@ -313,6 +489,7 @@ const COMPOSE_PREFILL_ALLOWED_KEYS = [
     'draft_folder',
     'reply_msg',
     'folder',
+    'from_unified',
     'resume_send',
 ];
 
@@ -547,8 +724,17 @@ $userId    = (int) $session['user_id'];
 $accountId = (int) $session['account_id'];
 
 $accountMgr = new Account();
+if ($action === 'inbox' && isset($_GET['account_id'])) {
+    $reqAccountId = (int) $_GET['account_id'];
+    if ($reqAccountId > 0 && $reqAccountId !== $accountId && $accountMgr->belongsToUser($reqAccountId, $userId)) {
+        (new Session())->switchAccount($reqAccountId);
+        $accountId = $reqAccountId;
+        $session['account_id'] = $reqAccountId;
+    }
+}
 $accounts   = $accountMgr->getForUser($userId);
 $flash      = flashGet();
+$hadSessionFlash = ($flash !== null);
 
 // Check if current account is already invalid to show persistent banner
 $currentAccount = null;
@@ -571,6 +757,8 @@ if (file_exists(WEBYMAIL_ROOT . '/setup.php')) {
 // Build folder list (from IMAP)
 $folders       = [];
 $currentFolder = $_GET['folder'] ?? 'INBOX';
+$preImap       = null;
+$preImapError  = null;
 try {
     $imap    = $accountMgr->imapConnect($accountId);
     $folders = $imap->getFolders();
@@ -588,12 +776,17 @@ try {
         }
         return strcmp($a['display'], $b['display']);
     });
+    $preImap = $imap;
 } catch (RuntimeException $e) {
     // IMAP might be temporarily unavailable; non-fatal
     $errorMsg = $e->getMessage();
+    $preImapError = $errorMsg;
     error_log('Folder list load failed for user ' . $userId . ', account ' . $accountId . ': ' . $errorMsg);
-    if (str_contains(strtolower($errorMsg), 'auth') || str_contains(strtolower($errorMsg), 'login') || str_contains(strtolower($errorMsg), 'credential')) {
+    if (isImapAuthError($errorMsg)) {
         $accountMgr->setValidationStatus($accountId, 'invalid');
+        if ($currentAccount) {
+            $currentAccount['validation_status'] = 'invalid';
+        }
         if (empty($flash)) {
             $flash = ['type' => 'danger', 'message' => 'Authentication failed for this account. Please check your settings.'];
         }
@@ -607,15 +800,47 @@ if (empty($folders)) {
     ];
 }
 
+$rawFromUnified = (string) ($_GET['from_unified'] ?? $_POST['from_unified'] ?? '');
+$fromUnified = isValidUnifiedFolder($rawFromUnified) ? normalizeUnifiedFolder($rawFromUnified) : '';
+$unifiedFolder = $action === 'unified'
+    ? normalizeUnifiedFolder((string) ($_GET['ufolder'] ?? 'inbox'))
+    : $fromUnified;
+$isUnified = ($action === 'unified') || ($fromUnified !== '' && in_array($action, ['view', 'compose', 'preview_eml'], true));
+
+$cachedUnifiedFolders = [];
+$uCache = $_SESSION['unified_folders'] ?? null;
+if (is_array($uCache) && (int) ($uCache['user_id'] ?? 0) === $userId && is_array($uCache['folders'] ?? null)) {
+    $cachedUnifiedFolders = $uCache['folders'];
+}
+
+$cachedUnifiedAccountFolders = [];
+$uaCache = $_SESSION['unified_account_folders'] ?? null;
+if (is_array($uaCache) && (int) ($uaCache['user_id'] ?? 0) === $userId && is_array($uaCache['accounts'] ?? null)) {
+    $cachedUnifiedAccountFolders = $uaCache['accounts'];
+}
+
 $layoutCommon = [
-    'session'        => $session,
-    'accounts'       => $accounts,
-    'currentAccount' => $currentAccount,
-    'folders'        => $folders,
-    'currentFolder'  => $currentFolder,
-    'flash'          => $flash,
-    'setupBanner'    => $setupBanner,
+    'session'               => $session,
+    'accounts'              => $accounts,
+    'currentAccount'        => $currentAccount,
+    'folders'               => $folders,
+    'currentFolder'         => $currentFolder,
+    'flash'                 => $flash,
+    'setupBanner'           => $setupBanner,
+    'isUnified'             => $isUnified,
+    'unifiedFolder'         => $unifiedFolder,
+    'unifiedFolders'        => $cachedUnifiedFolders,
+    'unifiedAccountFolders' => $cachedUnifiedAccountFolders,
 ];
+
+if ($action !== 'unified' && $preImap !== null) {
+    try {
+        $preImap->disconnect();
+    } catch (Throwable $e) {
+        // Ignore
+    }
+    $preImap = null;
+}
 
 // ── Account switch ────────────────────────────────────────────────────────────
 if ($action === 'switch_account') {
@@ -642,6 +867,7 @@ if ($action === 'create_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $imap = $accountMgr->imapConnect($accountId);
         $imap->createFolder($name);
         $imap->disconnect();
+        unset($_SESSION['unified_folders'], $_SESSION['unified_account_folders']);
         flashSet('success', 'Folder "' . htmlspecialchars($name) . '" created.');
     } catch (RuntimeException $e) {
         error_log('Folder creation failed for user ' . $userId . ': ' . $e->getMessage());
@@ -661,6 +887,7 @@ if ($action === 'rename_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $imap = $accountMgr->imapConnect($accountId);
         $imap->renameFolder($oldName, $newName);
         $imap->disconnect();
+        unset($_SESSION['unified_folders'], $_SESSION['unified_account_folders']);
         flashSet('success', 'Folder renamed to "' . htmlspecialchars($newName) . '".');
     } catch (RuntimeException $e) {
         error_log('Folder rename failed for user ' . $userId . ': ' . $e->getMessage());
@@ -683,6 +910,7 @@ if ($action === 'delete_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $imap = $accountMgr->imapConnect($accountId);
         $imap->deleteFolder($name);
         $imap->disconnect();
+        unset($_SESSION['unified_folders'], $_SESSION['unified_account_folders']);
         flashSet('success', 'Folder "' . htmlspecialchars($name) . '" deleted.');
     } catch (RuntimeException $e) {
         error_log('Folder deletion failed for user ' . $userId . ': ' . $e->getMessage());
@@ -764,6 +992,68 @@ if ($action === 'contacts_delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect($_SERVER['HTTP_REFERER'] ?? '?action=inbox');
 }
 
+// ── Email Templates ───────────────────────────────────────────────────────────
+if ($action === 'templates_list' && isAjax()) {
+    $tplMgr = new EmailTemplate($userId);
+    jsonResponse(['ok' => true, 'templates' => $tplMgr->list()]);
+}
+
+if ($action === 'templates_add' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $name     = trim((string) ($_POST['name'] ?? ''));
+    $subject  = trim((string) ($_POST['subject'] ?? ''));
+    $rawBody  = (string) ($_POST['body_html'] ?? '');
+    $bodyHtml = sanitizeHtml($rawBody, true, 'light', false, true);
+
+    if ($name === '') {
+        if (isAjax()) jsonResponse(['ok' => false, 'error' => 'Template name is required.']);
+        flashSet('danger', 'Template name is required.');
+        redirect($_SERVER['HTTP_REFERER'] ?? '?action=compose');
+    }
+
+    $tplMgr = new EmailTemplate($userId);
+    $newId  = $tplMgr->add($name, $subject, $bodyHtml);
+
+    if (isAjax()) jsonResponse(['ok' => true, 'id' => $newId, 'template' => $tplMgr->get($newId)]);
+    flashSet('success', 'Template saved.');
+    redirect($_SERVER['HTTP_REFERER'] ?? '?action=compose');
+}
+
+if ($action === 'templates_edit' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $id       = (int) ($_POST['id'] ?? 0);
+    $name     = trim((string) ($_POST['name'] ?? ''));
+    $subject  = trim((string) ($_POST['subject'] ?? ''));
+    $rawBody  = (string) ($_POST['body_html'] ?? '');
+    $bodyHtml = sanitizeHtml($rawBody, true, 'light', false, true);
+
+    if ($id <= 0 || $name === '') {
+        if (isAjax()) jsonResponse(['ok' => false, 'error' => 'Template ID and name are required.']);
+        flashSet('danger', 'Template ID and name are required.');
+        redirect($_SERVER['HTTP_REFERER'] ?? '?action=compose');
+    }
+
+    $tplMgr = new EmailTemplate($userId);
+    if (!$tplMgr->get($id)) {
+        if (isAjax()) jsonResponse(['ok' => false, 'error' => 'Template not found.']);
+        flashSet('danger', 'Template not found.');
+        redirect($_SERVER['HTTP_REFERER'] ?? '?action=compose');
+    }
+    $tplMgr->edit($id, $name, $subject, $bodyHtml);
+
+    if (isAjax()) jsonResponse(['ok' => true, 'template' => $tplMgr->get($id)]);
+    flashSet('success', 'Template updated.');
+    redirect($_SERVER['HTTP_REFERER'] ?? '?action=compose');
+}
+
+if ($action === 'templates_delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $id     = (int) ($_POST['id'] ?? 0);
+    $tplMgr = new EmailTemplate($userId);
+    $tplMgr->delete($id);
+
+    if (isAjax()) jsonResponse(['ok' => true]);
+    flashSet('success', 'Template deleted.');
+    redirect($_SERVER['HTTP_REFERER'] ?? '?action=compose');
+}
+
 // ── Inbox ─────────────────────────────────────────────────────────────────────
 if ($action === 'inbox' || $action === 'search') {
     $page    = max(1, (int) ($_GET['page'] ?? 1));
@@ -798,31 +1088,336 @@ if ($action === 'inbox' || $action === 'search') {
     exit;
 }
 
+// ── Unified Mailbox (multi-account) ───────────────────────────────────────────
+if ($action === 'unified') {
+    if (count($accounts) <= 1) {
+        if ($preImap !== null) {
+            try { $preImap->disconnect(); } catch (Throwable $e) {}
+        }
+        redirect('?action=inbox');
+    }
+
+    $ufolder     = normalizeUnifiedFolder((string) ($_GET['ufolder'] ?? 'inbox'));
+    $page        = max(1, (int) ($_GET['page'] ?? 1));
+    $perPage     = 30;
+    $fetchLimit  = $page * $perPage;
+    $allMessages = [];
+    $totalCount  = 0;
+    $unifiedErrors = [];
+
+    // If flash came solely from the stale pre-check on invalid status, let live multi-account check report errors cleanly
+    if (!$hadSessionFlash) {
+        $flash = null;
+    }
+
+    $folderLabels = [
+        'inbox'   => 'Inbox',
+        'sent'    => 'Sent',
+        'spam'    => 'Spam',
+        'trash'   => 'Trash',
+        'drafts'  => 'Drafts',
+        'archive' => 'Archive',
+    ];
+
+    $unifiedFoldersMap = [
+        'inbox' => ['key' => 'inbox', 'label' => 'Inbox', 'unread' => 0],
+        'sent'  => ['key' => 'sent',  'label' => 'Sent',  'unread' => 0],
+        'spam'  => ['key' => 'spam',  'label' => 'Spam',  'unread' => 0],
+        'trash' => ['key' => 'trash', 'label' => 'Trash', 'unread' => 0],
+    ];
+    $unifiedAccountFolders = [];
+
+    foreach ($accounts as &$acc) {
+        $accId    = (int) $acc['id'];
+        $accLabel = ($acc['label'] ?? '') !== '' ? $acc['label'] : $acc['email'];
+        $accEmail = (string) ($acc['email'] ?? '');
+        $accImap  = null;
+
+        try {
+            if ($accId === $accountId && $preImap !== null) {
+                $accImap = $preImap;
+                $preImap = null;
+            } elseif ($accId === $accountId && $preImapError !== null) {
+                throw new RuntimeException($preImapError);
+            } else {
+                $accImap = $accountMgr->imapConnect($accId);
+            }
+
+            if (($acc['validation_status'] ?? '') === 'invalid') {
+                $accountMgr->setValidationStatus($accId, 'valid');
+                $acc['validation_status'] = 'valid';
+            }
+
+            if ($accId === $accountId && !empty($folders)) {
+                $accFolders = $folders;
+            } else {
+                $accFolders = $accImap->getFolders();
+                if (count($accFolders) <= 20) {
+                    foreach ($accFolders as &$af) {
+                        $af['unread'] = $accImap->getUnreadCount($af['name']);
+                    }
+                    unset($af);
+                }
+                usort($accFolders, static function (array $a, array $b): int {
+                    $aIsInbox = strtoupper((string) ($a['name'] ?? '')) === 'INBOX';
+                    $bIsInbox = strtoupper((string) ($b['name'] ?? '')) === 'INBOX';
+                    if ($aIsInbox !== $bIsInbox) {
+                        return $aIsInbox ? -1 : 1;
+                    }
+                    return strnatcasecmp((string) ($a['display'] ?? ''), (string) ($b['display'] ?? ''));
+                });
+            }
+
+            $accUnreadTotal = 0;
+            foreach ($accFolders as $af) {
+                $afUnread = (int) ($af['unread'] ?? 0);
+                $accUnreadTotal += $afUnread;
+                $cls = classifyFolderForUnified($af);
+                if ($cls === null) {
+                    continue;
+                }
+                $uKey = $cls['key'];
+                if (!isset($unifiedFoldersMap[$uKey])) {
+                    $unifiedFoldersMap[$uKey] = [
+                        'key'    => $uKey,
+                        'label'  => $cls['label'],
+                        'unread' => 0,
+                    ];
+                }
+                $unifiedFoldersMap[$uKey]['unread'] += $afUnread;
+            }
+
+            $unifiedAccountFolders[] = [
+                'account_id'    => $accId,
+                'label'         => $accLabel,
+                'email'         => $accEmail,
+                'folders'       => $accFolders,
+                'unread_total'  => $accUnreadTotal,
+                'error'         => null,
+            ];
+
+            $targetFolders = resolveUnifiedFoldersForAccount($accImap, $ufolder, $accFolders);
+            foreach ($targetFolders as $targetFolder) {
+                $res = $accImap->getMessages($targetFolder, 1, $fetchLimit);
+                $totalCount += (int) ($res['total'] ?? 0);
+                foreach (($res['messages'] ?? []) as $msg) {
+                    $msg['account_id']     = $accId;
+                    $msg['account_label']  = $accLabel;
+                    $msg['account_email']  = $accEmail;
+                    $msg['account_folder'] = $targetFolder;
+                    $allMessages[] = $msg;
+                }
+            }
+
+            $accImap->disconnect();
+            $accImap = null;
+        } catch (RuntimeException $e) {
+            if ($accImap !== null) {
+                try { $accImap->disconnect(); } catch (Throwable $ignored) {}
+            }
+            $errorMsg = $e->getMessage();
+            error_log('Unified mailbox load failed for user ' . $userId . ', account ' . $accId . ' (' . $accEmail . '): ' . $errorMsg);
+            $isAuth = isImapAuthError($errorMsg);
+            if ($isAuth) {
+                $accountMgr->setValidationStatus($accId, 'invalid');
+                $acc['validation_status'] = 'invalid';
+            }
+            $errText = $isAuth
+                ? 'Authentication failed for this account. Please check your settings.'
+                : 'Unable to load messages. Please check your account settings.';
+            $unifiedErrors[] = [
+                'account_id'    => $accId,
+                'account_label' => $accLabel,
+                'account_email' => $accEmail,
+                'is_auth'       => $isAuth,
+                'message'       => $errText,
+            ];
+            $unifiedAccountFolders[] = [
+                'account_id'   => $accId,
+                'label'        => $accLabel,
+                'email'        => $accEmail,
+                'folders'      => ($accId === $accountId) ? $folders : [],
+                'unread_total' => 0,
+                'error'        => $errText,
+            ];
+        }
+    }
+    unset($acc);
+
+    $unifiedFolders = array_values($unifiedFoldersMap);
+    $coreOrder = ['inbox' => 0, 'sent' => 1, 'spam' => 2, 'trash' => 3, 'drafts' => 4, 'archive' => 5];
+    usort($unifiedFolders, static function (array $a, array $b) use ($coreOrder): int {
+        $oa = $coreOrder[$a['key']] ?? 99;
+        $ob = $coreOrder[$b['key']] ?? 99;
+        if ($oa !== $ob) {
+            return $oa <=> $ob;
+        }
+        return strnatcasecmp($a['label'], $b['label']);
+    });
+
+    $_SESSION['unified_folders'] = [
+        'user_id' => $userId,
+        'folders' => $unifiedFolders,
+    ];
+    $_SESSION['unified_account_folders'] = [
+        'user_id'  => $userId,
+        'accounts' => $unifiedAccountFolders,
+    ];
+
+    if ($preImap !== null) {
+        try { $preImap->disconnect(); } catch (Throwable $e) {}
+    }
+
+    // Refresh currentAccount & layoutCommon after live validation status updates
+    foreach ($accounts as $acc) {
+        if ((int)$acc['id'] === $accountId) {
+            $currentAccount = $acc;
+            break;
+        }
+    }
+    $layoutCommon['accounts']              = $accounts;
+    $layoutCommon['currentAccount']        = $currentAccount;
+    $layoutCommon['flash']                 = $flash;
+    $layoutCommon['unifiedFolders']        = $unifiedFolders;
+    $layoutCommon['unifiedAccountFolders'] = $unifiedAccountFolders;
+
+    $activeFolderLabel = $folderLabels[$ufolder] ?? ($unifiedFoldersMap[$ufolder]['label'] ?? ucfirst(str_replace('custom:', '', $ufolder)));
+
+    usort($allMessages, static function (array $a, array $b): int {
+        $cmp = ((int) ($b['timestamp'] ?? 0)) <=> ((int) ($a['timestamp'] ?? 0));
+        if ($cmp !== 0) {
+            return $cmp;
+        }
+        return ((int) ($b['msg_no'] ?? 0)) <=> ((int) ($a['msg_no'] ?? 0));
+    });
+
+    $pages = $totalCount > 0 ? (int) ceil($totalCount / $perPage) : 0;
+    if ($pages > 0 && $page > $pages) {
+        $page = $pages;
+    }
+    $offset       = ($page - 1) * $perPage;
+    $pageMessages = array_slice($allMessages, $offset, $perPage);
+
+    render('unified', $layoutCommon + [
+        'messages'       => $pageMessages,
+        'total'          => $totalCount,
+        'page'           => $page,
+        'pages'          => $pages,
+        'ufolder'        => $ufolder,
+        'folderLabel'    => $activeFolderLabel,
+        'unifiedFolders' => $unifiedFolders,
+        'unifiedErrors'  => $unifiedErrors,
+        'pageTitle'      => pageTitle('Unified – ' . $activeFolderLabel),
+    ]);
+    exit;
+}
+
+// ── Unified Bulk Actions (AJAX) ───────────────────────────────────────────────
+if ($action === 'unified_bulk' && isAjax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $body  = json_decode(file_get_contents('php://input'), true) ?? [];
+    $act   = (string) ($body['action'] ?? '');
+    $items = is_array($body['items'] ?? null) ? $body['items'] : [];
+
+    if (!in_array($act, ['read', 'unread', 'delete'], true) || empty($items)) {
+        jsonResponse(['ok' => false, 'error' => 'Invalid unified bulk request.']);
+    }
+
+    $grouped = [];
+    foreach ($items as $item) {
+        if (!is_array($item)) continue;
+        $tAccId  = (int) ($item['account_id'] ?? 0);
+        $tFolder = (string) ($item['folder'] ?? 'INBOX');
+        $tUid    = (int) ($item['uid'] ?? 0);
+        if ($tAccId <= 0 || $tUid <= 0 || !$accountMgr->belongsToUser($tAccId, $userId)) {
+            continue;
+        }
+        $grouped[$tAccId][$tFolder][] = $tUid;
+    }
+
+    if (empty($grouped)) {
+        jsonResponse(['ok' => false, 'error' => 'No valid messages selected.']);
+    }
+
+    $errors = [];
+    $succeeded = 0;
+    foreach ($grouped as $tAccId => $byFolder) {
+        $tImap = null;
+        try {
+            $tImap = $accountMgr->imapConnect((int) $tAccId);
+            $trash = $act === 'delete' ? resolveTrashFolder($tImap) : '';
+            foreach ($byFolder as $tFolder => $uids) {
+                $validFolder = validateSourceFolder($tImap, $tFolder);
+                if ($act === 'delete') {
+                    $inTrash = isTrashFolderEquivalent($validFolder, $trash);
+                    foreach ($uids as $uid) {
+                        moveToTrashOrDeleteByUid($tImap, $validFolder, (int) $uid, $trash, $inTrash);
+                        $succeeded++;
+                    }
+                } else {
+                    foreach ($uids as $uid) {
+                        $tImap->markReadByUid($validFolder, (int) $uid, $act === 'read');
+                        $succeeded++;
+                    }
+                }
+            }
+            $tImap->disconnect();
+        } catch (RuntimeException $e) {
+            if ($tImap !== null) {
+                try { $tImap->disconnect(); } catch (Throwable $ignored) {}
+            }
+            error_log('Unified bulk action failed for user ' . $userId . ', account ' . $tAccId . ', action ' . $act . ': ' . $e->getMessage());
+            $errors[] = 'Action failed for one of the accounts.';
+        }
+    }
+
+    if ($succeeded === 0 && !empty($errors)) {
+        jsonResponse(['ok' => false, 'error' => $errors[0]]);
+    }
+    jsonResponse(['ok' => true, 'errors' => $errors]);
+}
+
 // ── View message ──────────────────────────────────────────────────────────────
 if ($action === 'view') {
-    $msgNo  = (int) ($_GET['msg'] ?? 0);
-    $message = null;
-    $isTrash = false;
-    $isDraft = false;
+    $msgNo           = (int) ($_GET['msg'] ?? 0);
+    $targetAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, isset($_GET['account_id']) ? (int)$_GET['account_id'] : null);
+    $targetAccount   = null;
+    foreach ($accounts as $acc) {
+        if ((int)$acc['id'] === $targetAccountId) {
+            $targetAccount = $acc;
+            break;
+        }
+    }
+    $message       = null;
+    $isTrash       = false;
+    $isDraft       = false;
+    $targetFolders = $folders;
 
     try {
-        $imap    = $accountMgr->imapConnect($accountId);
-        $message = $imap->getMessage($currentFolder, $msgNo);
-        $trash   = resolveTrashFolder($imap);
-        $isTrash = isTrashFolderEquivalent($currentFolder, $trash);
-        $isDraft = isDraftsFolderEquivalent($currentFolder, $imap);
+        $imap          = $accountMgr->imapConnect($targetAccountId);
+        $targetFolders = $targetAccountId === $accountId ? $folders : $imap->getFolders();
+        $message       = $imap->getMessage($currentFolder, $msgNo);
+        $trash         = resolveTrashFolder($imap);
+        $isTrash       = isTrashFolderEquivalent($currentFolder, $trash);
+        $isDraft       = isDraftsFolderEquivalent($currentFolder, $imap);
 
         // Redirect to compose for drafts instead of simple view
         if ($isDraft) {
             $imap->disconnect();
             $folderEnc = urlencode($currentFolder);
-            header('Location: ?action=compose&folder=' . $folderEnc . '&edit_draft=' . $msgNo);
+            $extra = $targetAccountId !== $accountId ? '&account_id=' . $targetAccountId : '';
+            header('Location: ?action=compose&folder=' . $folderEnc . '&edit_draft=' . $msgNo . $extra);
             exit;
         }
         $imap->disconnect();
     } catch (RuntimeException $e) {
-        error_log('Message load failed for user ' . $userId . ', account ' . $accountId . ', folder ' . $currentFolder . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        error_log('Message load failed for user ' . $userId . ', account ' . $targetAccountId . ', folder ' . $currentFolder . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        if (isImapAuthError($e->getMessage())) {
+            $accountMgr->setValidationStatus($targetAccountId, 'invalid');
+        }
         flashSet('danger', 'Unable to load the selected message. Please try again later.');
+        if ($fromUnified !== '') {
+            redirect('?action=unified&ufolder=' . urlencode($fromUnified));
+        }
         redirect('?action=inbox&folder=' . urlencode($currentFolder));
     }
 
@@ -837,29 +1432,34 @@ if ($action === 'view') {
     }
 
     render('view', $layoutCommon + [
-        'message'     => $message,
-        'folder'      => $currentFolder,
-        'isTrash'     => $isTrash,
-        'isDraft'     => $isDraft,
-        'hasExternal' => $hasExternal,
-        'pageTitle'   => pageTitle($message['subject'] ?? 'View message'),
+        'message'         => $message,
+        'folder'          => $currentFolder,
+        'targetFolders'   => $targetFolders,
+        'targetAccountId' => $targetAccountId,
+        'targetAccount'   => $targetAccount,
+        'fromUnified'     => $fromUnified,
+        'isTrash'         => $isTrash,
+        'isDraft'         => $isDraft,
+        'hasExternal'     => $hasExternal,
+        'pageTitle'       => pageTitle($message['subject'] ?? 'View message'),
     ]);
     exit;
 }
 
 // ── Email body (rendered in sandboxed iframe) ─────────────────────────────────
 if ($action === 'email_body') {
-    $msgNo  = (int) ($_GET['msg']    ?? 0);
-    $folder = $_GET['folder'] ?? 'INBOX';
-    $showImages = !empty($_GET['images']) && $_GET['images'] === '1';
+    $msgNo           = (int) ($_GET['msg']    ?? 0);
+    $folder          = $_GET['folder'] ?? 'INBOX';
+    $showImages      = !empty($_GET['images']) && $_GET['images'] === '1';
+    $targetAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, isset($_GET['account_id']) ? (int)$_GET['account_id'] : null);
 
     try {
-        $imap    = $accountMgr->imapConnect($accountId);
+        $imap    = $accountMgr->imapConnect($targetAccountId);
         $folder  = validateSourceFolder($imap, $folder); // L-NEW: validate source folder
         $message = $imap->getMessage($folder, $msgNo);
         $imap->disconnect();
     } catch (Throwable $e) {
-        error_log('Email body load failed for user ' . $userId . ', account ' . $accountId . ', folder ' . $folder . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        error_log('Email body load failed for user ' . $userId . ', account ' . $targetAccountId . ', folder ' . $folder . ', msg ' . $msgNo . ': ' . $e->getMessage());
         http_response_code(500);
         exit('Error loading email content.');
     }
@@ -1273,11 +1873,12 @@ if ($action === 'import_eml' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ── Delete message ────────────────────────────────────────────────────────────
 if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $msgNo  = (int) ($_GET['msg']    ?? 0);
-    $folder = $_GET['folder'] ?? 'INBOX';
+    $msgNo           = (int) ($_GET['msg']    ?? 0);
+    $folder          = $_GET['folder'] ?? 'INBOX';
+    $targetAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, isset($_GET['account_id']) ? (int)$_GET['account_id'] : null);
 
     try {
-        $imap = $accountMgr->imapConnect($accountId);
+        $imap = $accountMgr->imapConnect($targetAccountId);
         $folder = validateSourceFolder($imap, $folder); // L-NEW: validate source folder
         $trash = resolveTrashFolder($imap);
         $inTrash = isTrashFolderEquivalent($folder, $trash);
@@ -1285,111 +1886,128 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $imap->disconnect();
         flashSet('success', $inTrash ? 'Message deleted.' : 'Message moved to Trash.');
     } catch (RuntimeException $e) {
-        error_log('Delete message failed for user ' . $userId . ', account ' . $accountId . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        error_log('Delete message failed for user ' . $userId . ', account ' . $targetAccountId . ', msg ' . $msgNo . ': ' . $e->getMessage());
         flashSet('danger', 'Could not delete message. Please try again later.');
+    }
+    if ($fromUnified !== '') {
+        redirect('?action=unified&ufolder=' . urlencode($fromUnified));
     }
     redirect('?action=inbox&folder=' . urlencode($folder));
 }
 
 // ── Mark as spam ──────────────────────────────────────────────────────────────
 if ($action === 'spam' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $msgNo  = (int) ($_GET['msg']    ?? 0);
-    $folder = $_GET['folder'] ?? 'INBOX';
+    $msgNo           = (int) ($_GET['msg']    ?? 0);
+    $folder          = $_GET['folder'] ?? 'INBOX';
+    $targetAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, isset($_GET['account_id']) ? (int)$_GET['account_id'] : null);
 
     try {
-        $imap = $accountMgr->imapConnect($accountId);
+        $imap = $accountMgr->imapConnect($targetAccountId);
         $folder = validateSourceFolder($imap, $folder); // L-NEW: validate source folder
         $spam = resolveSpamFolder($imap);
         $imap->moveMessage($folder, $msgNo, $spam);
         $imap->disconnect();
         flashSet('success', 'Message moved to Spam.');
     } catch (RuntimeException $e) {
-        error_log('Spam move failed for user ' . $userId . ', account ' . $accountId . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        error_log('Spam move failed for user ' . $userId . ', account ' . $targetAccountId . ', msg ' . $msgNo . ': ' . $e->getMessage());
         flashSet('danger', 'Could not move message to Spam. Please try again later.');
+    }
+    if ($fromUnified !== '') {
+        redirect('?action=unified&ufolder=' . urlencode($fromUnified));
     }
     redirect('?action=inbox&folder=' . urlencode($folder));
 }
 
 // ── Move message ─────────────────────────────────────────────────────────────────
 if ($action === 'move' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $msgNo       = (int) ($_GET['msg'] ?? 0);
-    $folder      = $_GET['folder'] ?? 'INBOX';
-    $destination = trim((string) ($_POST['destination'] ?? ''));
+    $msgNo           = (int) ($_GET['msg'] ?? 0);
+    $folder          = $_GET['folder'] ?? 'INBOX';
+    $destination     = trim((string) ($_POST['destination'] ?? ''));
+    $targetAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, isset($_GET['account_id']) ? (int)$_GET['account_id'] : null);
+    $viewExtra       = ($targetAccountId !== $accountId ? '&account_id=' . $targetAccountId : '')
+                     . ($fromUnified !== '' ? '&from_unified=' . urlencode($fromUnified) : '');
 
     if ($msgNo <= 0 || $destination === '') {
         flashSet('danger', 'Select a destination folder.');
-        redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
+        redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo . $viewExtra);
     }
 
     if ($destination === $folder) {
         flashSet('warning', 'The message is already in that folder.');
-        redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
+        redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo . $viewExtra);
     }
 
     try {
-        $imap = $accountMgr->imapConnect($accountId);
+        $imap = $accountMgr->imapConnect($targetAccountId);
         $folders = $imap->getFolders();
         if (!folderExists($folders, $destination)) {
             $imap->disconnect();
             flashSet('danger', 'Selected folder is not available.');
-            redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
+            redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo . $viewExtra);
         }
 
         $imap->moveMessage($folder, $msgNo, $destination);
         $imap->disconnect();
         flashSet('success', 'Message moved to "' . $destination . '".');
+        if ($fromUnified !== '') {
+            redirect('?action=unified&ufolder=' . urlencode($fromUnified));
+        }
         redirect('?action=inbox&folder=' . urlencode($destination));
     } catch (RuntimeException $e) {
-        error_log('Move message failed for user ' . $userId . ', account ' . $accountId . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        error_log('Move message failed for user ' . $userId . ', account ' . $targetAccountId . ', msg ' . $msgNo . ': ' . $e->getMessage());
         flashSet('danger', 'Could not move the message. Please try again later.');
     }
-    redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
+    redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo . $viewExtra);
 }
 
 // ── Copy message ─────────────────────────────────────────────────────────────────
 if ($action === 'copy' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $msgNo       = (int) ($_GET['msg']    ?? 0);
-    $folder      = $_GET['folder'] ?? 'INBOX';
-    $destination = trim((string) ($_POST['destination'] ?? ''));
+    $msgNo           = (int) ($_GET['msg']    ?? 0);
+    $folder          = $_GET['folder'] ?? 'INBOX';
+    $destination     = trim((string) ($_POST['destination'] ?? ''));
+    $targetAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, isset($_GET['account_id']) ? (int)$_GET['account_id'] : null);
+    $viewExtra       = ($targetAccountId !== $accountId ? '&account_id=' . $targetAccountId : '')
+                     . ($fromUnified !== '' ? '&from_unified=' . urlencode($fromUnified) : '');
 
     if ($msgNo <= 0 || $destination === '') {
         flashSet('danger', 'Select a destination folder.');
-        redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
+        redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo . $viewExtra);
     }
 
     try {
-        $imap = $accountMgr->imapConnect($accountId);
+        $imap = $accountMgr->imapConnect($targetAccountId);
         $folders = $imap->getFolders();
         if (!folderExists($folders, $destination)) {
             $imap->disconnect();
             flashSet('danger', 'Selected folder is not available.');
-            redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
+            redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo . $viewExtra);
         }
 
         $imap->copyMessage($folder, $msgNo, $destination);
         $imap->disconnect();
         flashSet('success', 'Message copied to "' . $destination . '".');
-        redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
+        redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo . $viewExtra);
     } catch (RuntimeException $e) {
-        error_log('Copy message failed for user ' . $userId . ', account ' . $accountId . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        error_log('Copy message failed for user ' . $userId . ', account ' . $targetAccountId . ', msg ' . $msgNo . ': ' . $e->getMessage());
         flashSet('danger', 'Could not copy the message. Please try again later.');
-        redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo);
+        redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo . $viewExtra);
     }
 }
 
 // ── Email headers (raw) ───────────────────────────────────────────────────────
 if ($action === 'email_headers' && isAjax()) {
-    $msgNo  = (int) ($_GET['msg']    ?? 0);
-    $folder = $_GET['folder'] ?? 'INBOX';
+    $msgNo           = (int) ($_GET['msg']    ?? 0);
+    $folder          = $_GET['folder'] ?? 'INBOX';
+    $targetAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, isset($_GET['account_id']) ? (int)$_GET['account_id'] : null);
 
     try {
-        $imap    = $accountMgr->imapConnect($accountId);
+        $imap    = $accountMgr->imapConnect($targetAccountId);
         $folder  = validateSourceFolder($imap, $folder); // L-NEW: validate source folder
         $headers = $imap->getRawHeaders($folder, $msgNo);
         $imap->disconnect();
         jsonResponse(['ok' => true, 'headers' => $headers]);
     } catch (RuntimeException $e) {
-        error_log('Raw headers request failed for user ' . $userId . ', account ' . $accountId . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        error_log('Raw headers request failed for user ' . $userId . ', account ' . $targetAccountId . ', msg ' . $msgNo . ': ' . $e->getMessage());
         jsonResponse(['ok' => false, 'error' => 'Could not load headers.']);
     }
 }
@@ -1489,8 +2107,9 @@ if ($action === 'bulk' && isAjax()) {
 
 // ── Attachment download ───────────────────────────────────────────────────────
 if ($action === 'attachment' || $action === 'download_all') {
-    $msgNo   = (int) ($_GET['msg']     ?? 0);
-    $folder  = $_GET['folder']  ?? 'INBOX';
+    $msgNo           = (int) ($_GET['msg']     ?? 0);
+    $folder          = $_GET['folder']  ?? 'INBOX';
+    $targetAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, isset($_GET['account_id']) ? (int)$_GET['account_id'] : null);
 
     if ($action === 'download_all') {
         if (!class_exists('ZipArchive')) {
@@ -1498,7 +2117,7 @@ if ($action === 'attachment' || $action === 'download_all') {
         }
 
         try {
-            $imap = $accountMgr->imapConnect($accountId);
+            $imap = $accountMgr->imapConnect($targetAccountId);
             $imap->selectFolder($folder);
             $structure = $imap->fetchStructure($msgNo);
             $attachments = $imap->getAttachments($msgNo, $structure);
@@ -1534,7 +2153,7 @@ if ($action === 'attachment' || $action === 'download_all') {
             unlink($zipFile);
             exit;
         } catch (Throwable $e) {
-            error_log('Download all attachments failed for user ' . $userId . ', account ' . $accountId . ', folder ' . $folder . ', msg ' . $msgNo . ': ' . $e->getMessage());
+            error_log('Download all attachments failed for user ' . $userId . ', account ' . $targetAccountId . ', folder ' . $folder . ', msg ' . $msgNo . ': ' . $e->getMessage());
             if (ob_get_level()) ob_clean();
             http_response_code(500);
             header('Content-Type: text/plain; charset=utf-8');
@@ -1558,7 +2177,7 @@ if ($action === 'attachment' || $action === 'download_all') {
     ini_set('memory_limit', '256M');
 
     try {
-        $imap = $accountMgr->imapConnect($accountId);
+        $imap = $accountMgr->imapConnect($targetAccountId);
         $imap->selectFolder($folder);
         $data = $imap->fetchAttachment($msgNo, $section);
         $imap->disconnect();
@@ -1567,7 +2186,7 @@ if ($action === 'attachment' || $action === 'download_all') {
             throw new Exception("Attachment data is empty or could not be retrieved.");
         }
     } catch (Throwable $e) {
-        error_log('Attachment download failed for user ' . $userId . ', account ' . $accountId . ', folder ' . $folder . ', msg ' . $msgNo . ', section ' . $section . ': ' . $e->getMessage());
+        error_log('Attachment download failed for user ' . $userId . ', account ' . $targetAccountId . ', folder ' . $folder . ', msg ' . $msgNo . ', section ' . $section . ': ' . $e->getMessage());
         if (ob_get_level()) ob_clean();
         http_response_code(500);
         header('Content-Type: text/plain; charset=utf-8');
@@ -1598,10 +2217,11 @@ if ($action === 'attachment' || $action === 'download_all') {
 
 // ── Preview .eml Attachment (In-browser viewer) ───────────────────────────────
 if ($action === 'preview_eml') {
-    $msgNo   = (int) ($_GET['msg'] ?? 0);
-    $folder  = $_GET['folder'] ?? 'INBOX';
-    $section = $_GET['section'] ?? '';
-    $name    = basename($_GET['name'] ?? 'attachment.eml');
+    $msgNo           = (int) ($_GET['msg'] ?? 0);
+    $folder          = $_GET['folder'] ?? 'INBOX';
+    $section         = $_GET['section'] ?? '';
+    $name            = basename($_GET['name'] ?? 'attachment.eml');
+    $targetAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, isset($_GET['account_id']) ? (int)$_GET['account_id'] : null);
 
     if ($section === '' || !preg_match('/^[0-9]+(\.[0-9]+)*$/', $section)) {
         if (isAjax()) {
@@ -1612,7 +2232,7 @@ if ($action === 'preview_eml') {
     }
 
     try {
-        $imap = $accountMgr->imapConnect($accountId);
+        $imap = $accountMgr->imapConnect($targetAccountId);
         $imap->selectFolder($folder);
         $data = $imap->fetchAttachment($msgNo, $section);
         $imap->disconnect();
@@ -1630,6 +2250,8 @@ if ($action === 'preview_eml') {
             'from'        => $parsed['from'],
             'to'          => $parsed['to'],
             'cc'          => $parsed['cc'],
+            'reply_to'    => $parsed['reply_to'] ?? '',
+            'message_id'  => $parsed['message_id'] ?? '',
             'date'        => $parsed['date'],
             'body_html'   => $safeHtml,
             'body_text'   => $parsed['body_text'],
@@ -1645,17 +2267,19 @@ if ($action === 'preview_eml') {
         }
 
         // Standalone preview
-        render('view_eml', [
-            'eml'       => $emlData,
-            'filename'  => $name,
-            'folder'    => $folder,
-            'msgNo'     => $msgNo,
-            'section'   => $section,
-            'pageTitle' => pageTitle('Preview .eml - ' . $parsed['subject']),
+        render('view_eml', $layoutCommon + [
+            'eml'             => $emlData,
+            'filename'        => $name,
+            'folder'          => $folder,
+            'msgNo'           => $msgNo,
+            'section'         => $section,
+            'targetAccountId' => $targetAccountId,
+            'fromUnified'     => $fromUnified,
+            'pageTitle'       => pageTitle('Preview .eml - ' . $parsed['subject']),
         ], true);
         exit;
     } catch (Throwable $e) {
-        error_log('Preview EML failed for user ' . $userId . ', folder ' . $folder . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        error_log('Preview EML failed for user ' . $userId . ', account ' . $targetAccountId . ', folder ' . $folder . ', msg ' . $msgNo . ': ' . $e->getMessage());
         if (isAjax()) {
             jsonResponse(['ok' => false, 'error' => 'Error previewing .eml attachment: ' . $e->getMessage()]);
         }
@@ -1666,11 +2290,12 @@ if ($action === 'preview_eml') {
 
 // ── Email Export (EML / ZIP) ──────────────────────────────────────────────────
 if ($action === 'export_eml') {
-    $msgNo   = (int) ($_GET['msg'] ?? 0);
-    $folder  = $_GET['folder'] ?? 'INBOX';
+    $msgNo           = (int) ($_GET['msg'] ?? 0);
+    $folder          = $_GET['folder'] ?? 'INBOX';
+    $targetAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, isset($_GET['account_id']) ? (int)$_GET['account_id'] : null);
 
     try {
-        $imap = $accountMgr->imapConnect($accountId);
+        $imap = $accountMgr->imapConnect($targetAccountId);
         $raw  = $imap->getRawMessage($folder, $msgNo);
         $imap->disconnect();
 
@@ -1681,7 +2306,7 @@ if ($action === 'export_eml') {
         echo $raw;
         exit;
     } catch (RuntimeException $e) {
-        error_log('EML export failed for user ' . $userId . ', account ' . $accountId . ', folder ' . $folder . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        error_log('EML export failed for user ' . $userId . ', account ' . $targetAccountId . ', folder ' . $folder . ', msg ' . $msgNo . ': ' . $e->getMessage());
         http_response_code(500);
         exit('Error exporting message.');
     }
@@ -1725,8 +2350,9 @@ if ($action === 'export_zip') {
 
 // ── Compose / Reply / Forward ─────────────────────────────────────────────────
 if ($action === 'compose') {
-    $prefill  = [];
-    $replyMsg = 0;
+    $prefill          = [];
+    $replyMsg         = 0;
+    $composeAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, isset($_GET['account_id']) ? (int)$_GET['account_id'] : null);
     $rawResumePrefill = $_SESSION['compose_prefill'] ?? null;
     $resumePrefill = null;
     if ($rawResumePrefill !== null) {
@@ -1735,13 +2361,75 @@ if ($action === 'compose') {
             $resumePrefill = null;
         }
     }
-    $hasExistingMessageContext = isset($_GET['reply']) || isset($_GET['reply_all']) || isset($_GET['forward']) || isset($_GET['edit_draft']);
+    $hasEmlContext             = (isset($_GET['reply_eml']) || isset($_GET['forward_eml'])) && isset($_GET['msg']) && !empty($_GET['section']);
+    $hasExistingMessageContext = $hasEmlContext || isset($_GET['reply']) || isset($_GET['reply_all']) || isset($_GET['forward']) || isset($_GET['edit_draft']);
 
-    // Reply / Forward / Edit Draft
-    if ($hasExistingMessageContext) {
+    if ($hasEmlContext) {
+        $origNo  = (int) ($_GET['msg'] ?? 0);
+        $section = (string) ($_GET['section'] ?? '');
+        if ($origNo <= 0 || $section === '' || !preg_match('/^[0-9]+(\.[0-9]+)*$/', $section)) {
+            flashSet('danger', 'Invalid .eml attachment reference.');
+        } else {
+            try {
+                $imap = $accountMgr->imapConnect($composeAccountId);
+                $imap->selectFolder($currentFolder);
+                $rawEml = $imap->fetchAttachment($origNo, $section);
+                $imap->disconnect();
+
+                if ($rawEml === '') {
+                    throw new RuntimeException('EML attachment data is empty.');
+                }
+
+                $orig          = EmlParser::parse($rawEml);
+                $isForward     = isset($_GET['forward_eml']);
+                $isReplyAll    = isset($_GET['reply_all']);
+                $imagesAllowed = !isset($_GET['images']) || $_GET['images'] === '1';
+
+                $rawHtml = ($orig['body_html'] ?? '') !== ''
+                    ? $orig['body_html']
+                    : nl2br(htmlspecialchars($orig['body_text'] ?? ''));
+                $theme    = $session['theme'] ?? ($_COOKIE['wm_theme'] ?? 'system');
+                $bodyHtml = sanitizeHtml($rawHtml, $imagesAllowed, $theme, false, true);
+
+                $replyAddress = ($orig['reply_to'] ?? '') !== '' ? $orig['reply_to'] : ($orig['from'] ?? '');
+                $origAccount  = $accountMgr->get($composeAccountId);
+                $ownEmail     = (string) ($origAccount['email'] ?? '');
+                $ccValue      = $isReplyAll
+                    ? buildReplyAllCc((string) ($orig['to'] ?? ''), (string) ($orig['cc'] ?? ''), $replyAddress, $ownEmail)
+                    : '';
+                $origSubject  = ($orig['subject'] ?? '') !== '' ? $orig['subject'] : '(no subject)';
+                $origFrom     = (string) ($orig['from'] ?? '');
+                $origDate     = (string) ($orig['date'] ?? '');
+                $origTo       = (string) ($orig['to'] ?? '');
+                $quoteHeader  = sprintf('On %s, %s wrote:', $origDate, $origFrom);
+                $inReplyTo    = trim((string) ($orig['message_id'] ?? ''));
+
+                $prefill = [
+                    'to'          => $isForward ? '' : $replyAddress,
+                    'cc'          => $ccValue,
+                    'subject'     => ($isForward ? 'Fwd: ' : 'Re: ') . preg_replace('/^(Re:|Fwd:)\s*/i', '', $origSubject),
+                    'in_reply_to' => $isForward ? '' : $inReplyTo,
+                    'reply_to'    => '',
+                    'body_html'   => $isForward
+                        ? '<br><br><hr><b>--- Forwarded Message ---</b><br>' .
+                          '<b>From:</b> ' . htmlspecialchars($origFrom) . '<br>' .
+                          '<b>Date:</b> ' . htmlspecialchars($origDate) . '<br>' .
+                          '<b>Subject:</b> ' . htmlspecialchars($origSubject) . '<br>' .
+                          '<b>To:</b> ' . htmlspecialchars($origTo) . '<br><br>' .
+                          $bodyHtml
+                        : '<br><br>' . htmlspecialchars($quoteHeader) . '<br><blockquote style="border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666">' . $bodyHtml . '</blockquote>',
+                ];
+                $replyMsg = $origNo;
+            } catch (Throwable $e) {
+                error_log('Compose EML reply/forward load failed for user ' . $userId . ', account ' . $composeAccountId . ', orig ' . $origNo . ': ' . $e->getMessage());
+                flashSet('danger', 'Could not load attached .eml message. Please try again later.');
+            }
+        }
+    } elseif ($hasExistingMessageContext) {
+        // Reply / Forward / Edit Draft
         $origNo = (int) ($_GET['reply'] ?? $_GET['reply_all'] ?? $_GET['forward'] ?? $_GET['edit_draft'] ?? 0);
         try {
-            $imap    = $accountMgr->imapConnect($accountId);
+            $imap    = $accountMgr->imapConnect($composeAccountId);
             $orig    = $imap->getMessage($currentFolder, $origNo);
             $imap->disconnect();
 
@@ -1771,11 +2459,16 @@ if ($action === 'compose') {
                 ];
             } else {
                 $replyAddress = $orig['reply_to'] ?: $orig['from'];
-                $quoteHeader = sprintf('On %s, %s wrote:', $orig['date'], $orig['from']);
+                $quoteHeader  = sprintf('On %s, %s wrote:', $orig['date'], $orig['from']);
+                $origAccount  = $accountMgr->get($composeAccountId);
+                $ownEmail     = (string) ($origAccount['email'] ?? '');
+                $ccValue      = $isReplyAll
+                    ? buildReplyAllCc((string) ($orig['to'] ?? ''), (string) ($orig['cc'] ?? ''), $replyAddress, $ownEmail)
+                    : '';
 
                 $prefill = [
                     'to'          => $isForward ? '' : $replyAddress,
-                    'cc'          => $isReplyAll ? $orig['to'] : '',
+                    'cc'          => $ccValue,
                     'subject'     => ($isForward ? 'Fwd: ' : 'Re: ') . preg_replace('/^(Re:|Fwd:)\s*/i', '', $orig['subject']),
                     'in_reply_to' => "<{$orig['uid']}@{$_SERVER['HTTP_HOST']}>",
                     'reply_to'    => '',
@@ -1791,7 +2484,7 @@ if ($action === 'compose') {
             }
             $replyMsg = $origNo;
         } catch (RuntimeException $e) {
-            error_log('Compose reply/forward load failed for user ' . $userId . ', account ' . $accountId . ', orig ' . $origNo . ': ' . $e->getMessage());
+            error_log('Compose reply/forward load failed for user ' . $userId . ', account ' . $composeAccountId . ', orig ' . $origNo . ': ' . $e->getMessage());
             flashSet('danger', 'Could not load original message. Please try again later.');
         }
     }
@@ -1806,11 +2499,21 @@ if ($action === 'compose') {
         if (!empty($prefill['folder'])) {
             $currentFolder = $prefill['folder'];
         }
+        if (!empty($prefill['from_account'])) {
+            $composeAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, (int)$prefill['from_account']);
+        }
+        if (!empty($prefill['from_unified']) && isValidUnifiedFolder((string)$prefill['from_unified'])) {
+            $fromUnified = normalizeUnifiedFolder((string)$prefill['from_unified']);
+        }
     }
     // Clear any saved compose data to avoid leaking stale content into future visits.
     unset($_SESSION['compose_prefill']);
 
-    $account = $accountMgr->get($accountId);
+    if (!$hasExistingMessageContext && empty($prefill['to']) && !empty($_GET['to'])) {
+        $prefill['to'] = preg_replace('/[\x00-\x1F\x7F]/', '', trim((string) $_GET['to']));
+    }
+
+    $account = $accountMgr->get($composeAccountId);
     $user    = Database::getInstance()->fetch('SELECT * FROM users WHERE id = ?', [$userId]);
     $signature = ($account['signature'] ?? '') ?: ($user['signature'] ?? '');
 
@@ -1819,7 +2522,9 @@ if ($action === 'compose') {
         'prefill'           => $prefill,
         'replyMsg'          => $replyMsg,
         'folder'            => $currentFolder,
-        'currentAccountId'  => $accountId,
+        'currentAccountId'  => $composeAccountId,
+        'composeAccount'    => $account,
+        'fromUnified'       => $fromUnified,
         'signature'         => $signature,
         'resumeSend'        => !empty($prefill['resume_send']),
         'pageTitle'         => pageTitle('Compose'),
@@ -1869,6 +2574,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         'draft_folder' => $_POST['draft_folder'] ?? 'Drafts',
         'reply_msg'    => $_POST['reply_msg'] ?? 0,
         'folder'       => $_POST['folder'] ?? $currentFolder,
+        'from_unified' => $fromUnified,
         'resume_send'  => true,
     ]);
     $composePrefill = sanitizeComposePrefill($prefillData);
@@ -2075,6 +2781,9 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             // Non-fatal: still consider email sent
         }
         flashSet('success', 'Message sent successfully.');
+        if ($fromUnified !== '') {
+            redirect('?action=unified&ufolder=' . urlencode($fromUnified));
+        }
         redirect('?action=inbox');
         } else {
             $draftSaved = false;
@@ -2278,6 +2987,7 @@ if ($action === 'settings_save') {
                 ]);
                 $newAcc = $mgr->get($newId);
                 $isValid = ($newAcc['validation_status'] === 'valid');
+                unset($_SESSION['unified_folders'], $_SESSION['unified_account_folders']);
 
                 if (isAjax()) {
                     jsonResponse([
@@ -2342,6 +3052,7 @@ if ($action === 'settings_save') {
                 $mgr->update($editId, $userId, $updateData);
                 $updatedAcc = $mgr->get($editId);
                 $isValid = ($updatedAcc['validation_status'] === 'valid');
+                unset($_SESSION['unified_folders'], $_SESSION['unified_account_folders']);
 
                 if (isAjax()) {
                     jsonResponse([
@@ -2371,6 +3082,7 @@ if ($action === 'settings_save') {
         case 'delete_account':
             $mgr = new Account();
             $mgr->delete((int) ($_POST['account_id'] ?? 0), $userId);
+            unset($_SESSION['unified_folders'], $_SESSION['unified_account_folders']);
             flashSet('success', 'Account removed.');
             redirect('?action=settings&tab=accounts');
 

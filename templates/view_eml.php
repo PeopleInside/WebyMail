@@ -7,20 +7,41 @@
  * @var int    $msgNo
  * @var string $section
  */
-$folderEnc = urlencode($folder);
-$downloadUrl = '?action=attachment&folder=' . $folderEnc . '&msg=' . (int)$msgNo . '&section=' . urlencode($section) . '&name=' . urlencode($filename);
-$backUrl = '?action=view&folder=' . $folderEnc . '&msg=' . (int)$msgNo;
+$folderEnc       = urlencode($folder);
+$sectionEnc      = urlencode($section);
+$activeSessAccId = (int) ($session['account_id'] ?? 0);
+$targetAccountId = (int) ($targetAccountId ?? $activeSessAccId);
+$fromUnified     = (string) ($fromUnified ?? '');
+$accountParam    = ($targetAccountId > 0 && ($targetAccountId !== $activeSessAccId || $fromUnified !== ''))
+    ? '&account_id=' . $targetAccountId
+    : '';
+$unifiedParam    = $fromUnified !== '' ? '&from_unified=' . urlencode($fromUnified) : '';
+$downloadUrl     = '?action=attachment&folder=' . $folderEnc . '&msg=' . (int)$msgNo . '&section=' . $sectionEnc . '&name=' . urlencode($filename) . $accountParam;
+$backUrl         = '?action=view&folder=' . $folderEnc . '&msg=' . (int)$msgNo . $accountParam . $unifiedParam;
+$replyBase       = 'folder=' . $folderEnc . '&msg=' . (int)$msgNo . '&section=' . $sectionEnc . '&images=1' . $accountParam . $unifiedParam;
 ?>
 <div class="wm-toolbar">
-    <a href="<?= $backUrl ?>" class="btn btn-ghost btn-sm" target="_self">
+    <a href="<?= htmlspecialchars($backUrl) ?>" class="btn btn-ghost btn-sm" target="_self">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
         Back to original email
+    </a>
+    <a href="?action=compose&reply_eml=1&<?= $replyBase ?>" class="btn btn-primary btn-sm" target="_self" title="Reply to this attached email">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+        Reply
+    </a>
+    <a href="?action=compose&reply_eml=1&reply_all=1&<?= $replyBase ?>" class="btn btn-outline btn-sm" target="_self" title="Reply All to this attached email">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 17 2 12 7 7"/><polyline points="12 17 7 12 12 7"/><path d="M22 18v-2a4 4 0 00-4-4H2"/></svg>
+        Reply All
+    </a>
+    <a href="?action=compose&forward_eml=1&<?= $replyBase ?>" class="btn btn-outline btn-sm" target="_self" title="Forward this attached email">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 014-4h12"/></svg>
+        Forward
     </a>
     <div class="wm-topbar-spacer"></div>
     <span class="badge badge-info" style="font-size:.75rem;padding:.2rem .6rem">
         Attached Email (.eml) Preview
     </span>
-    <a href="<?= $downloadUrl ?>" class="btn btn-outline btn-sm" download title="Download .eml file">
+    <a href="<?= htmlspecialchars($downloadUrl) ?>" class="btn btn-outline btn-sm" download title="Download .eml file">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Download .eml
     </a>

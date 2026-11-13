@@ -9,18 +9,29 @@
  * @var string $signature  HTML signature for the active account's user
  * @var bool   $resumeSend whether we are returning from a failed send
  */
-$isReply   = !empty($replyMsg);
-$folder    = $folder    ?? 'INBOX';
-$folderEnc = urlencode($folder);
-$signature = $signature ?? '';
-$resumeSend = !empty($resumeSend);
+$isReply         = !empty($replyMsg);
+$folder          = $folder    ?? 'INBOX';
+$folderEnc       = urlencode($folder);
+$signature       = $signature ?? '';
+$resumeSend      = !empty($resumeSend);
+$fromUnified     = (string) ($fromUnified ?? '');
+$activeSessAccId = (int) ($session['account_id'] ?? 0);
+$currentAccountId = (int) ($currentAccountId ?? $activeSessAccId);
+$accountParam    = ($currentAccountId > 0 && ($currentAccountId !== $activeSessAccId || $fromUnified !== ''))
+    ? '&account_id=' . $currentAccountId
+    : '';
+$unifiedParam    = $fromUnified !== '' ? '&from_unified=' . urlencode($fromUnified) : '';
+$cancelUrl       = $isReply
+    ? '?action=view&folder=' . urlencode($folder) . '&msg=' . (int)$replyMsg . $accountParam . $unifiedParam
+    : ($fromUnified !== '' ? '?action=unified&ufolder=' . urlencode($fromUnified) : '?action=inbox&folder=' . urlencode($folder));
+$hasPrefillCc    = !empty($prefill['cc']);
 ?>
 
 <div class="wm-compose-wrap" style="height:calc(100dvh - 52px)">
 
     <!-- Toolbar -->
     <div class="wm-toolbar">
-        <a href="<?= $isReply ? '?action=view&folder=' . urlencode($folder) . '&msg=' . (int)$replyMsg : '?action=inbox&folder=' . urlencode($folder) ?>" class="btn btn-ghost btn-sm" target="_self">
+        <a href="<?= htmlspecialchars($cancelUrl) ?>" class="btn btn-ghost btn-sm" target="_self">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
             Cancel
         </a>
@@ -33,6 +44,10 @@ $resumeSend = !empty($resumeSend);
         <button type="submit" form="compose-form" class="btn btn-primary btn-sm">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             Send
+        </button>
+        <button type="button" id="templates-btn" class="btn btn-outline btn-sm" style="margin-left:.5rem" title="Manage and insert email templates">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Templates
         </button>
         <div style="position:relative;margin-left:.5rem">
             <button type="button" id="msg-options-btn" class="btn btn-ghost btn-sm" title="Message options">
@@ -60,6 +75,7 @@ $resumeSend = !empty($resumeSend);
         <?= csrfInput() ?>
         <!-- Hidden fields -->
         <input type="hidden" name="folder"       value="<?= htmlspecialchars($folder) ?>">
+        <input type="hidden" name="from_unified" value="<?= htmlspecialchars($fromUnified) ?>">
         <input type="hidden" name="in_reply_to"  value="<?= htmlspecialchars($prefill['in_reply_to'] ?? '') ?>">
         <input type="hidden" name="reply_msg"    value="<?= (int)($replyMsg ?? 0) ?>">
         <input type="hidden" name="draft_uid"    id="draft-uid" value="<?= (int)($prefill['draft_uid'] ?? 0) ?>">
@@ -84,6 +100,12 @@ $resumeSend = !empty($resumeSend);
             </div>
             <?php else: ?>
                 <input type="hidden" name="from_account" value="<?= (int)$currentAccountId ?>">
+                <?php if (!empty($composeAccount) && ($currentAccountId !== $activeSessAccId || $fromUnified !== '')): ?>
+                <div class="wm-compose-field">
+                    <label>From</label>
+                    <span style="font-size:.875rem;color:var(--wm-text-muted)"><?= htmlspecialchars(($composeAccount['sender_name'] ?: ($composeAccount['label'] ?: (explode('@', $composeAccount['email'])[0]))) . ' <' . $composeAccount['email'] . '>') ?></span>
+                </div>
+                <?php endif; ?>
             <?php endif; ?>
 
             <div class="wm-compose-field">
@@ -94,11 +116,11 @@ $resumeSend = !empty($resumeSend);
                 <button type="button" class="btn btn-ghost btn-icon open-contacts" data-target="to" title="Pick from contacts">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
                 </button>
-                <button type="button" id="show-cc"  class="btn btn-ghost btn-sm" style="font-size:.75rem">Cc</button>
+                <button type="button" id="show-cc"  class="btn btn-ghost btn-sm" style="font-size:.75rem<?= $hasPrefillCc ? ';display:none' : '' ?>">Cc</button>
                 <button type="button" id="show-bcc" class="btn btn-ghost btn-sm" style="font-size:.75rem">Bcc</button>
             </div>
 
-            <div class="wm-compose-field" id="cc-row" style="display:none">
+            <div class="wm-compose-field" id="cc-row" style="display:<?= $hasPrefillCc ? 'flex' : 'none' ?>">
                 <label for="cc">Cc</label>
                 <input type="text" id="cc" name="cc" autocomplete="off"
                        value="<?= htmlspecialchars($prefill['cc'] ?? '') ?>"
@@ -227,6 +249,68 @@ $resumeSend = !empty($resumeSend);
             <textarea id="source-editor" style="display:none;flex:1;min-height:300px;width:100%;box-sizing:border-box;font-family:monospace;font-size:.85rem;padding:.75rem;border:none;border-top:1px solid var(--wm-border);resize:none;background:var(--wm-surface);color:var(--wm-text);outline:none" spellcheck="false"></textarea>
         </div>
     </form>
+</div>
+
+<!-- Email Templates Modal -->
+<div id="templates-modal" class="wm-modal" style="display:none">
+    <div class="wm-modal-content" style="max-width:650px;max-height:90dvh">
+        <div class="wm-modal-header">
+            <h3 style="margin:0;font-size:1.1rem">Email Templates</h3>
+            <button type="button" id="close-templates-modal" class="btn-ghost btn-icon close-modal" style="font-size:1.5rem;line-height:1;padding:0 .5rem">&times;</button>
+        </div>
+        <div class="wm-modal-body">
+            <div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap;align-items:center">
+                <div style="position:relative;flex:1;min-width:160px">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="position:absolute;left:.65rem;top:50%;transform:translateY(-50%);color:var(--wm-text-muted);pointer-events:none"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="search" id="template-search" class="form-control" placeholder="Search saved templates..." aria-label="Search saved templates" style="width:100%;padding-left:2rem">
+                </div>
+                <button type="button" id="save-current-template-btn" class="btn btn-primary btn-sm" title="Save current subject and message body (without signature) as a template">
+                    + Save current
+                </button>
+                <button type="button" id="new-template-btn" class="btn btn-outline btn-sm">
+                    + New blank
+                </button>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:1rem;font-size:.82rem;color:var(--wm-text-muted);flex-wrap:wrap">
+                <label style="display:inline-flex;align-items:center;gap:.4rem;cursor:pointer">
+                    <input type="checkbox" id="template-overwrite-subject" <?= $isReply ? '' : 'checked' ?>>
+                    <span>Set/overwrite Subject when applying<?= $isReply ? ' (uncheck to keep Re:/Fwd:)' : '' ?></span>
+                </label>
+                <span>Content is inserted above any existing signature.</span>
+            </div>
+
+            <!-- Add/Edit Template Form -->
+            <form id="template-form" style="display:none;background:var(--wm-surface-2);padding:1rem;border-radius:8px;margin-bottom:1rem;border:1px solid var(--wm-border)">
+                <input type="hidden" id="template-id" value="">
+                <div style="margin-bottom:.75rem">
+                    <label for="template-name-input" style="font-size:.75rem;display:block;margin-bottom:.25rem">Template Name *</label>
+                    <input type="text" id="template-name-input" class="form-control" placeholder="e.g. Support Follow-up" required>
+                </div>
+                <div style="margin-bottom:.75rem">
+                    <label for="template-subject-input" style="font-size:.75rem;display:block;margin-bottom:.25rem">Subject</label>
+                    <input type="text" id="template-subject-input" class="form-control" placeholder="Email subject...">
+                </div>
+                <div style="margin-bottom:.75rem">
+                    <label style="font-size:.75rem;display:block;margin-bottom:.25rem">Message Content (without signature)</label>
+                    <div id="template-body-editor" contenteditable="true"
+                         style="min-height:130px;max-height:240px;overflow-y:auto;padding:.6rem .75rem;border:1px solid var(--wm-border);border-radius:6px;background:var(--wm-surface);color:var(--wm-text);font-size:.9rem;line-height:1.5;outline:none"></div>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:.5rem">
+                    <button type="button" id="cancel-template-form" class="btn btn-ghost btn-sm">Cancel</button>
+                    <button type="submit" id="save-template-submit" class="btn btn-primary btn-sm">Save Template</button>
+                </div>
+            </form>
+
+            <!-- Templates List -->
+            <div id="templates-list-container" style="max-height:360px;overflow-y:auto">
+                <div class="wm-email-loading">
+                    <div class="spinner"></div>
+                    <span>Loading templates...</span>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script nonce="<?= $cspNonce ?>">
@@ -974,6 +1058,381 @@ $resumeSend = !empty($resumeSend);
             }
         });
     }
+
+    // ── Email Templates (DB-persisted) ────────────────────────────────────────
+    (function() {
+        var tplBtn          = document.getElementById('templates-btn');
+        var tplModal        = document.getElementById('templates-modal');
+        var tplCloseBtn     = document.getElementById('close-templates-modal');
+        var tplSearch       = document.getElementById('template-search');
+        var tplSaveCurrent  = document.getElementById('save-current-template-btn');
+        var tplNewBtn       = document.getElementById('new-template-btn');
+        var tplForm         = document.getElementById('template-form');
+        var tplIdInput      = document.getElementById('template-id');
+        var tplNameInput    = document.getElementById('template-name-input');
+        var tplSubjectInput = document.getElementById('template-subject-input');
+        var tplBodyEditor   = document.getElementById('template-body-editor');
+        var tplCancelBtn    = document.getElementById('cancel-template-form');
+        var tplSubmitBtn    = document.getElementById('save-template-submit');
+        var tplListEl       = document.getElementById('templates-list-container');
+        var overwriteSubjCb = document.getElementById('template-overwrite-subject');
+        var sourceEditor    = document.getElementById('source-editor');
+        var allTemplates    = [];
+
+        if (!tplBtn || !tplModal) return;
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            var d = document.createElement('div');
+            d.textContent = text;
+            return d.innerHTML;
+        }
+
+        function htmlToPlainSnippet(html) {
+            if (!html) return '';
+            var d = document.createElement('div');
+            d.innerHTML = html;
+            return (d.textContent || d.innerText || '').replace(/\s+/g, ' ').trim();
+        }
+
+        function syncVisualFromSourceIfActive() {
+            if (sourceEditor && sourceEditor.style.display !== 'none') {
+                editorEl.innerHTML = sourceEditor.value;
+            }
+        }
+
+        function syncSourceFromVisualIfActive() {
+            if (sourceEditor && sourceEditor.style.display !== 'none') {
+                sourceEditor.value = editorEl.innerHTML;
+            }
+        }
+
+        // Extract current compose message body WITHOUT signature (and without quoted reply/forward)
+        function extractComposeBodyWithoutSignature() {
+            syncVisualFromSourceIfActive();
+            var clone = document.createElement('div');
+            clone.innerHTML = editorEl.innerHTML;
+
+            // Remove signature blocks
+            clone.querySelectorAll('.wm-signature').forEach(function(el) {
+                el.parentNode && el.parentNode.removeChild(el);
+            });
+
+            // Remove quoted reply/forward section if present
+            var quoteNode = clone.querySelector('blockquote, hr');
+            if (quoteNode) {
+                // Remove preceding "On ... wrote:" line or <br> right before blockquote/hr
+                var toRemove = [];
+                var cur = quoteNode;
+                while (cur) {
+                    toRemove.push(cur);
+                    cur = cur.nextSibling;
+                }
+                var prev = quoteNode.previousSibling;
+                while (prev) {
+                    var prevText = (prev.textContent || '').trim();
+                    if (prev.nodeName === 'BR' || /^On .+ wrote:$/i.test(prevText)) {
+                        var p = prev.previousSibling;
+                        toRemove.push(prev);
+                        prev = p;
+                    } else {
+                        break;
+                    }
+                }
+                toRemove.forEach(function(n) {
+                    n.parentNode && n.parentNode.removeChild(n);
+                });
+            }
+
+            // Trim trailing <br> and empty <p><br></p> left by signature spacing
+            while (clone.lastChild) {
+                var last = clone.lastChild;
+                if (last.nodeName === 'BR') {
+                    clone.removeChild(last);
+                } else if (last.nodeType === 3 && !last.textContent.trim()) {
+                    clone.removeChild(last);
+                } else if (last.nodeType === 1 && !last.querySelector('img') && (last.textContent || '').trim() === '') {
+                    clone.removeChild(last);
+                } else {
+                    break;
+                }
+            }
+            return clone.innerHTML.trim();
+        }
+
+        function hasContentBeforeNode(parent, stopNode) {
+            var cur = parent.firstChild;
+            while (cur && cur !== stopNode) {
+                if (cur.nodeType === 3 && cur.textContent.trim() !== '') return true;
+                if (cur.nodeType === 1) {
+                    if (cur.querySelector('img') || cur.tagName === 'IMG') return true;
+                    if ((cur.textContent || '').trim() !== '') return true;
+                }
+                cur = cur.nextSibling;
+            }
+            return false;
+        }
+
+        function applyTemplate(tpl) {
+            syncVisualFromSourceIfActive();
+
+            var sigEl = editorEl.querySelector('.wm-signature');
+            var quoteEl = !sigEl ? editorEl.querySelector('blockquote, hr') : null;
+            var anchorNode = sigEl || quoteEl;
+
+            if (anchorNode) {
+                if (hasContentBeforeNode(editorEl, anchorNode)) {
+                    if (!confirm('Replace the current text above your signature/quote with this template?')) {
+                        return;
+                    }
+                }
+                // Remove nodes before anchorNode
+                while (editorEl.firstChild && editorEl.firstChild !== anchorNode) {
+                    editorEl.removeChild(editorEl.firstChild);
+                }
+                // Remove immediate empty <br> directly after signature? Keep signature & quote intact!
+                var wrapper = document.createElement('div');
+                wrapper.innerHTML = (tpl.body_html || '<p><br></p>') + '<p><br></p>';
+                var frag = document.createDocumentFragment();
+                while (wrapper.firstChild) {
+                    frag.appendChild(wrapper.firstChild);
+                }
+                editorEl.insertBefore(frag, anchorNode);
+            } else {
+                var hasAnyContent = (editorEl.textContent || '').trim() !== '' || !!editorEl.querySelector('img');
+                if (hasAnyContent) {
+                    if (!confirm('Replace the current message content with this template?')) {
+                        return;
+                    }
+                }
+                editorEl.innerHTML = tpl.body_html || '<p><br></p>';
+            }
+
+            // Apply Subject if empty or if overwrite checkbox is checked
+            if (subjectField && tpl.subject !== undefined && tpl.subject !== '') {
+                var curSubj = subjectField.value.trim();
+                if (curSubj === '' || (overwriteSubjCb && overwriteSubjCb.checked)) {
+                    subjectField.value = tpl.subject;
+                }
+            }
+
+            syncSourceFromVisualIfActive();
+            if (typeof checkDirty === 'function') checkDirty();
+            tplModal.style.display = 'none';
+            editorEl.focus();
+        }
+
+        function loadTemplates() {
+            tplListEl.innerHTML = '<div class="wm-email-loading"><div class="spinner"></div><span>Loading templates...</span></div>';
+            fetch('?action=templates_list&_=' + Date.now(), {
+                cache: 'no-store',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    allTemplates = data.templates || [];
+                    filterAndRender();
+                } else {
+                    tplListEl.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--wm-danger)">Could not load templates.</div>';
+                }
+            })
+            .catch(function() {
+                tplListEl.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--wm-danger)">Could not load templates.</div>';
+            });
+        }
+
+        function sortTemplates() {
+            allTemplates.sort(function(a, b) {
+                return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' });
+            });
+        }
+
+        function filterAndRender() {
+            var q = (tplSearch.value || '').toLowerCase().trim();
+            var list = q === '' ? allTemplates : allTemplates.filter(function(t) {
+                return (t.name || '').toLowerCase().includes(q)
+                    || (t.subject || '').toLowerCase().includes(q)
+                    || htmlToPlainSnippet(t.body_html).toLowerCase().includes(q);
+            });
+            renderTemplates(list);
+        }
+
+        function renderTemplates(list) {
+            if (!list.length) {
+                if (allTemplates.length > 0 && (tplSearch.value || '').trim() !== '') {
+                    tplListEl.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--wm-text-muted)">No templates match your search. <button type="button" id="clear-tpl-search-btn" class="btn btn-ghost btn-sm" style="margin-left:.35rem">Clear search</button></div>';
+                    var clearBtn = document.getElementById('clear-tpl-search-btn');
+                    if (clearBtn) {
+                        clearBtn.addEventListener('click', function() {
+                            tplSearch.value = '';
+                            filterAndRender();
+                        });
+                    }
+                } else {
+                    tplListEl.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--wm-text-muted)">No email templates saved yet.</div>';
+                }
+                return;
+            }
+            tplListEl.innerHTML = '';
+            list.forEach(function(tpl) {
+                var snippet = htmlToPlainSnippet(tpl.body_html);
+                var row = document.createElement('div');
+                row.className = 'contact-item';
+                row.style.alignItems = 'flex-start';
+                row.innerHTML = `
+                    <div class="contact-info" style="flex:1;min-width:0">
+                        <span class="contact-name">${escapeHtml(tpl.name)}</span>
+                        ${tpl.subject ? `<span class="contact-email" style="font-weight:500">Subject: ${escapeHtml(tpl.subject)}</span>` : ''}
+                        ${snippet ? `<span style="font-size:.76rem;display:block;color:var(--wm-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:.15rem">${escapeHtml(snippet)}</span>` : ''}
+                    </div>
+                    <div style="display:flex;gap:.25rem;flex-shrink:0;align-items:center">
+                        <button type="button" class="btn btn-primary btn-sm apply-template" data-id="${tpl.id}">Apply</button>
+                        <button type="button" class="btn btn-ghost btn-sm edit-template" data-id="${tpl.id}" title="Edit template">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        </button>
+                        <button type="button" class="btn btn-ghost btn-sm delete-template" data-id="${tpl.id}" title="Delete template">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                        </button>
+                    </div>
+                `;
+                tplListEl.appendChild(row);
+            });
+        }
+
+        function openTemplateForm(opts) {
+            tplIdInput.value      = opts.id ? String(opts.id) : '';
+            tplNameInput.value    = opts.name || '';
+            tplSubjectInput.value = opts.subject || '';
+            tplBodyEditor.innerHTML = opts.body_html || '';
+            tplSubmitBtn.textContent = opts.id ? 'Update Template' : 'Save Template';
+            tplForm.style.display = 'block';
+            tplNameInput.focus();
+        }
+
+        tplBtn.addEventListener('click', function() {
+            tplSearch.value = '';
+            tplForm.style.display = 'none';
+            tplModal.style.display = 'flex';
+            loadTemplates();
+        });
+
+        tplCloseBtn.addEventListener('click', function() {
+            tplModal.style.display = 'none';
+        });
+
+        tplModal.addEventListener('click', function(e) {
+            if (e.target === tplModal) tplModal.style.display = 'none';
+        });
+
+        tplSearch.addEventListener('input', filterAndRender);
+
+        tplNewBtn.addEventListener('click', function() {
+            openTemplateForm({ id: 0, name: '', subject: '', body_html: '' });
+        });
+
+        tplSaveCurrent.addEventListener('click', function() {
+            var curSubj = subjectField ? subjectField.value.trim() : '';
+            var curBody = extractComposeBodyWithoutSignature();
+            openTemplateForm({
+                id: 0,
+                name: curSubj,
+                subject: curSubj,
+                body_html: curBody
+            });
+        });
+
+        tplCancelBtn.addEventListener('click', function() {
+            tplForm.style.display = 'none';
+        });
+
+        tplForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var id = parseInt(tplIdInput.value || '0', 10);
+            var fd = new FormData();
+            if (id > 0) fd.append('id', String(id));
+            fd.append('name', tplNameInput.value.trim());
+            fd.append('subject', tplSubjectInput.value.trim());
+            fd.append('body_html', tplBodyEditor.innerHTML);
+            fd.append('csrf_token', document.querySelector('meta[name="csrf-token"]').content);
+
+            tplSubmitBtn.disabled = true;
+            fetch('?action=' + (id > 0 ? 'templates_edit' : 'templates_add'), {
+                method: 'POST',
+                cache: 'no-store',
+                body: fd,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    tplForm.style.display = 'none';
+                    tplSearch.value = '';
+                    if (data.template) {
+                        var savedId = parseInt(data.template.id, 10);
+                        var idx = allTemplates.findIndex(function(t) { return parseInt(t.id, 10) === savedId; });
+                        if (idx >= 0) {
+                            allTemplates[idx] = data.template;
+                        } else {
+                            allTemplates.push(data.template);
+                        }
+                        sortTemplates();
+                        filterAndRender();
+                    } else {
+                        loadTemplates();
+                    }
+                } else {
+                    alert(data.error || 'Could not save template.');
+                }
+            })
+            .catch(function() {
+                alert('Could not save template.');
+            })
+            .finally(function() {
+                tplSubmitBtn.disabled = false;
+            });
+        });
+
+        tplListEl.addEventListener('click', function(e) {
+            var applyBtn = e.target.closest('.apply-template');
+            if (applyBtn) {
+                var id = parseInt(applyBtn.dataset.id, 10);
+                var tpl = allTemplates.find(function(t) { return parseInt(t.id, 10) === id; });
+                if (tpl) applyTemplate(tpl);
+                return;
+            }
+
+            var editBtn = e.target.closest('.edit-template');
+            if (editBtn) {
+                var id = parseInt(editBtn.dataset.id, 10);
+                var tpl = allTemplates.find(function(t) { return parseInt(t.id, 10) === id; });
+                if (tpl) openTemplateForm(tpl);
+                return;
+            }
+
+            var delBtn = e.target.closest('.delete-template');
+            if (delBtn) {
+                if (!confirm('Delete this email template?')) return;
+                var delId = parseInt(delBtn.dataset.id, 10);
+                var fd = new FormData();
+                fd.append('id', String(delId));
+                fd.append('csrf_token', document.querySelector('meta[name="csrf-token"]').content);
+                fetch('?action=templates_delete', {
+                    method: 'POST',
+                    cache: 'no-store',
+                    body: fd,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.ok) {
+                        allTemplates = allTemplates.filter(function(t) { return parseInt(t.id, 10) !== delId; });
+                        filterAndRender();
+                    }
+                });
+            }
+        });
+    })();
 
 })();
 </script>

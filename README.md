@@ -56,3 +56,17 @@ https://github.com/PeopleInside/WebyMail/releases
 **Dark mode**
 ![Dark](https://github.com/user-attachments/assets/2b7010aa-0f26-444d-b681-95d2a447bb88)
 <img width="1919" height="952" alt="Screenshot 2026-03-01 173614" src="https://github.com/user-attachments/assets/da00ceb7-175f-4dbd-ae09-28b91d01e63a" />
+
+---
+
+## Disclaimer
+
+WebyMail is free, open-source software licensed under the [GNU General Public License v3.0](LICENSE) and is provided **"AS IS"** and **"AS AVAILABLE"**, without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, title, and non-infringement.
+
+In no event shall the authors, maintainers, or contributors be held liable for any direct, indirect, incidental, special, exemplary, or consequential damages (including, without limitation, loss of data, lost or undelivered emails, account compromise, service interruption, server misconfiguration, or security breaches) arising in any way out of the use of, or inability to use, this software, even if advised of the possibility of such damages.
+
+By installing and using WebyMail, you acknowledge that you do so **at your own sole risk** and that you are solely responsible for:
+- Securing and maintaining your hosting environment, PHP/web server configuration, HTTPS/TLS certificates, and firewall rules.
+- Regularly backing up your database, `config/config.php`, and `app_secret.wm` encryption key.
+- Verifying the suitability and security of the software for your own environment prior to production use.
+
