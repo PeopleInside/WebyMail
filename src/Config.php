@@ -6,7 +6,7 @@ declare(strict_types=1);
  */
 class Config
 {
-    public const VERSION = '3.5.7';
+    public const VERSION = '3.5.8';
     public const UPDATE_URL = 'https://github.com/PeopleInside/WebyMail/releases/latest';
     public const THEMES = ['system', 'light', 'dark'];
     private static ?array $data = null;
@@ -99,6 +99,54 @@ class Config
     public static function isSetup(): bool
     {
         return file_exists(self::$configFile);
+    }
+
+    /**
+     * Determine whether the current HTTP request arrived over HTTPS.
+     * Proxy headers (X-Forwarded-Proto, X-Forwarded-SSL, CF-Visitor) are
+     * honored ONLY when REMOTE_ADDR belongs to configured trusted_proxies.
+     */
+    public static function isRequestSecure(): bool
+    {
+        if (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off') {
+            return true;
+        }
+        if (!empty($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443) {
+            return true;
+        }
+
+        $trustedRaw = (string) self::get('trusted_proxies', '');
+        $trustedProxies = array_filter(array_map('trim', explode(',', $trustedRaw)));
+        if (empty($trustedProxies)) {
+            return false;
+        }
+
+        $remoteIp = trim((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+        if ($remoteIp === '') {
+            return false;
+        }
+
+        $isTrusted = false;
+        foreach ($trustedProxies as $proxy) {
+            if ($remoteIp === $proxy || HostValidator::ipInCidr($remoteIp, $proxy)) {
+                $isTrusted = true;
+                break;
+            }
+        }
+        if (!$isTrusted) {
+            return false;
+        }
+
+        $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+        $forwardedSsl   = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL']   ?? ''));
+        if (str_contains($forwardedProto, 'https') || $forwardedSsl === 'on') {
+            return true;
+        }
+        if (!empty($_SERVER['HTTP_CF_VISITOR']) && str_contains((string) $_SERVER['HTTP_CF_VISITOR'], 'https')) {
+            return true;
+        }
+
+        return false;
     }
 
     public static function checkSystem(): array
@@ -801,6 +849,8 @@ class Config
             'setup_complete'  => false,
             'timezone'        => 'Europe/Rome',
             'hide_server_on_login' => true,
+            'allow_custom_server_on_login' => false,
+            'allow_private_mail_hosts' => false,
             'allow_insecure_imap_cert' => false,
         ];
     }

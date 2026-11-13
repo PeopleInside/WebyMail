@@ -20,7 +20,7 @@ class Captcha
     private const TTL_SECONDS = 300; // 5 minutes
     private const CLOCK_SKEW_SECONDS = 5;
     private const DEFAULT_DIFFICULTY = 5; // 5 leading hex zeros ≈ 1 048 576 hashes on average
-    private const MIN_FALLBACK_DIFFICULTY = 3; // Backward compatibility for pre-upgrade challenges
+    private const MIN_FALLBACK_DIFFICULTY = self::DEFAULT_DIFFICULTY;
     private const MAX_DIFFICULTY = 8;
 
     public function issue(int $difficulty = self::DEFAULT_DIFFICULTY): array
@@ -135,7 +135,25 @@ class Captcha
 
         $hash   = hash('sha256', $challenge . ':' . $solution);
         $prefix = str_repeat('0', $difficulty);
-        return str_starts_with($hash, $prefix);
+        if (!str_starts_with($hash, $prefix)) {
+            return false;
+        }
+
+        // One-time replay protection across session loss / HMAC fallback
+        try {
+            $db = Database::getInstance();
+            $db->query('DELETE FROM used_captcha_tokens WHERE expires_at < ?', [time()]);
+            $tokenHash = hash('sha256', $token);
+            $db->query(
+                'INSERT INTO used_captcha_tokens (token_hash, expires_at) VALUES (?, ?)',
+                [$tokenHash, $expires + self::CLOCK_SKEW_SECONDS]
+            );
+        } catch (PDOException $e) {
+            // Primary key violation (or DB failure) rejects replay fail-closed
+            return false;
+        }
+
+        return true;
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

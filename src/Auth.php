@@ -44,11 +44,47 @@ class Auth
         bool   $smtpStarttls,
         bool|int|string $rememberMe = false,
         bool   $allowInsecureImap = false,
-        bool   $allowInsecureSmtp = false
+        bool   $allowInsecureSmtp = false,
+        bool   $allowHostMigration = false
     ): array {
         $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
         if ($this->isBanned($ip, $username)) {
             return ['ok' => false, 'error' => 'Too many failed login attempts. Please try again in 15 minutes.'];
+        }
+
+        // Validate server host/port syntax & block SSRF destinations before connecting
+        try {
+            $host = HostValidator::validateHostAndPort($host, $port);
+            if ($smtpHost !== '') {
+                $smtpHost = HostValidator::validateHostAndPort($smtpHost, $smtpPort);
+            }
+        } catch (InvalidArgumentException $e) {
+            $this->recordFailedAttempt($ip, $username);
+            $this->logger->security('login_invalid_host', ['username' => $username, 'error' => $e->getMessage()]);
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+
+        // Prevent Account Takeover: if the user already exists with a primary account
+        // bound to a specific IMAP host, do not allow authenticating against an arbitrary
+        // user-supplied IMAP server.
+        $existingUser    = $this->db->fetch('SELECT * FROM users WHERE email = ?', [$username]);
+        $existingPrimary = $existingUser !== null
+            ? $this->db->fetch('SELECT * FROM accounts WHERE user_id = ? AND is_primary = 1', [(int) $existingUser['id']])
+            : null;
+
+        if (
+            !$allowHostMigration
+            && $existingPrimary !== null
+            && !empty($existingPrimary['imap_host'])
+            && strcasecmp((string) $existingPrimary['imap_host'], $host) !== 0
+        ) {
+            $this->recordFailedAttempt($ip, $username);
+            $this->logger->security('login_host_mismatch', [
+                'username' => $username,
+                'expected' => $existingPrimary['imap_host'],
+                'received' => $host,
+            ]);
+            return ['ok' => false, 'error' => 'Invalid credentials or server unreachable. Please check your details.'];
         }
 
         // Test IMAP credentials
@@ -56,7 +92,7 @@ class Auth
             $imap = new ImapClient();
             $imap->connect($host, $port, $ssl, $username, $password, $allowInsecureImap);
             $imap->disconnect();
-        } catch (RuntimeException $e) {
+        } catch (RuntimeException|InvalidArgumentException $e) {
             $this->recordFailedAttempt($ip, $username);
             $this->logger->security('login_failure', ['username' => $username, 'error' => $e->getMessage()]);
             error_log('IMAP login failed for ' . $username . ' from ' . $ip . ': ' . $e->getMessage());
@@ -68,7 +104,7 @@ class Auth
         $this->logger->security('login_step1_success', ['username' => $username]);
 
         // Provision or retrieve the user record
-        $user = $this->db->fetch('SELECT * FROM users WHERE email = ?', [$username]);
+        $user = $existingUser;
         if ($user === null) {
             $this->db->query(
                 'INSERT INTO users (email, display_name) VALUES (?, ?)',
@@ -80,10 +116,7 @@ class Auth
         }
 
         // Provision or retrieve the primary account record
-        $account = $this->db->fetch(
-            'SELECT * FROM accounts WHERE user_id = ? AND is_primary = 1',
-            [$userId]
-        );
+        $account = $existingPrimary;
         if ($account === null) {
             $this->db->query(
                 'INSERT INTO accounts
@@ -177,8 +210,17 @@ class Auth
             return ['ok' => false, 'error' => 'User not found.'];
         }
 
-        // Try TOTP first
-        $verifiedAt = $this->tf->verify($user['totp_secret'], $code, $user['last_totp_at'] ? (int)$user['last_totp_at'] : null);
+        // Try TOTP first (secret is encrypted at rest; fall back gracefully if legacy plaintext)
+        $storedSecret = (string) ($user['totp_secret'] ?? '');
+        $plainSecret  = Config::decrypt($storedSecret);
+        if ($plainSecret === '' && $storedSecret !== '' && preg_match('/^[A-Z2-7]+=*$/', $storedSecret)) {
+            $plainSecret = $storedSecret;
+            $this->db->query('UPDATE users SET totp_secret = ? WHERE id = ?', [Config::encrypt($plainSecret), $userId]);
+        }
+
+        $verifiedAt = $plainSecret !== ''
+            ? $this->tf->verify($plainSecret, $code, $user['last_totp_at'] ? (int)$user['last_totp_at'] : null)
+            : null;
         if ($verifiedAt !== null) {
             $this->db->query(
                 'UPDATE users SET last_totp_at = ? WHERE id = ?',
@@ -226,10 +268,11 @@ class Auth
      */
     public function enable2FA(int $userId, string $secret, array $recoveryCodes): void
     {
-        $encrypted = $this->tf->encryptRecoveryCodes($recoveryCodes);
+        $encryptedCodes  = $this->tf->encryptRecoveryCodes($recoveryCodes);
+        $encryptedSecret = Config::encrypt($secret);
         $this->db->query(
             'UPDATE users SET totp_secret=?, totp_enabled=1, recovery_codes=? WHERE id=?',
-            [$secret, json_encode($encrypted), $userId]
+            [$encryptedSecret, json_encode($encryptedCodes), $userId]
         );
         $this->session->destroyAll($userId);
     }

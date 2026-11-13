@@ -148,12 +148,17 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
     <div class="wm-view-main">
         <?php if ($hasHtml): ?>
         <div class="wm-email-container">
-            <div id="email-body-shadow" class="wm-email-body-shadow">
-                <div class="wm-email-loading">
-                    <div class="spinner"></div>
-                    <span>Loading message content...</span>
-                </div>
+            <div id="email-loading" class="wm-email-loading">
+                <div class="spinner"></div>
+                <span>Loading message content...</span>
             </div>
+            <iframe id="email-frame"
+                    class="wm-email-frame"
+                    sandbox="allow-popups allow-popups-to-escape-sandbox"
+                    referrerpolicy="no-referrer"
+                    style="display:none"
+                    title="Email content"></iframe>
+            <div id="email-error" style="display:none;padding:2rem;text-align:center;color:var(--wm-danger)"></div>
         </div>
         <?php else: ?>
         <div class="wm-email-container plain-text">
@@ -343,20 +348,25 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
     var close = document.getElementById('headers-modal-close');
     var pre   = document.getElementById('headers-content');
     var loaded = false;
-    const emailShadowCss = [
-        ':host{display:block;}',
-        '#wm-shadow-wrapper{color:inherit;background:transparent;max-width:100%;overflow-x:auto;overflow-wrap:anywhere;word-break:break-word;}',
-        '#wm-shadow-wrapper *{box-sizing:border-box;}',
-        '#wm-shadow-wrapper body{margin:0;padding:0;}',
-        '#wm-shadow-wrapper img,#wm-shadow-wrapper video,#wm-shadow-wrapper iframe,#wm-shadow-wrapper canvas,#wm-shadow-wrapper svg{max-width:100%;height:auto;}',
-        '#wm-shadow-wrapper table{width:auto;max-width:100%;border-collapse:collapse;}',
-        '#wm-shadow-wrapper td,#wm-shadow-wrapper th{word-break:break-word;}',
-        '#wm-shadow-wrapper pre,#wm-shadow-wrapper code{white-space:pre-wrap;word-break:break-word;}',
-        '#wm-shadow-wrapper blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--wm-border, #d8e0e8);}',
-        '#wm-shadow-wrapper a{word-break:break-word;}',
-        '#wm-shadow-wrapper[data-theme="dark"]{background:transparent;}',
-        '#wm-shadow-wrapper[data-theme="dark"] body,#wm-shadow-wrapper[data-theme="dark"] html{background:transparent!important;}'
-    ].join('\n');
+    var lastEmailHtml = null;
+    var lastEmlHtml = null;
+    var activeEmlFrame = null;
+
+    function getResolvedTheme() {
+        var theme = document.documentElement.getAttribute('data-theme') || 'system';
+        if (theme === 'system') {
+            theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        return theme;
+    }
+
+    function applyThemeToEmailHtml(html, theme) {
+        if (!html) return html;
+        var safeTheme = (theme === 'dark') ? 'dark' : 'light';
+        return html
+            .replace(/<html([^>]*?)\sdata-theme=["'][^"']*["']/i, '<html$1 data-theme="' + safeTheme + '"')
+            .replace(/(<div[^>]*\sid=["']wm-shadow-wrapper["'][^>]*?)\sdata-theme=["'][^"']*["']/i, '$1 data-theme="' + safeTheme + '"');
+    }
 
     if (btn && modal) {
         btn.addEventListener('click', function() {
@@ -436,66 +446,55 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
         }
     }
 
-    // Shadow DOM Email Body logic
-    var shadowHost = document.getElementById('email-body-shadow');
-    if (shadowHost && <?php echo $hasHtml ? 'true' : 'false'; ?>) {
-        // Use Shadow DOM for isolation without iframe scrollbars
-        var shadowRoot = shadowHost.shadowRoot || shadowHost.attachShadow({ mode: 'open' });
-        
+    // Sandboxed iframe Email Body logic (opaque origin, no scripts, no same-origin)
+    var emailFrame   = document.getElementById('email-frame');
+    var emailLoading = document.getElementById('email-loading');
+    var emailError   = document.getElementById('email-error');
+
+    function syncEmailFramesTheme() {
+        var theme = getResolvedTheme();
+        if (emailFrame && lastEmailHtml !== null) {
+            emailFrame.srcdoc = applyThemeToEmailHtml(lastEmailHtml, theme);
+        }
+        if (activeEmlFrame && lastEmlHtml !== null) {
+            activeEmlFrame.srcdoc = applyThemeToEmailHtml(lastEmlHtml, theme);
+        }
+    }
+
+    var themeObserver = new MutationObserver(syncEmailFramesTheme);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncEmailFramesTheme);
+    }
+
+    if (emailFrame && <?php echo $hasHtml ? 'true' : 'false'; ?>) {
         function loadEmailBody(showImages) {
             var url = '?action=email_body&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?>&images=' + (showImages ? '1' : '0') + <?= json_encode($accountParam) ?>;
-            
-            // Show loading state in the main DOM (not shadow)
-            shadowHost.innerHTML = '<div class="wm-email-loading"><div class="spinner"></div><span>Loading message content...</span></div>';
-            
-            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                .then(function(r) { return r.text(); })
-                .then(function(html) {
-                    // Clear the loading state from main DOM
-                    shadowHost.innerHTML = '';
-                    
-                    // Inject into shadow root
-                    // We wrap it in a div to easily apply the theme and enforce responsive styling
-                    shadowRoot.innerHTML = '<style>' + emailShadowCss + '</style><div id="wm-shadow-wrapper">' + html + '</div>';
-                    
-                    // Sync theme immediately
-                    syncTheme();
 
-                    if (typeof window.attachShadowCopySanitizer === 'function') {
-                        window.attachShadowCopySanitizer(shadowRoot);
-                    }
-                    
-                    // Ensure all links open in new tab
-                    shadowRoot.querySelectorAll('a').forEach(function(a) {
-                        a.setAttribute('target', '_blank');
-                        a.setAttribute('rel', 'noopener noreferrer');
-                    });
+            if (emailLoading) emailLoading.style.display = 'flex';
+            if (emailError) emailError.style.display = 'none';
+            emailFrame.style.display = 'none';
+
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function(r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.text();
                 })
-                .catch(function(err) {
-                    shadowHost.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--wm-danger)">Failed to load message content.</div>';
+                .then(function(html) {
+                    lastEmailHtml = html;
+                    emailFrame.srcdoc = applyThemeToEmailHtml(html, getResolvedTheme());
+                    if (emailLoading) emailLoading.style.display = 'none';
+                    emailFrame.style.display = 'block';
+                })
+                .catch(function() {
+                    if (emailLoading) emailLoading.style.display = 'none';
+                    emailFrame.style.display = 'none';
+                    if (emailError) {
+                        emailError.textContent = 'Failed to load message content.';
+                        emailError.style.display = 'block';
+                    }
                 });
         }
-
-        function syncTheme() {
-            var theme = document.documentElement.getAttribute('data-theme') || 'system';
-            if (theme === 'system') {
-                theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-            }
-            
-            var wrapper = shadowRoot.getElementById('wm-shadow-wrapper');
-            if (wrapper) {
-                wrapper.setAttribute('data-theme', theme);
-            }
-            
-            // Also update any internal elements if they were injected
-            var innerHtml = shadowRoot.querySelector('html');
-            if (innerHtml) innerHtml.setAttribute('data-theme', theme);
-            var innerBody = shadowRoot.querySelector('body');
-            if (innerBody) innerBody.setAttribute('data-theme', theme);
-        }
-        
-        var observer = new MutationObserver(syncTheme);
-        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
         // Initial load
         loadEmailBody(false);
@@ -560,7 +559,9 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
             emlDate.textContent = '-';
             if (emlCc) emlCc.style.display = 'none';
             if (emlCcLabel) emlCcLabel.style.display = 'none';
-            emlBody.innerHTML = '';
+            emlBody.textContent = '';
+            lastEmlHtml = null;
+            activeEmlFrame = null;
             emlNestedAtt.style.display = 'none';
             emlNestedList.innerHTML = '';
             emlLoading.style.display = 'flex';
@@ -585,7 +586,11 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
             .then(function(res) {
                 emlLoading.style.display = 'none';
                 if (!res.ok || !res.eml) {
-                    emlBody.innerHTML = '<div style="color:var(--wm-danger);padding:1rem">Failed to load .eml: ' + (res.error || 'Unknown error') + '</div>';
+                    var errDiv = document.createElement('div');
+                    errDiv.style.color = 'var(--wm-danger)';
+                    errDiv.style.padding = '1rem';
+                    errDiv.textContent = 'Failed to load .eml: ' + (res.error || 'Unknown error');
+                    emlBody.appendChild(errDiv);
                     return;
                 }
                 var eml = res.eml;
@@ -601,7 +606,15 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
                 }
 
                 if (eml.has_html && eml.body_html) {
-                    emlBody.innerHTML = eml.body_html;
+                    var emlFrame = document.createElement('iframe');
+                    emlFrame.className = 'wm-eml-modal-frame';
+                    emlFrame.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox');
+                    emlFrame.setAttribute('referrerpolicy', 'no-referrer');
+                    emlFrame.setAttribute('title', 'Attached email preview');
+                    lastEmlHtml = String(eml.body_html);
+                    activeEmlFrame = emlFrame;
+                    emlFrame.srcdoc = applyThemeToEmailHtml(lastEmlHtml, getResolvedTheme());
+                    emlBody.appendChild(emlFrame);
                 } else if (eml.body_text) {
                     var p = document.createElement('pre');
                     p.style.whiteSpace = 'pre-wrap';
@@ -610,7 +623,11 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
                     p.textContent = eml.body_text;
                     emlBody.appendChild(p);
                 } else {
-                    emlBody.innerHTML = '<div style="color:var(--wm-text-muted);font-style:italic">Empty email content</div>';
+                    var emptyDiv = document.createElement('div');
+                    emptyDiv.style.color = 'var(--wm-text-muted)';
+                    emptyDiv.style.fontStyle = 'italic';
+                    emptyDiv.textContent = 'Empty email content';
+                    emlBody.appendChild(emptyDiv);
                 }
 
                 // Nested attachments
@@ -628,7 +645,11 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
             })
             .catch(function(err) {
                 emlLoading.style.display = 'none';
-                emlBody.innerHTML = '<div style="color:var(--wm-danger);padding:1rem">Failed to preview email: ' + err.message + '</div>';
+                var errDiv = document.createElement('div');
+                errDiv.style.color = 'var(--wm-danger)';
+                errDiv.style.padding = '1rem';
+                errDiv.textContent = 'Failed to preview email: ' + (err && err.message ? err.message : 'Unknown error');
+                emlBody.appendChild(errDiv);
             });
         });
     });

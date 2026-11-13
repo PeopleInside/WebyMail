@@ -144,6 +144,10 @@ class Database
                 created_at  INTEGER NOT NULL DEFAULT (strftime('%s','now')),
                 updated_at  INTEGER NOT NULL DEFAULT (strftime('%s','now'))
             );
+            CREATE TABLE IF NOT EXISTS used_captcha_tokens (
+                token_hash TEXT    PRIMARY KEY,
+                expires_at INTEGER NOT NULL
+            );
         ");
 
         // 2. Lightweight migrations (ensure columns exist in case of upgrade)
@@ -193,7 +197,58 @@ class Database
             CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip_address);
             CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts(username);
             CREATE INDEX IF NOT EXISTS idx_login_attempts_identifier ON login_attempts(identifier);
+            CREATE INDEX IF NOT EXISTS idx_used_captcha_expires ON used_captcha_tokens(expires_at);
         ");
+
+        $this->runSecurityMigrations();
+    }
+
+    /**
+     * One-time security migrations tracked via SQLite PRAGMA user_version:
+     *  - v1: Hash existing plaintext session tokens with SHA-256 and encrypt
+     *        plaintext user TOTP secrets with Config::encrypt().
+     */
+    private function runSecurityMigrations(): void
+    {
+        $ver = (int) $this->pdo->query('PRAGMA user_version')->fetchColumn();
+        if ($ver >= 1) {
+            return;
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            // 1. Hash existing session tokens (skip if already migrated/empty)
+            $sessions = $this->pdo->query('SELECT token FROM sessions')->fetchAll(PDO::FETCH_ASSOC);
+            if (!empty($sessions)) {
+                $updStmt = $this->pdo->prepare('UPDATE sessions SET token = ? WHERE token = ?');
+                foreach ($sessions as $row) {
+                    $tok = (string) ($row['token'] ?? '');
+                    if ($tok !== '') {
+                        $updStmt->execute([hash('sha256', $tok), $tok]);
+                    }
+                }
+            }
+
+            // 2. Encrypt any plaintext TOTP secrets
+            $users = $this->pdo->query('SELECT id, totp_secret FROM users WHERE totp_secret IS NOT NULL AND totp_secret != ""')->fetchAll(PDO::FETCH_ASSOC);
+            if (!empty($users)) {
+                $updTotp = $this->pdo->prepare('UPDATE users SET totp_secret = ? WHERE id = ?');
+                foreach ($users as $u) {
+                    $secret = (string) $u['totp_secret'];
+                    if (Config::decrypt($secret) === '') {
+                        $updTotp->execute([Config::encrypt($secret), (int) $u['id']]);
+                    }
+                }
+            }
+
+            $this->pdo->exec('PRAGMA user_version = 1');
+            $this->pdo->commit();
+        } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            error_log('WebyMail security migration failed: ' . $e->getMessage());
+        }
     }
 
     /**

@@ -28,6 +28,8 @@ class ImapClient
             throw new RuntimeException('PHP IMAP extension is not installed.');
         }
 
+        $safeHost = HostValidator::validateHostAndPort($host, $port);
+
         $flags = '/imap';
         if ($ssl) {
             $flags .= '/ssl';
@@ -37,7 +39,7 @@ class ImapClient
             $flags .= '/novalidate-cert';
         }
 
-        $mailbox = '{' . $host . ':' . $port . $flags . '}';
+        $mailbox = '{' . $safeHost . ':' . $port . $flags . '}';
         $this->host = $mailbox;
         $this->user = $username;
 

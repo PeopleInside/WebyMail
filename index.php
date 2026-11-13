@@ -34,34 +34,18 @@ if (!isset($cspNonce)) {
     }
 }
 
+spl_autoload_register(function (string $class): void {
+    $file = __DIR__ . '/src/' . $class . '.php';
+    if (file_exists($file)) {
+        require_once $file;
+    }
+});
+
+require_once __DIR__ . '/src/Config.php';
+
 function isRequestSecure(): bool
 {
-    if (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off') {
-        return true;
-    }
-    if (!empty($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443) {
-        return true;
-    }
-
-    $forwardedProto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
-    $forwardedSsl   = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL']   ?? ''));
-    if (str_contains($forwardedProto, 'https') || $forwardedSsl === 'on') {
-        return true;
-    }
-    if (!empty($_SERVER['HTTP_CF_VISITOR']) && str_contains($_SERVER['HTTP_CF_VISITOR'], 'https')) {
-        return true;
-    }
-
-    // Trust X-Forwarded-* headers when a trusted proxy list is configured.
-    $trustedProxies = array_filter(array_map('trim', explode(',', (string) Config::get('trusted_proxies', ''))));
-    if (!empty($trustedProxies)) {
-        $remoteIp = $_SERVER['REMOTE_ADDR'] ?? '';
-        if (in_array($remoteIp, $trustedProxies, true) && str_contains($forwardedProto, 'https')) {
-            return true;
-        }
-    }
-
-    return false;
+    return Config::isRequestSecure();
 }
 
 // PHP native session is used only for the 2FA pending state
@@ -86,15 +70,6 @@ header("X-Frame-Options: SAMEORIGIN");
 header("X-XSS-Protection: 1; mode=block");
 header("Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()");
 header("Referrer-Policy: strict-origin-when-cross-origin");
-
-spl_autoload_register(function (string $class): void {
-    $file = __DIR__ . '/src/' . $class . '.php';
-    if (file_exists($file)) {
-        require_once $file;
-    }
-});
-
-require_once __DIR__ . '/src/Config.php';
 
 // Set timezone from config
 date_default_timezone_set(Config::get('timezone', 'Europe/Rome'));
@@ -272,14 +247,29 @@ function classifyFolderForUnified(array $folder): ?array
         return ['key' => 'archive', 'label' => 'Archive'];
     }
 
-    $rel = trim(str_replace('\\', '/', $name));
+    $rawName = trim($name);
+    $rel = str_replace('\\', '/', $rawName);
     $rel = preg_replace('/^(\[Gmail\]\/|\[Google Mail\]\/|INBOX[\.\/])/i', '', $rel) ?? $rel;
     $rel = trim($rel, '/.');
-    if ($rel === '') {
-        $rel = trim($display) !== '' ? trim($display) : trim($name);
+
+    $delim = str_contains($rel, '/') ? '/' : (str_contains($rel, '.') ? '.' : '');
+    if ($delim !== '') {
+        $segments = array_values(array_filter(
+            array_map('trim', explode($delim, $rel)),
+            static fn(string $s): bool => $s !== ''
+        ));
+    } else {
+        $segments = $rel !== '' ? [$rel] : [];
     }
-    $relLabel = str_contains($rel, '/') ? implode(' / ', array_map('trim', explode('/', $rel))) : $rel;
-    $relLower = function_exists('mb_strtolower') ? mb_strtolower($rel, 'UTF-8') : strtolower($rel);
+
+    if (empty($segments)) {
+        $fallback = trim($display) !== '' ? trim($display) : $rawName;
+        $segments = [$fallback];
+    }
+
+    $relPath  = implode('/', $segments);
+    $relLabel = implode(' / ', $segments);
+    $relLower = function_exists('mb_strtolower') ? mb_strtolower($relPath, 'UTF-8') : strtolower($relPath);
     return ['key' => 'custom:' . $relLower, 'label' => $relLabel];
 }
 
@@ -412,16 +402,7 @@ function populateUnifiedSidebarCache(
         }
     }
 
-    $unifiedFolders = array_values($unifiedFoldersMap);
-    $coreOrder = ['inbox' => 0, 'sent' => 1, 'spam' => 2, 'trash' => 3, 'drafts' => 4, 'archive' => 5];
-    usort($unifiedFolders, static function (array $a, array $b) use ($coreOrder): int {
-        $oa = $coreOrder[$a['key']] ?? 99;
-        $ob = $coreOrder[$b['key']] ?? 99;
-        if ($oa !== $ob) {
-            return $oa <=> $ob;
-        }
-        return strnatcasecmp($a['label'], $b['label']);
-    });
+    $unifiedFolders = rebuildUnifiedFoldersFromAccountFolders($unifiedAccountFolders);
 
     $_SESSION['unified_folders'] = [
         'user_id' => $userId,
@@ -436,6 +417,51 @@ function populateUnifiedSidebarCache(
         'unifiedFolders'        => $unifiedFolders,
         'unifiedAccountFolders' => $unifiedAccountFolders,
     ];
+}
+
+function rebuildUnifiedFoldersFromAccountFolders(array $unifiedAccountFolders): array
+{
+    $unifiedFoldersMap = [
+        'inbox' => ['key' => 'inbox', 'label' => 'Inbox', 'unread' => 0],
+        'sent'  => ['key' => 'sent',  'label' => 'Sent',  'unread' => 0],
+        'spam'  => ['key' => 'spam',  'label' => 'Spam',  'unread' => 0],
+        'trash' => ['key' => 'trash', 'label' => 'Trash', 'unread' => 0],
+    ];
+
+    foreach ($unifiedAccountFolders as $accEntry) {
+        $accFolders = $accEntry['folders'] ?? [];
+        if (!is_array($accFolders)) {
+            continue;
+        }
+        foreach ($accFolders as $af) {
+            $cls = classifyFolderForUnified($af);
+            if ($cls === null) {
+                continue;
+            }
+            $uKey = $cls['key'];
+            if (!isset($unifiedFoldersMap[$uKey])) {
+                $unifiedFoldersMap[$uKey] = [
+                    'key'    => $uKey,
+                    'label'  => $cls['label'],
+                    'unread' => 0,
+                ];
+            }
+            $unifiedFoldersMap[$uKey]['unread'] += (int) ($af['unread'] ?? 0);
+        }
+    }
+
+    $unifiedFolders = array_values($unifiedFoldersMap);
+    $coreOrder = ['inbox' => 0, 'sent' => 1, 'spam' => 2, 'trash' => 3, 'drafts' => 4, 'archive' => 5];
+    usort($unifiedFolders, static function (array $a, array $b) use ($coreOrder): int {
+        $oa = $coreOrder[$a['key']] ?? 99;
+        $ob = $coreOrder[$b['key']] ?? 99;
+        if ($oa !== $ob) {
+            return $oa <=> $ob;
+        }
+        return strnatcasecmp($a['label'], $b['label']);
+    });
+
+    return $unifiedFolders;
 }
 
 function resolveTargetAccountId(Account $accountMgr, int $userId, int $defaultAccountId, ?int $requestedId = null): int
@@ -665,7 +691,7 @@ function requireAuth(): array
         if ($token === '' && isAjax()) {
             $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
         }
-        if ($token === '' || $token !== $sessionObj->getCsrfToken()) {
+        if ($token === '' || !hash_equals($sessionObj->getCsrfToken(), $token)) {
             if (isAjax()) {
                 jsonResponse(['ok' => false, 'error' => 'Security token mismatch. Please refresh the page.']);
             }
@@ -744,17 +770,27 @@ if ($action === 'login') {
         }
         if ($captchaCheckPassed && $error === null) {
             $auth     = new Auth();
-            $serverSettingsShown = !empty($_POST['server_settings_shown']);
+            $allowCustomServer = !Config::get('hide_server_on_login', true)
+                || (bool) Config::get('allow_custom_server_on_login', false);
+            $serverSettingsShown = $allowCustomServer && !empty($_POST['server_settings_shown']);
 
-            $host     = trim($_POST['imap_host'] ?? Config::get('imap_host', ''));
-            $port     = (int) ($_POST['imap_port'] ?? Config::get('imap_port', 993));
+            $host     = $serverSettingsShown
+                ? trim((string) ($_POST['imap_host'] ?? Config::get('imap_host', '')))
+                : trim((string) Config::get('imap_host', ''));
+            $port     = $serverSettingsShown
+                ? (int) ($_POST['imap_port'] ?? Config::get('imap_port', 993))
+                : (int) Config::get('imap_port', 993);
             $ssl      = $serverSettingsShown ? !empty($_POST['imap_ssl']) : (bool) Config::get('imap_ssl', true);
-            
+
             $username = trim($_POST['username'] ?? '');
             $password = $_POST['password'] ?? '';
-            
-            $smtpHost = trim($_POST['smtp_host'] ?? Config::get('smtp_host', $host));
-            $smtpPort = (int) ($_POST['smtp_port'] ?? Config::get('smtp_port', 465));
+
+            $smtpHost = $serverSettingsShown
+                ? trim((string) ($_POST['smtp_host'] ?? Config::get('smtp_host', $host)))
+                : trim((string) Config::get('smtp_host', $host));
+            $smtpPort = $serverSettingsShown
+                ? (int) ($_POST['smtp_port'] ?? Config::get('smtp_port', 465))
+                : (int) Config::get('smtp_port', 465);
             $smtpSsl  = $serverSettingsShown ? !empty($_POST['smtp_ssl']) : (bool) Config::get('smtp_ssl', true);
             $smtpTls  = $serverSettingsShown ? !empty($_POST['smtp_starttls']) : (bool) Config::get('smtp_starttls', false);
 
@@ -777,7 +813,8 @@ if ($action === 'login') {
                 $smtpHost, $smtpPort, $smtpSsl, $smtpTls,
                 $_POST['remember_me'] ?? '0',
                 $allowImapInsecure,
-                $allowSmtpInsecure
+                $allowSmtpInsecure,
+                !$allowCustomServer
             );
             $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 
@@ -834,7 +871,7 @@ if ($action === 'logout') {
 
     $sessionObj = new Session();
     $token = $_POST['csrf_token'] ?? '';
-    if ($token === '' || $token !== $sessionObj->getCsrfToken()) {
+    if ($token === '' || !hash_equals($sessionObj->getCsrfToken(), $token)) {
         flashSet('danger', 'Security token mismatch. Please try again.');
         redirect('?action=inbox');
     }
@@ -980,6 +1017,11 @@ if (!empty($cachedUnifiedAccountFolders) && !empty($folders) && $action !== 'uni
         'user_id'  => $userId,
         'accounts' => $cachedUnifiedAccountFolders,
     ];
+    $cachedUnifiedFolders = rebuildUnifiedFoldersFromAccountFolders($cachedUnifiedAccountFolders);
+    $_SESSION['unified_folders'] = [
+        'user_id' => $userId,
+        'folders' => $cachedUnifiedFolders,
+    ];
 }
 
 if (
@@ -1117,9 +1159,14 @@ if ($action === 'delete_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if ($action === 'empty_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $folder = $_POST['folder'] ?? $currentFolder;
+    $folder = trim((string) ($_POST['folder'] ?? $currentFolder));
     try {
         $imap = $accountMgr->imapConnect($accountId);
+        if (!folderExists($imap->getFolders(), $folder)) {
+            $imap->disconnect();
+            flashSet('danger', 'Selected folder is not available.');
+            redirect('?action=inbox');
+        }
         $imap->emptyFolder($folder);
         $imap->disconnect();
         flashSet('success', 'Folder "' . htmlspecialchars($folder) . '" emptied.');
@@ -1192,7 +1239,14 @@ if ($action === 'contacts_delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 // ── Email Templates ───────────────────────────────────────────────────────────
 if ($action === 'templates_list' && isAjax()) {
     $tplMgr = new EmailTemplate($userId);
-    jsonResponse(['ok' => true, 'templates' => $tplMgr->list()]);
+    $list   = $tplMgr->list();
+    foreach ($list as &$tpl) {
+        if (!empty($tpl['body_html'])) {
+            $tpl['body_html'] = sanitizeHtml((string) $tpl['body_html'], true, 'light', false, true);
+        }
+    }
+    unset($tpl);
+    jsonResponse(['ok' => true, 'templates' => $list]);
 }
 
 if ($action === 'templates_add' && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -1685,16 +1739,172 @@ if ($action === 'email_body') {
 /**
  * Robust HTML sanitization for email bodies.
  */
+function sanitizeHtmlFailClosed(string $html, bool $isOutgoing): string
+{
+    $safe = htmlspecialchars($html, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    if ($isOutgoing) {
+        return nl2br($safe);
+    }
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; script-src \'none\';"></head><body><pre style="white-space:pre-wrap;word-break:break-word;margin:0;padding:1.5rem;font-family:inherit">' . $safe . '</pre></body></html>';
+}
+
+function isSafeEmailHref(string $url): bool
+{
+    $decoded = html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $clean   = strtolower((string) preg_replace('/[\x00-\x20\x7F]+/', '', $decoded));
+    if ($clean === '') {
+        return false;
+    }
+    if (str_starts_with($clean, '#')) {
+        return true;
+    }
+    return (bool) preg_match('/^(https?:|mailto:|tel:)/i', $clean);
+}
+
+function isSafeCssUrl(string $url): bool
+{
+    $decoded = html_entity_decode(trim($url, " \t\n\r\0\x0B\"'"), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $clean   = strtolower((string) preg_replace('/[\x00-\x20\x7F]+/', '', $decoded));
+    return (bool) preg_match('/^https?:\/\//i', $clean);
+}
+
+function sanitizeInlineCss(string $css, bool $showImages): string
+{
+    $css = preg_replace('/\/\*.*?\*\//s', '', $css) ?? '';
+    $css = str_replace('\\', '', $css);
+    $collapsed = strtolower((string) preg_replace('/[\x00-\x20\x7F]+/', '', $css));
+    if (
+        str_contains($collapsed, 'expression(')
+        || str_contains($collapsed, 'javascript:')
+        || str_contains($collapsed, 'vbscript:')
+        || str_contains($collapsed, '-moz-binding')
+        || str_contains($collapsed, 'behavior:')
+    ) {
+        return '';
+    }
+
+    static $allowedProps = [
+        'color' => true,
+        'background-color' => true,
+        'background' => true,
+        'font' => true,
+        'font-family' => true,
+        'font-size' => true,
+        'font-weight' => true,
+        'font-style' => true,
+        'font-variant' => true,
+        'text-align' => true,
+        'text-decoration' => true,
+        'text-indent' => true,
+        'text-transform' => true,
+        'line-height' => true,
+        'letter-spacing' => true,
+        'word-spacing' => true,
+        'white-space' => true,
+        'vertical-align' => true,
+        'margin' => true,
+        'margin-top' => true,
+        'margin-right' => true,
+        'margin-bottom' => true,
+        'margin-left' => true,
+        'padding' => true,
+        'padding-top' => true,
+        'padding-right' => true,
+        'padding-bottom' => true,
+        'padding-left' => true,
+        'border' => true,
+        'border-top' => true,
+        'border-right' => true,
+        'border-bottom' => true,
+        'border-left' => true,
+        'border-color' => true,
+        'border-style' => true,
+        'border-width' => true,
+        'border-radius' => true,
+        'border-collapse' => true,
+        'border-spacing' => true,
+        'width' => true,
+        'min-width' => true,
+        'max-width' => true,
+        'height' => true,
+        'min-height' => true,
+        'max-height' => true,
+        'display' => true,
+        'float' => true,
+        'clear' => true,
+        'list-style' => true,
+        'list-style-type' => true,
+        'list-style-position' => true,
+        'table-layout' => true,
+        'word-break' => true,
+        'overflow-wrap' => true,
+        'word-wrap' => true,
+        'opacity' => true,
+        'box-sizing' => true,
+        'visibility' => true,
+    ];
+
+    $safeDecls = [];
+    foreach (explode(';', $css) as $decl) {
+        $decl = trim($decl);
+        if ($decl === '' || !str_contains($decl, ':')) {
+            continue;
+        }
+        [$prop, $val] = explode(':', $decl, 2);
+        $prop = strtolower(trim($prop));
+        $val  = trim($val);
+        if ($prop === '' || $val === '' || !isset($allowedProps[$prop])) {
+            continue;
+        }
+        $valNorm = strtolower((string) preg_replace('/[\x00-\x20\x7F]+/', '', $val));
+        if (
+            str_contains($valNorm, 'expression(')
+            || str_contains($valNorm, 'javascript:')
+            || str_contains($valNorm, 'vbscript:')
+            || str_contains($valNorm, '-moz-binding')
+            || str_contains($valNorm, 'behavior:')
+        ) {
+            continue;
+        }
+        if ($prop === 'display') {
+            $allowedDisplay = ['block', 'inline', 'inline-block', 'flex', 'inline-flex', 'grid', 'table', 'table-row', 'table-cell', 'table-header-group', 'table-row-group', 'table-footer-group', 'list-item', 'none'];
+            if (!in_array(strtolower($val), $allowedDisplay, true)) {
+                continue;
+            }
+        }
+        if (preg_match('/url\s*\(/i', $val)) {
+            if (!$showImages) {
+                $val = preg_replace('/url\s*\([^)]*\)/i', 'none', $val) ?? 'none';
+            } else {
+                $val = preg_replace_callback('/url\s*\(([^)]*)\)/i', static function (array $m): string {
+                    return isSafeCssUrl($m[1]) ? 'url(' . trim($m[1]) . ')' : 'none';
+                }, $val) ?? 'none';
+            }
+        }
+        $safeDecls[] = $prop . ': ' . $val;
+    }
+
+    return implode('; ', $safeDecls);
+}
+
+/**
+ * Strict fail-closed, allowlist-based HTML sanitization for email bodies, drafts, and signatures.
+ */
 function sanitizeHtml(string $html, bool $showImages, string $theme, bool $stripRemoteImages = false, bool $isOutgoing = false): string
 {
-    if (!class_exists('DOMDocument') || trim($html) === '') {
-        return $html;
+    if (trim($html) === '') {
+        return '';
     }
+    if (!class_exists('DOMDocument')) {
+        return sanitizeHtmlFailClosed($html, $isOutgoing);
+    }
+
+    $theme = in_array($theme, ['light', 'dark', 'system'], true) ? $theme : 'system';
 
     try {
         $doc = new DOMDocument('1.0', 'UTF-8');
         libxml_use_internal_errors(true);
-        
+
         $isFullDoc = str_contains(strtolower($html), '<html');
         if ($isFullDoc) {
             $success = $doc->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NODEFDTD);
@@ -1704,16 +1914,45 @@ function sanitizeHtml(string $html, bool $showImages, string $theme, bool $strip
         libxml_clear_errors();
 
         if (!$success || !$doc->documentElement) {
-            return $html;
+            return sanitizeHtmlFailClosed($html, $isOutgoing);
         }
 
-        // Remove dangerous tags
-        $dangerousTags = [
-            'script', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'style', 
-            'applet', 'frameset', 'frame', 'video', 'audio', 'canvas', 'svg', 'math',
-            'form', 'button', 'input', 'select', 'textarea', 'keygen', 'details', 'summary'
+        // Remove XML processing instructions (e.g., UTF-8 encoding PI)
+        for ($i = $doc->childNodes->length - 1; $i >= 0; $i--) {
+            $child = $doc->childNodes->item($i);
+            if ($child && $child->nodeType === XML_PI_NODE && $child->parentNode) {
+                $child->parentNode->removeChild($child);
+            }
+        }
+
+        static $dropSubtreeTags = [
+            'script', 'style', 'svg', 'math', 'iframe', 'frame', 'frameset',
+            'object', 'embed', 'applet', 'noscript', 'template', 'title',
+            'meta', 'link', 'base', 'form', 'input', 'button', 'select',
+            'option', 'optgroup', 'textarea', 'keygen', 'audio', 'video',
+            'source', 'track', 'canvas', 'map', 'area', 'xml',
         ];
-        foreach ($dangerousTags as $tag) {
+
+        static $allowedTags = [
+            'html' => true, 'head' => true, 'body' => true, 'div' => true, 'span' => true,
+            'p' => true, 'br' => true, 'hr' => true, 'wbr' => true,
+            'b' => true, 'strong' => true, 'i' => true, 'em' => true, 'u' => true,
+            's' => true, 'strike' => true, 'del' => true, 'ins' => true,
+            'sub' => true, 'sup' => true, 'small' => true, 'big' => true, 'mark' => true,
+            'code' => true, 'pre' => true, 'kbd' => true, 'samp' => true, 'var' => true,
+            'blockquote' => true, 'q' => true, 'cite' => true, 'abbr' => true, 'acronym' => true,
+            'dfn' => true, 'time' => true, 'address' => true, 'center' => true, 'font' => true,
+            'h1' => true, 'h2' => true, 'h3' => true, 'h4' => true, 'h5' => true, 'h6' => true,
+            'ul' => true, 'ol' => true, 'li' => true, 'dl' => true, 'dt' => true, 'dd' => true,
+            'a' => true, 'img' => true, 'table' => true, 'caption' => true,
+            'colgroup' => true, 'col' => true, 'thead' => true, 'tbody' => true, 'tfoot' => true,
+            'tr' => true, 'th' => true, 'td' => true, 'figure' => true, 'figcaption' => true,
+            'header' => true, 'footer' => true, 'section' => true, 'article' => true,
+            'aside' => true, 'main' => true, 'nav' => true,
+        ];
+
+        // 1. Drop executable / dangerous subtrees completely
+        foreach ($dropSubtreeTags as $tag) {
             $nodes = $doc->getElementsByTagName($tag);
             while ($nodes && $nodes->length > 0) {
                 $node = $nodes->item(0);
@@ -1725,79 +1964,136 @@ function sanitizeHtml(string $html, bool $showImages, string $theme, bool $strip
             }
         }
 
-        // Remove event handlers and other dangerous attributes
-        $xpath = new DOMXPath($doc);
-        $nodes = $xpath->query('//@*');
-        if ($nodes) {
-            foreach ($nodes as $attr) {
-                $name = strtolower($attr->nodeName);
-                if (str_starts_with($name, 'on') || in_array($name, ['formaction', 'form', 'srcdoc', 'action', 'method', 'background', 'lowsrc'], true)) {
-                    // 'background'/'lowsrc' are obsolete HTML4-era attributes that some legacy
-                    // engines resolved as javascript: URLs; no modern markup relies on them.
-                    if ($attr->parentNode) {
-                        $attr->parentNode->removeAttribute($attr->nodeName);
+        // 2. Unwrap any non-allowlisted elements while preserving safe text/children
+        $allElements = $doc->getElementsByTagName('*');
+        for ($i = $allElements->length - 1; $i >= 0; $i--) {
+            $el = $allElements->item($i);
+            if (!$el || !($el instanceof DOMElement)) {
+                continue;
+            }
+            $tagName = strtolower($el->tagName);
+            if (!isset($allowedTags[$tagName])) {
+                if ($el->parentNode) {
+                    while ($el->firstChild) {
+                        $el->parentNode->insertBefore($el->firstChild, $el);
                     }
-                } elseif ($name === 'style') {
-                    // Collapse whitespace (including newlines) before keyword checks so a
-                    // value like "url(java\nscript:...)" cannot dodge the "javascript:" check;
-                    // browsers ignore such whitespace inside CSS tokens, so collapsing it here
-                    // does not change how any legitimate style value is interpreted.
-                    $val = strtolower(preg_replace('/\s+/', '', $attr->nodeValue));
-                    // Block dangerous CSS properties
-                    $isDangerous = str_contains($val, 'expression') || 
-                                   str_contains($val, 'javascript:') || 
-                                   str_contains($val, 'vbscript:') ||
-                                   str_contains($val, '-moz-binding') ||
-                                   str_contains($val, 'position:fixed') ||
-                                   str_contains($val, 'position:absolute'); // Prevent overlay attacks
-                    
-                    if (!$showImages && str_contains($val, 'url(')) {
-                        // Replace url(...) with a placeholder to prevent tracking
-                        $attr->nodeValue = preg_replace('/url\s*\([^)]+\)/i', 'url(data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)', $attr->nodeValue);
+                    $el->parentNode->removeChild($el);
+                }
+            }
+        }
+
+        // 3. Attribute allowlist per tag
+        static $globalAttrs = [
+            'dir' => true, 'lang' => true, 'title' => true, 'align' => true,
+            'valign' => true, 'width' => true, 'height' => true, 'style' => true,
+            'class' => true,
+        ];
+        static $tagAttrs = [
+            'a'          => ['href' => true, 'target' => true, 'rel' => true, 'name' => true],
+            'img'        => ['src' => true, 'alt' => true, 'width' => true, 'height' => true, 'border' => true, 'hspace' => true, 'vspace' => true, 'referrerpolicy' => true, 'data-blocked-src' => true],
+            'table'      => ['border' => true, 'cellpadding' => true, 'cellspacing' => true, 'width' => true, 'height' => true, 'bgcolor' => true, 'align' => true, 'summary' => true],
+            'td'         => ['colspan' => true, 'rowspan' => true, 'width' => true, 'height' => true, 'bgcolor' => true, 'align' => true, 'valign' => true, 'nowrap' => true, 'scope' => true, 'headers' => true],
+            'th'         => ['colspan' => true, 'rowspan' => true, 'width' => true, 'height' => true, 'bgcolor' => true, 'align' => true, 'valign' => true, 'nowrap' => true, 'scope' => true, 'headers' => true],
+            'tr'         => ['align' => true, 'valign' => true, 'bgcolor' => true],
+            'thead'      => ['align' => true, 'valign' => true, 'bgcolor' => true],
+            'tbody'      => ['align' => true, 'valign' => true, 'bgcolor' => true],
+            'tfoot'      => ['align' => true, 'valign' => true, 'bgcolor' => true],
+            'col'        => ['span' => true, 'width' => true, 'align' => true, 'valign' => true],
+            'colgroup'   => ['span' => true, 'width' => true, 'align' => true, 'valign' => true],
+            'ol'         => ['start' => true, 'type' => true, 'reversed' => true],
+            'ul'         => ['type' => true],
+            'li'         => ['type' => true, 'value' => true],
+            'font'       => ['color' => true, 'face' => true, 'size' => true],
+            'hr'         => ['width' => true, 'size' => true, 'color' => true, 'noshade' => true],
+            'blockquote' => ['cite' => true],
+            'body'       => ['bgcolor' => true, 'text' => true, 'link' => true, 'vlink' => true, 'alink' => true, 'leftmargin' => true, 'topmargin' => true, 'marginwidth' => true, 'marginheight' => true],
+        ];
+
+        $allElements = $doc->getElementsByTagName('*');
+        for ($i = $allElements->length - 1; $i >= 0; $i--) {
+            $el = $allElements->item($i);
+            if (!$el || !($el instanceof DOMElement) || !$el->hasAttributes()) {
+                continue;
+            }
+            $tagName = strtolower($el->tagName);
+            $allowedForTag = $tagAttrs[$tagName] ?? [];
+            $attrNames = [];
+            foreach ($el->attributes as $attr) {
+                $attrNames[] = $attr->nodeName;
+            }
+            foreach ($attrNames as $attrName) {
+                $attrLower = strtolower($attrName);
+                if (!isset($globalAttrs[$attrLower]) && !isset($allowedForTag[$attrLower])) {
+                    $el->removeAttribute($attrName);
+                    continue;
+                }
+                if ($attrLower === 'style') {
+                    $cleanStyle = sanitizeInlineCss($el->getAttribute($attrName), $showImages);
+                    if ($cleanStyle === '') {
+                        $el->removeAttribute($attrName);
+                    } else {
+                        $el->setAttribute('style', $cleanStyle);
                     }
-                    
-                    if ($isDangerous) {
-                        $attr->parentNode->removeAttribute($attr->nodeName);
+                } elseif ($attrLower === 'class') {
+                    $cleanClass = trim((string) preg_replace('/[^a-zA-Z0-9_\-\s]/', '', $el->getAttribute($attrName)));
+                    if ($cleanClass === '') {
+                        $el->removeAttribute($attrName);
+                    } else {
+                        $el->setAttribute('class', $cleanClass);
                     }
                 }
             }
         }
 
-        // Sanitize links
+        // 4. Sanitize links
         foreach ($doc->getElementsByTagName('a') as $a) {
-            $href = $a->getAttribute('href');
-            $normalised = strtolower(preg_replace('/[\x00-\x20]+/', '', html_entity_decode($href, ENT_QUOTES | ENT_HTML5)));
-            if (str_starts_with($normalised, 'javascript:') || str_starts_with($normalised, 'vbscript:') || str_starts_with($normalised, 'data:text/html')) {
+            if (!($a instanceof DOMElement)) {
+                continue;
+            }
+            $href = trim($a->getAttribute('href'));
+            if ($href === '' || !isSafeEmailHref($href)) {
                 $a->setAttribute('href', '#');
             }
             $a->setAttribute('target', '_blank');
             $a->setAttribute('rel', 'noopener noreferrer');
         }
 
-        // Handle images (blocking/stripping)
+        // 5. Sanitize images (allow https/http, cid:, safe raster data URIs; block SVG data URIs)
         $imgs = $doc->getElementsByTagName('img');
+        $blockedPlaceholder = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
         for ($i = $imgs->length - 1; $i >= 0; $i--) {
             $img = $imgs->item($i);
-            $src = $img->getAttribute('src');
-            $isRemote = str_starts_with(strtolower($src), 'http');
-            
+            if (!($img instanceof DOMElement) || !$img->parentNode) {
+                continue;
+            }
+            $src = trim($img->getAttribute('src'));
+            $srcClean = strtolower((string) preg_replace('/[\x00-\x20\x7F]+/', '', html_entity_decode($src, ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+            $isRemote = (bool) preg_match('/^https?:\/\//i', $srcClean);
+            $isCid    = str_starts_with($srcClean, 'cid:');
+            $isSafeRasterData = (bool) preg_match('/^data:image\/(png|jpeg|jpg|gif|webp);base64,[a-z0-9+\/=]+$/i', $srcClean);
+
             if ($stripRemoteImages && $isRemote) {
                 $img->parentNode->removeChild($img);
                 continue;
             }
 
+            if (!$isRemote && !$isCid && !$isSafeRasterData) {
+                $img->removeAttribute('src');
+                $img->removeAttribute('data-blocked-src');
+                continue;
+            }
+
             if (!$showImages && $isRemote) {
                 $img->setAttribute('data-blocked-src', $src);
-                $img->setAttribute('src', 'data:image/svg+xml;base64,' . base64_encode('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="30" viewBox="0 0 100 30"><rect width="100%" height="100%" fill="#f1f5f9"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#64748b">[Image Blocked]</text></svg>'));
+                $img->setAttribute('src', $blockedPlaceholder);
                 $img->setAttribute('alt', '[Blocked Image]');
                 $img->setAttribute('title', 'This remote image was blocked for your privacy. Use the "Allow images" button to see it.');
-                $img->setAttribute('class', ($img->getAttribute('class') ? $img->getAttribute('class') . ' ' : '') . 'wm-blocked-image');
+                $img->setAttribute('class', trim($img->getAttribute('class') . ' wm-blocked-image'));
             }
             $img->setAttribute('referrerpolicy', 'no-referrer');
         }
 
         if (!$isOutgoing) {
-            // Inject base styles and meta
             $head = $doc->getElementsByTagName('head')->item(0);
             if (!$head) {
                 $head = $doc->createElement('head');
@@ -1807,7 +2103,17 @@ function sanitizeHtml(string $html, bool $showImages, string $theme, bool $strip
                     $doc->documentElement->appendChild($head);
                 }
             }
-            
+
+            $metaCharset = $doc->createElement('meta');
+            $metaCharset->setAttribute('charset', 'UTF-8');
+            $head->appendChild($metaCharset);
+
+            $imgCsp = $showImages ? "'self' data: https:" : "'self' data:";
+            $metaCsp = $doc->createElement('meta');
+            $metaCsp->setAttribute('http-equiv', 'Content-Security-Policy');
+            $metaCsp->setAttribute('content', "default-src 'none'; style-src 'unsafe-inline'; img-src {$imgCsp}; script-src 'none';");
+            $head->appendChild($metaCsp);
+
             $base = $doc->createElement('base');
             $base->setAttribute('target', '_blank');
             $base->setAttribute('rel', 'noopener noreferrer');
@@ -1819,50 +2125,44 @@ function sanitizeHtml(string $html, bool $showImages, string $theme, bool $strip
             $darkColor = '#e6edf3';
 
             $styleStr = '
-                :root { 
-                    --bg: ' . $lightBg . '; 
-                    --color: ' . $lightColor . '; 
+                :root {
+                    --bg: ' . $lightBg . ';
+                    --color: ' . $lightColor . ';
                     color-scheme: light;
                 }
-                
-                [data-theme="dark"] { 
-                    --bg: ' . $darkBg . '; 
-                    --color: ' . $darkColor . '; 
-                    color-scheme: dark; 
+                [data-theme="dark"] {
+                    --bg: ' . $darkBg . ';
+                    --color: ' . $darkColor . ';
+                    color-scheme: dark;
                 }
-                
                 @media (prefers-color-scheme: dark) {
-                    :root:not([data-theme="light"]) { 
-                        --bg: ' . $darkBg . '; 
-                        --color: ' . $darkColor . '; 
-                        color-scheme: dark; 
+                    :root:not([data-theme="light"]) {
+                        --bg: ' . $darkBg . ';
+                        --color: ' . $darkColor . ';
+                        color-scheme: dark;
                     }
                 }
-
                 html, body {
                     margin: 0;
                     padding: 0;
                     height: auto !important;
-                    min-height: auto !important;
-                    max-height: none !important;
-                    overflow: visible !important;
+                    min-height: 100%;
+                    overflow-x: auto;
+                    overflow-y: visible;
                     background: var(--bg);
                     color: var(--color);
                 }
-
                 #wm-shadow-wrapper {
                     min-height: 100%;
                     display: block;
-                    padding: 2.5rem;
+                    padding: 2rem;
                     box-sizing: border-box;
                     width: 100%;
                     max-width: 100%;
-                    /* Base colors for inversion: assume light by default */
                     background: #ffffff;
                     color: #1a2332;
                     transition: background-color .2s, color .2s;
                 }
-
                 body {
                     padding: 0;
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -1872,47 +2172,48 @@ function sanitizeHtml(string $html, bool $showImages, string $theme, bool $strip
                     overflow-wrap: anywhere;
                     max-width: 100%;
                     margin: 0 auto;
-                    overflow-x: hidden;
                 }
-
-                /* Force wrapping for all elements */
                 * {
+                    box-sizing: border-box;
                     overflow-wrap: anywhere !important;
                     word-break: break-word !important;
                 }
-
-                pre {
+                pre, code {
                     white-space: pre-wrap !important;
-                    margin: 0;
                     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
                 }
-
-                @media (max-width: 600px) {
-                    #wm-shadow-wrapper { padding: 1.25rem; }
-                    * { white-space: normal !important; }
-                    pre, code, kbd, samp { white-space: pre-wrap !important; }
+                pre { margin: 0; }
+                blockquote {
+                    margin: 0;
+                    padding-left: 1rem;
+                    border-left: 3px solid #d8e0e8;
                 }
-
                 img, table { max-width: 100% !important; height: auto !important; }
                 table { border-collapse: collapse; }
                 a { color: #388bfd; }
-                
-                /* --- SMART DARK MODE INVERSION --- */
-                /* This technique inverts the entire content and then re-inverts media to keep them looking natural. */
-                
-                /* Target the root element (html or body) when data-theme="dark" is set */
+                img.wm-blocked-image {
+                    display: inline-block;
+                    min-width: 110px;
+                    min-height: 24px;
+                    padding: 2px 6px;
+                    border: 1px dashed #94a3b8;
+                    border-radius: 4px;
+                    background: #f1f5f9;
+                    color: #475569;
+                    font-size: 0.75rem;
+                    vertical-align: middle;
+                }
+                @media (max-width: 600px) {
+                    #wm-shadow-wrapper { padding: 1.25rem; }
+                }
                 [data-theme="dark"] {
                     background-color: var(--bg) !important;
                     color: var(--color) !important;
                 }
-
-                /* Apply inversion to the content wrapper in dark mode */
-                /* data-theme="dark" is set directly on #wm-shadow-wrapper by JS syncTheme(),
-                   so we must use #wm-shadow-wrapper[data-theme="dark"] (not [data-theme="dark"] #wm-shadow-wrapper) */
                 #wm-shadow-wrapper[data-theme="dark"] {
                     filter: invert(100%) hue-rotate(180deg) brightness(1.1) contrast(0.9);
-                    background: transparent !important; /* Transparent so the container #161b22 surface shows through */
-                    color: #000000 !important; /* Ensure base text is black before inversion */
+                    background: transparent !important;
+                    color: #000000 !important;
                 }
                 @media (prefers-color-scheme: dark) {
                     #wm-shadow-wrapper:not([data-theme="light"]) {
@@ -1921,10 +2222,7 @@ function sanitizeHtml(string $html, bool $showImages, string $theme, bool $strip
                         color: #000000 !important;
                     }
                 }
-
-                /* Force very dark colors to be more readable after inversion */
                 #wm-shadow-wrapper[data-theme="dark"] * {
-                    /* Nudge contrast for better readability in dark mode */
                     text-shadow: 0 0 0.5px rgba(255,255,255,0.05);
                 }
                 @media (prefers-color-scheme: dark) {
@@ -1932,13 +2230,7 @@ function sanitizeHtml(string $html, bool $showImages, string $theme, bool $strip
                         text-shadow: 0 0 0.5px rgba(255,255,255,0.05);
                     }
                 }
-
-                /* Re-invert images to restore their original colors (never show inverted images) */
                 #wm-shadow-wrapper[data-theme="dark"] img,
-                #wm-shadow-wrapper[data-theme="dark"] video,
-                #wm-shadow-wrapper[data-theme="dark"] iframe,
-                #wm-shadow-wrapper[data-theme="dark"] canvas,
-                #wm-shadow-wrapper[data-theme="dark"] svg,
                 #wm-shadow-wrapper[data-theme="dark"] [style*="background-image"],
                 #wm-shadow-wrapper[data-theme="dark"] [style*="background: url"],
                 #wm-shadow-wrapper[data-theme="dark"] [style*="background:url"] {
@@ -1946,18 +2238,12 @@ function sanitizeHtml(string $html, bool $showImages, string $theme, bool $strip
                 }
                 @media (prefers-color-scheme: dark) {
                     #wm-shadow-wrapper:not([data-theme="light"]) img,
-                    #wm-shadow-wrapper:not([data-theme="light"]) video,
-                    #wm-shadow-wrapper:not([data-theme="light"]) iframe,
-                    #wm-shadow-wrapper:not([data-theme="light"]) canvas,
-                    #wm-shadow-wrapper:not([data-theme="light"]) svg,
                     #wm-shadow-wrapper:not([data-theme="light"]) [style*="background-image"],
                     #wm-shadow-wrapper:not([data-theme="light"]) [style*="background: url"],
                     #wm-shadow-wrapper:not([data-theme="light"]) [style*="background:url"] {
                         filter: invert(100%) hue-rotate(180deg) !important;
                     }
                 }
-
-                /* Fix for links which might become hard to read after inversion */
                 #wm-shadow-wrapper[data-theme="dark"] a {
                     filter: invert(100%) hue-rotate(180deg) !important;
                     color: #58a6ff !important;
@@ -1970,35 +2256,27 @@ function sanitizeHtml(string $html, bool $showImages, string $theme, bool $strip
                         text-decoration: underline;
                     }
                 }
-
-                /* Ensure background colors that were inverted to white become the theme background */
-                [data-theme="dark"] .inverted-bg-fix {
-                    background-color: var(--bg) !important;
-                }
-
-                /* Additional overrides for common email elements that might still look bad */
-                [data-theme="dark"] table, 
-                [data-theme="dark"] td, 
-                [data-theme="dark"] div, 
-                [data-theme="dark"] span, 
-                [data-theme="dark"] p {
-                    border-color: var(--wm-border, #30363d) !important;
-                }
-                
-                /* Special handling for blocked image placeholders in dark mode */
-                [data-theme="dark"] img[alt="[image blocked]"] {
+                [data-theme="dark"] img.wm-blocked-image {
                     filter: none !important;
                     background: #30363d;
                     color: #8b949e;
-                    padding: 4px;
-                    border-radius: 4px;
-                    font-size: 0.75rem;
+                    border-color: #484f58;
                 }
             ';
             $style = $doc->createElement('style');
             $style->appendChild($doc->createTextNode($styleStr));
             $head->appendChild($style);
 
+            $bodyNode = $doc->getElementsByTagName('body')->item(0);
+            if ($bodyNode) {
+                $wrapper = $doc->createElement('div');
+                $wrapper->setAttribute('id', 'wm-shadow-wrapper');
+                $wrapper->setAttribute('data-theme', $theme);
+                while ($bodyNode->firstChild) {
+                    $wrapper->appendChild($bodyNode->firstChild);
+                }
+                $bodyNode->appendChild($wrapper);
+            }
             $doc->documentElement->setAttribute('data-theme', $theme);
         }
 
@@ -2008,24 +2286,30 @@ function sanitizeHtml(string $html, bool $showImages, string $theme, bool $strip
                 if ($bodyNode) {
                     $innerHTML = '';
                     foreach ($bodyNode->childNodes as $child) {
-                        $innerHTML .= $doc->saveHTML($child);
+                        $saved = $doc->saveHTML($child);
+                        if ($saved === false) {
+                            return sanitizeHtmlFailClosed($html, true);
+                        }
+                        $innerHTML .= $saved;
                     }
-                    return $innerHTML ?: $html;
+                    return $innerHTML;
                 }
             }
-            return $doc->saveHTML() ?: $html;
+            $savedDoc = $doc->saveHTML();
+            return $savedDoc !== false ? $savedDoc : sanitizeHtmlFailClosed($html, true);
         }
 
-        return $doc->saveHTML() ?: $html;
+        $savedDoc = $doc->saveHTML();
+        return $savedDoc !== false ? $savedDoc : sanitizeHtmlFailClosed($html, false);
     } catch (Throwable $e) {
         error_log('HTML Sanitization failed: ' . $e->getMessage());
-        return $html;
+        return sanitizeHtmlFailClosed($html, $isOutgoing);
     }
 }
 
 // ── Import EML ──────────────────────────────────────────────────────────────
 if ($action === 'import_eml' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $folder = $_POST['folder'] ?? 'INBOX';
+    $folder = trim((string) ($_POST['folder'] ?? 'INBOX'));
     $file = $_FILES['eml_file'] ?? null;
 
     if ($file && $file['error'] === UPLOAD_ERR_OK) {
@@ -2049,12 +2333,16 @@ if ($action === 'import_eml' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $raw = file_get_contents($file['tmp_name']);
             try {
                 $imap = $accountMgr->imapConnect($accountId);
-                if ($imap->appendMessage($folder, $raw)) {
+                if (!folderExists($imap->getFolders(), $folder)) {
+                    $imap->disconnect();
+                    $flash = ['type' => 'danger', 'message' => 'Selected folder is not available.'];
+                } elseif ($imap->appendMessage($folder, $raw)) {
                     $flash = ['type' => 'success', 'message' => 'Email imported successfully.'];
+                    $imap->disconnect();
                 } else {
                     $flash = ['type' => 'danger', 'message' => 'Failed to import email.'];
+                    $imap->disconnect();
                 }
-                $imap->disconnect();
             } catch (Exception $e) {
                 error_log('EML import failed for user ' . $userId . ', account ' . $accountId . ': ' . $e->getMessage());
                 $flash = ['type' => 'danger', 'message' => 'Failed to import email.'];
@@ -2244,13 +2532,18 @@ if ($action === 'check_unread' && isAjax()) {
 // ── Bulk actions ──────────────────────────────────────────────────────────────
 if ($action === 'bulk' && isAjax()) {
     $body   = json_decode(file_get_contents('php://input'), true) ?? [];
-    $folder = $body['folder'] ?? 'INBOX';
+    $folder = trim((string) ($body['folder'] ?? 'INBOX'));
     $uids   = array_map('intval', $body['uids'] ?? []);
     $act    = $body['action'] ?? '';
     $destination = trim((string) ($body['destination'] ?? ''));
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
+        $allFolders = $imap->getFolders();
+        if (!folderExists($allFolders, $folder)) {
+            $imap->disconnect();
+            jsonResponse(['ok' => false, 'error' => 'Source folder is not available.']);
+        }
         if ($act === 'delete') {
             $trash = resolveTrashFolder($imap);
             $inTrash = isTrashFolderEquivalent($folder, $trash);
@@ -2263,7 +2556,7 @@ if ($action === 'bulk' && isAjax()) {
                 $moveError = 'Select a destination folder.';
             } elseif ($destination === $folder) {
                 $moveError = 'Selected messages are already in that folder.';
-            } elseif (!folderExists($imap->getFolders(), $destination)) {
+            } elseif (!folderExists($allFolders, $destination)) {
                 $moveError = 'Selected folder is not available.';
             }
 
@@ -2275,9 +2568,9 @@ if ($action === 'bulk' && isAjax()) {
                 $imap->moveMessageByUid($folder, $uid, $destination);
             }
         } elseif ($act === 'copy') {
-            if ($destination === '') {
+            if ($destination === '' || !folderExists($allFolders, $destination)) {
                 $imap->disconnect();
-                jsonResponse(['ok' => false, 'error' => 'Select a destination folder.']);
+                jsonResponse(['ok' => false, 'error' => 'Selected destination folder is not available.']);
             }
             foreach ($uids as $uid) {
                 $imap->copyMessageByUid($folder, $uid, $destination);
@@ -2315,6 +2608,7 @@ if ($action === 'attachment' || $action === 'download_all') {
 
         try {
             $imap = $accountMgr->imapConnect($targetAccountId);
+            $folder = validateSourceFolder($imap, $folder);
             $imap->selectFolder($folder);
             $structure = $imap->fetchStructure($msgNo);
             $attachments = $imap->getAttachments($msgNo, $structure);
@@ -2329,9 +2623,28 @@ if ($action === 'attachment' || $action === 'download_all') {
                 exit('Failed to create ZIP file.');
             }
 
+            $usedNames = [];
             foreach ($attachments as $att) {
                 $data = $imap->fetchAttachment($msgNo, $att['section']);
-                $zip->addFromString($att['filename'], $data);
+                $rawName = str_replace(['\\', "\0", "\r", "\n"], '/', (string) ($att['filename'] ?? 'attachment'));
+                $entryName = basename($rawName);
+                $entryName = trim((string) preg_replace('/[\x00-\x1F\x7F\/]+/', '_', $entryName));
+                if ($entryName === '' || $entryName === '.' || $entryName === '..') {
+                    $entryName = 'attachment';
+                }
+                $baseEntry = $entryName;
+                $suffixIdx = 1;
+                while (isset($usedNames[strtolower($entryName)])) {
+                    $dotPos = strrpos($baseEntry, '.');
+                    if ($dotPos !== false && $dotPos > 0) {
+                        $entryName = substr($baseEntry, 0, $dotPos) . ' (' . $suffixIdx . ')' . substr($baseEntry, $dotPos);
+                    } else {
+                        $entryName = $baseEntry . ' (' . $suffixIdx . ')';
+                    }
+                    $suffixIdx++;
+                }
+                $usedNames[strtolower($entryName)] = true;
+                $zip->addFromString($entryName, $data);
             }
             $zip->close();
             $imap->disconnect();
@@ -2375,6 +2688,7 @@ if ($action === 'attachment' || $action === 'download_all') {
 
     try {
         $imap = $accountMgr->imapConnect($targetAccountId);
+        $folder = validateSourceFolder($imap, $folder);
         $imap->selectFolder($folder);
         $data = $imap->fetchAttachment($msgNo, $section);
         $imap->disconnect();
@@ -2430,6 +2744,7 @@ if ($action === 'preview_eml') {
 
     try {
         $imap = $accountMgr->imapConnect($targetAccountId);
+        $folder = validateSourceFolder($imap, $folder);
         $imap->selectFolder($folder);
         $data = $imap->fetchAttachment($msgNo, $section);
         $imap->disconnect();
@@ -2439,7 +2754,7 @@ if ($action === 'preview_eml') {
         }
 
         $parsed = EmlParser::parse($data);
-        $theme = $session['theme'] ?? 'system';
+        $theme = $session['theme'] ?? ($_COOKIE['wm_theme'] ?? 'system');
         $safeHtml = $parsed['body_html'] !== '' ? sanitizeHtml($parsed['body_html'], true, $theme) : '';
 
         $emlData = [
@@ -2478,7 +2793,7 @@ if ($action === 'preview_eml') {
     } catch (Throwable $e) {
         error_log('Preview EML failed for user ' . $userId . ', account ' . $targetAccountId . ', folder ' . $folder . ', msg ' . $msgNo . ': ' . $e->getMessage());
         if (isAjax()) {
-            jsonResponse(['ok' => false, 'error' => 'Error previewing .eml attachment: ' . $e->getMessage()]);
+            jsonResponse(['ok' => false, 'error' => 'Error previewing .eml attachment.']);
         }
         http_response_code(500);
         exit('Error previewing EML attachment.');
@@ -2493,6 +2808,7 @@ if ($action === 'export_eml') {
 
     try {
         $imap = $accountMgr->imapConnect($targetAccountId);
+        $folder = validateSourceFolder($imap, $folder);
         $raw  = $imap->getRawMessage($folder, $msgNo);
         $imap->disconnect();
 
@@ -2518,6 +2834,7 @@ if ($action === 'export_zip') {
 
     try {
         $imap = $accountMgr->imapConnect($accountId);
+        $folder = validateSourceFolder($imap, $folder);
         $zip = new ZipArchive();
         $zipFile = tempnam(sys_get_temp_dir(), 'wm_export');
         if ($zip->open($zipFile, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
@@ -2640,7 +2957,7 @@ if ($action === 'compose') {
 
             // Block remote images from the original body if they were not explicitly accepted
             // in the previous view. This follows User Request.
-            $bodyHtml = $isEditDraft ? $rawHtml : sanitizeHtml($rawHtml, $imagesAllowed, $theme, false, true);
+            $bodyHtml = sanitizeHtml($rawHtml, $isEditDraft ? true : $imagesAllowed, $theme, false, true);
 
             if ($isEditDraft) {
                 $prefill = [
@@ -2712,9 +3029,21 @@ if ($action === 'compose') {
 
     $account = $accountMgr->get($composeAccountId);
     $user    = Database::getInstance()->fetch('SELECT * FROM users WHERE id = ?', [$userId]);
-    $signature = ($account['signature'] ?? '') ?: ($user['signature'] ?? '');
+    $rawSignature = ($account['signature'] ?? '') ?: ($user['signature'] ?? '');
+    $signature    = sanitizeHtml((string) $rawSignature, true, 'light', false, true);
+    if (!empty($user['signature'])) {
+        $user['signature'] = sanitizeHtml((string) $user['signature'], true, 'light', false, true);
+    }
+    $composeAccounts = $accounts;
+    foreach ($composeAccounts as &$cAcc) {
+        if (!empty($cAcc['signature'])) {
+            $cAcc['signature'] = sanitizeHtml((string) $cAcc['signature'], true, 'light', false, true);
+        }
+    }
+    unset($cAcc);
 
-    render('compose', $layoutCommon + [
+    render('compose', array_merge($layoutCommon, [
+        'accounts'          => $composeAccounts,
         'user'              => $user,
         'prefill'           => $prefill,
         'replyMsg'          => $replyMsg,
@@ -2725,7 +3054,7 @@ if ($action === 'compose') {
         'signature'         => $signature,
         'resumeSend'        => !empty($prefill['resume_send']),
         'pageTitle'         => pageTitle('Compose'),
-    ]);
+    ]));
     exit;
 }
 
@@ -3049,6 +3378,13 @@ if ($action === 'settings') {
         ];
     }
 
+    if ($activeAccount !== null && !empty($activeAccount['signature'])) {
+        $activeAccount['signature'] = sanitizeHtml((string) $activeAccount['signature'], true, 'light', false, true);
+    }
+    if ($user !== null && !empty($user['signature'])) {
+        $user['signature'] = sanitizeHtml((string) $user['signature'], true, 'light', false, true);
+    }
+
     render('settings', $layoutCommon + [
         'tab'           => $tab,
         'user'          => $user,
@@ -3073,52 +3409,57 @@ if ($action === 'settings_save') {
             $name = trim($_POST['display_name'] ?? '');
             if ($account !== null) {
                 $accountMgr->update($accountId, $userId, [
-                    'label'         => $account['label'],
-                    'sender_name'   => $name,
-                    'signature'     => $account['signature'] ?? '',
-                    'email'         => $account['email'],
-                    'imap_host'     => $account['imap_host'],
-                    'imap_port'     => (int)$account['imap_port'],
-                    'imap_ssl'      => (int)$account['imap_ssl'],
-                    'smtp_host'     => $account['smtp_host'],
-                    'smtp_port'     => (int)$account['smtp_port'],
-                    'smtp_ssl'      => (int)$account['smtp_ssl'],
-                    'smtp_starttls' => (int)$account['smtp_starttls'],
-                    'username'      => $account['username'],
+                    'label'               => $account['label'],
+                    'sender_name'         => $name,
+                    'signature'           => $account['signature'] ?? '',
+                    'email'               => $account['email'],
+                    'imap_host'           => $account['imap_host'],
+                    'imap_port'           => (int)$account['imap_port'],
+                    'imap_ssl'            => (int)$account['imap_ssl'],
+                    'smtp_host'           => $account['smtp_host'],
+                    'smtp_port'           => (int)$account['smtp_port'],
+                    'smtp_ssl'            => (int)$account['smtp_ssl'],
+                    'smtp_starttls'       => (int)$account['smtp_starttls'],
+                    'username'            => $account['username'],
+                    'allow_insecure_imap' => (int)($account['allow_insecure_imap'] ?? 0),
+                    'allow_insecure_smtp' => (int)($account['allow_insecure_smtp'] ?? 0),
                 ]);
             }
             flashSet('success', 'Profile saved for this account.');
             redirect('?action=settings&tab=profile');
 
         case 'signature':
-            $sig = $_POST['signature'] ?? '';
+            $sig = sanitizeHtml((string) ($_POST['signature'] ?? ''), true, 'light', false, true);
             if ($account !== null) {
                 $accountMgr->update($accountId, $userId, [
-                    'label'         => $account['label'],
-                    'sender_name'   => $account['sender_name'] ?? '',
-                    'signature'     => $sig,
-                    'email'         => $account['email'],
-                    'imap_host'     => $account['imap_host'],
-                    'imap_port'     => (int)$account['imap_port'],
-                    'imap_ssl'      => (int)$account['imap_ssl'],
-                    'smtp_host'     => $account['smtp_host'],
-                    'smtp_port'     => (int)$account['smtp_port'],
-                    'smtp_ssl'      => (int)$account['smtp_ssl'],
-                    'smtp_starttls' => (int)$account['smtp_starttls'],
-                    'username'      => $account['username'],
+                    'label'               => $account['label'],
+                    'sender_name'         => $account['sender_name'] ?? '',
+                    'signature'           => $sig,
+                    'email'               => $account['email'],
+                    'imap_host'           => $account['imap_host'],
+                    'imap_port'           => (int)$account['imap_port'],
+                    'imap_ssl'            => (int)$account['imap_ssl'],
+                    'smtp_host'           => $account['smtp_host'],
+                    'smtp_port'           => (int)$account['smtp_port'],
+                    'smtp_ssl'            => (int)$account['smtp_ssl'],
+                    'smtp_starttls'       => (int)$account['smtp_starttls'],
+                    'username'            => $account['username'],
+                    'allow_insecure_imap' => (int)($account['allow_insecure_imap'] ?? 0),
+                    'allow_insecure_smtp' => (int)($account['allow_insecure_smtp'] ?? 0),
                 ]);
             }
             flashSet('success', 'Signature saved for this account.');
             redirect('?action=settings&tab=profile');
 
         case 'enable_2fa':
-            $tf      = new TwoFactor();
-            $secret  = $_POST['totp_secret']    ?? ($_SESSION['2fa_enroll']['secret'] ?? '');
-            $codes   = json_decode($_POST['recovery_codes'] ?? '[]', true) ?: ($_SESSION['2fa_enroll']['codes'] ?? []);
-            $code    = trim($_POST['verify_code'] ?? '');
+            $tf     = new TwoFactor();
+            $enroll = $_SESSION['2fa_enroll'] ?? null;
+            $secret = is_array($enroll) ? (string) ($enroll['secret'] ?? '') : '';
+            $codes  = is_array($enroll) && is_array($enroll['codes'] ?? null) ? $enroll['codes'] : [];
+            $code   = trim($_POST['verify_code'] ?? '');
 
-            if (!$tf->verify($secret, $code)) {
-                flashSet('danger', 'Verification code is incorrect. Please try again.');
+            if ($secret === '' || empty($codes) || !$tf->verify($secret, $code)) {
+                flashSet('danger', 'Verification code is incorrect or 2FA setup expired. Please try again.');
                 redirect('?action=settings&tab=security');
             }
 
@@ -3144,11 +3485,11 @@ if ($action === 'settings_save') {
             redirect('?action=settings&tab=security');
 
         case 'revoke_session':
-            $token = $_POST['token'] ?? '';
-            if ($token !== '') {
+            $token = trim((string) ($_POST['token'] ?? ''));
+            if ($token !== '' && ctype_xdigit($token) && strlen($token) === 64) {
                 $sessionObj = new Session();
                 $current = $sessionObj->current();
-                if ($current && $current['token'] === $token) {
+                if ($current && hash_equals((string) $current['token'], $token)) {
                     $sessionObj->destroy();
                     redirect('?action=login');
                 } else {
@@ -3343,17 +3684,24 @@ if ($action === 'move_database' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ── View Recovery Codes ───────────────────────────────────────────────────────
 if ($action === 'view_recovery_codes' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $password = $_POST['password'] ?? '';
+    $rcState = $_SESSION['rc_attempts'] ?? ['count' => 0, 'until' => 0];
+    if (($rcState['until'] ?? 0) > time()) {
+        jsonResponse(['ok' => false, 'error' => 'Too many failed attempts. Please try again later.']);
+    }
+
+    $password = (string) ($_POST['password'] ?? '');
     if ($password === '' && isAjax()) {
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
-        $password = $body['password'] ?? '';
+        $password = (string) ($body['password'] ?? '');
     }
 
     $accountMgr = new Account();
     $primary = Database::getInstance()->fetch('SELECT id FROM accounts WHERE user_id = ? AND is_primary = 1', [$userId]);
     if ($primary) {
         $acc = $accountMgr->get((int)$primary['id']);
-        if ($acc && $acc['password_plain'] === $password) {
+        $plain = $acc ? (string) ($acc['password_plain'] ?? '') : '';
+        if ($acc && $plain !== '' && $password !== '' && hash_equals($plain, $password)) {
+            unset($_SESSION['rc_attempts']);
             $user = Database::getInstance()->fetch('SELECT recovery_codes FROM users WHERE id = ?', [$userId]);
             $encrypted = json_decode($user['recovery_codes'] ?? '[]', true);
             $tf = new TwoFactor();
@@ -3361,6 +3709,11 @@ if ($action === 'view_recovery_codes' && $_SERVER['REQUEST_METHOD'] === 'POST') 
             jsonResponse(['ok' => true, 'codes' => $codes]);
         }
     }
+
+    $count = (int) ($rcState['count'] ?? 0) + 1;
+    $until = $count >= 5 ? (time() + 900) : 0;
+    $_SESSION['rc_attempts'] = ['count' => $count, 'until' => $until];
+    sleep(1);
     jsonResponse(['ok' => false, 'error' => 'Invalid password.']);
 }
 
@@ -3388,15 +3741,17 @@ if ($action === 'test_credentials' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $accountMgr = new Account();
     try {
         $accountMgr->validateCredentials([
-            'imap_host'     => trim($body['imap_host']     ?? ''),
-            'imap_port'     => (int)($body['imap_port']    ?? 993),
-            'imap_ssl'      => !empty($body['imap_ssl']),
-            'smtp_host'     => trim($body['smtp_host']     ?? ''),
-            'smtp_port'     => (int)($body['smtp_port']    ?? 587),
-            'smtp_ssl'      => !empty($body['smtp_ssl']),
-            'smtp_starttls' => !empty($body['smtp_starttls']),
-            'username'      => trim($body['username']      ?? ''),
-            'password'      => $body['password']           ?? '',
+            'imap_host'           => trim($body['imap_host']     ?? ''),
+            'imap_port'           => (int)($body['imap_port']    ?? 993),
+            'imap_ssl'            => !empty($body['imap_ssl']),
+            'smtp_host'           => trim($body['smtp_host']     ?? ''),
+            'smtp_port'           => (int)($body['smtp_port']    ?? 587),
+            'smtp_ssl'            => !empty($body['smtp_ssl']),
+            'smtp_starttls'       => !empty($body['smtp_starttls']),
+            'username'            => trim($body['username']      ?? ''),
+            'password'            => $body['password']           ?? '',
+            'allow_insecure_imap' => !empty($body['allow_insecure_imap']),
+            'allow_insecure_smtp' => !empty($body['allow_insecure_smtp']),
         ]);
         jsonResponse(['ok' => true, 'message' => 'Connection successful!']);
     } catch (Exception $e) {

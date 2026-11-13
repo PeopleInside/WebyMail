@@ -12,16 +12,17 @@ $pages      = $mailData['pages']    ?? 1;
 $folderEnc  = urlencode($folder ?? 'INBOX');
 $folderDisplay = htmlspecialchars($folder ?? 'INBOX');
 $folderJs = json_encode($folder ?? 'INBOX', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-$exportZipBaseUrl = json_encode(
-    '?action=export_zip&folder=' . rawurlencode($folder ?? 'INBOX'),
-    JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
-);
+$exportZipUrl = '?action=export_zip&folder=' . rawurlencode($folder ?? 'INBOX');
 $moveTargets = array_values(array_filter($folders ?? [], static function (array $item) use ($folder): bool {
     return ($item['name'] ?? '') !== ($folder ?? 'INBOX');
 }));
 ?>
 
-<div class="wm-toolbar">
+<div class="wm-toolbar"
+     id="inbox-toolbar"
+     data-folder="<?= htmlspecialchars($folder ?? 'INBOX') ?>"
+     data-is-trash="<?= ($isTrash ?? false) ? '1' : '0' ?>"
+     data-export-zip-url="<?= htmlspecialchars($exportZipUrl) ?>">
     <!-- Bulk action toggle -->
     <input type="checkbox" id="select-all" title="Select all">
 
@@ -160,129 +161,5 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
 </div>
 <?php endif; ?>
 </div>
-
-<script nonce="<?= $cspNonce ?>">
-(function() {
-    function bulkAction(action) {
-        var uids = getSelectedUids();
-        if (!uids.length) return;
-        
-        if (action === 'delete') {
-            var msg = '<?= ($isTrash ?? false) ? "Permanently delete selected messages? This cannot be undone." : "Move selected messages to Trash?" ?>';
-            if (!confirm(msg)) return;
-        }
-        
-        apiPost('?action=bulk', {
-            action: action,
-            uids:   uids,
-            folder: <?= $folderJs ?>
-        }).then(function(res) {
-            if (res.ok) {
-                if (res.redirect) window.location.href = res.redirect;
-                else window.location.reload();
-            }
-            else alert(res.error || 'Action failed.');
-        });
-    }
-
-    function bulkMove() {
-        const uids = getSelectedUids();
-        const destination = document.getElementById('bulk-move-destination');
-        if (!uids.length) return;
-        if (!destination || !destination.value) {
-            alert('Select a destination folder.');
-            return;
-        }
-        if (!confirm('Move the selected messages to "' + destination.options[destination.selectedIndex].text + '"?')) {
-            return;
-        }
-
-        apiPost('?action=bulk', {
-            action: 'move',
-            uids: uids,
-            folder: <?= $folderJs ?>,
-            destination: destination.value
-        }).then(function(res) {
-            if (res.ok) {
-                if (res.redirect) window.location.href = res.redirect;
-                else window.location.reload();
-            }
-            else alert(res.error || 'Action failed.');
-        });
-    }
-
-    function bulkCopy() {
-        const uids = getSelectedUids();
-        const destination = document.getElementById('bulk-move-destination');
-        if (!uids.length) return;
-        if (!destination || !destination.value) {
-            alert('Select a destination folder.');
-            return;
-        }
-        if (!confirm('Copy the selected messages to "' + destination.options[destination.selectedIndex].text + '"?')) {
-            return;
-        }
-
-        apiPost('?action=bulk', {
-            action: 'copy',
-            uids: uids,
-            folder: <?= $folderJs ?>,
-            destination: destination.value
-        }).then(function(res) {
-            if (res.ok) {
-                window.location.reload();
-            }
-            else alert(res.error || 'Action failed.');
-        });
-    }
-
-    function bulkExport() {
-        const uids = getSelectedUids();
-        if (!uids.length) return;
-        window.location.href = <?= $exportZipBaseUrl ?> + '&uids=' + encodeURIComponent(uids.join(','));
-    }
-
-    // Bind event listeners
-    const bRead = document.getElementById('bulk-read');
-    if (bRead) bRead.addEventListener('click', () => bulkAction('read'));
-    
-    const bUnread = document.getElementById('bulk-unread');
-    if (bUnread) bUnread.addEventListener('click', () => bulkAction('unread'));
-    
-    const bExport = document.getElementById('bulk-export');
-    if (bExport) bExport.addEventListener('click', bulkExport);
-    
-    const bMove = document.getElementById('bulk-move');
-    if (bMove) bMove.addEventListener('click', bulkMove);
-
-    const bCopy = document.getElementById('bulk-copy');
-    if (bCopy) bCopy.addEventListener('click', bulkCopy);
-    
-    const bDelete = document.getElementById('bulk-delete');
-    if (bDelete) bDelete.addEventListener('click', () => bulkAction('delete'));
-
-    const refreshBtn = document.getElementById('refresh-btn');
-    if (refreshBtn) refreshBtn.addEventListener('click', () => window.location.reload());
-
-    const importBtn = document.getElementById('import-eml-btn');
-    const importInput = document.getElementById('eml-file-input');
-    const importForm = document.getElementById('import-eml-form');
-    if (importBtn && importInput) {
-        importBtn.addEventListener('click', () => importInput.click());
-    }
-    if (importInput && importForm) {
-        importInput.addEventListener('change', () => importForm.submit());
-    }
-
-    const emptyForm = document.getElementById('empty-folder-form');
-    if (emptyForm) {
-        emptyForm.addEventListener('submit', function(e) {
-            if (!confirm('Are you sure you want to permanently empty this folder? All emails will be deleted and this action cannot be undone.')) {
-                e.preventDefault();
-            }
-        });
-    }
-})();
-</script>
 
 <?php if ($folder === 'Drafts') unset($_SESSION['last_failed_draft_uid']); ?>

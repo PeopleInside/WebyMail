@@ -724,6 +724,42 @@ input:autofill {
     overflow-y: visible;
 }
 
+.wm-email-frame {
+    width: 100%;
+    min-height: 540px;
+    height: 70vh;
+    border: 0;
+    display: block;
+    flex: 1;
+    resize: vertical;
+    background: transparent;
+}
+
+.wm-eml-modal-frame {
+    width: 100%;
+    min-height: 360px;
+    height: 55vh;
+    border: 0;
+    display: block;
+    background: transparent;
+}
+
+.wm-eml-standalone-frame {
+    width: 100%;
+    min-height: 540px;
+    height: 70vh;
+    border: 0;
+    display: block;
+    resize: vertical;
+    background: transparent;
+}
+
+.wm-main.is-loading {
+    opacity: .6;
+    pointer-events: none;
+    transition: opacity .12s ease;
+}
+
 .wm-email-loading {
     display: flex;
     flex-direction: column;
