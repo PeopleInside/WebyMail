@@ -117,6 +117,21 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
 </div>
 <?php endif; ?>
 
+<!-- Email authentication / anti-spoofing warning banner -->
+<?php
+$authStatus = $message['auth_status'] ?? ['has_auth' => false, 'banner_level' => 'none', 'checks' => []];
+if (!empty($authStatus['has_auth']) && in_array($authStatus['banner_level'] ?? 'none', ['danger', 'warning'], true)):
+    $bannerCls = ($authStatus['banner_level'] === 'danger') ? 'wm-auth-banner-danger' : 'wm-auth-banner-warning';
+?>
+<div class="wm-auth-banner <?= $bannerCls ?>" role="alert">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <div>
+        <div style="font-weight:700"><?= htmlspecialchars((string) ($authStatus['banner_title'] ?? 'Authentication Warning')) ?></div>
+        <div class="wm-auth-banner-text"><?= htmlspecialchars((string) ($authStatus['banner_description'] ?? '')) ?></div>
+    </div>
+</div>
+<?php endif; ?>
+
 <!-- Message header -->
 <div class="wm-view-header">
     <div class="wm-view-subject">
@@ -140,6 +155,28 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
         <span><strong>Reply-To:</strong> <?= htmlspecialchars($message['reply_to']) ?></span>
         <?php endif; ?>
         <span><strong>Date:</strong> <?= htmlspecialchars($message['date'] ?? '') ?></span>
+        <?php if (!empty($authStatus['checks'])): ?>
+        <span class="wm-auth-badge" aria-label="Email authentication checks">
+            <?php foreach (['spf', 'dkim', 'dmarc'] as $mechKey):
+                if (empty($authStatus['checks'][$mechKey])) continue;
+                $chk = $authStatus['checks'][$mechKey];
+                $chipCls = match ($chk['status'] ?? 'warn') {
+                    'pass' => 'is-pass',
+                    'fail' => 'is-fail',
+                    default => 'is-warn',
+                };
+                $detailText = (string) ($chk['detail'] ?? '');
+            ?>
+            <span class="wm-auth-chip <?= $chipCls ?>"
+                  tabindex="0"
+                  data-tooltip="<?= htmlspecialchars($detailText) ?>"
+                  aria-label="<?= htmlspecialchars(($chk['text'] ?? strtoupper($mechKey)) . ($detailText !== '' ? ': ' . $detailText : '')) ?>">
+                <span class="wm-auth-chip-dot" aria-hidden="true"></span>
+                <?= htmlspecialchars((string) ($chk['text'] ?? strtoupper($mechKey))) ?>
+            </span>
+            <?php endforeach; ?>
+        </span>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -233,10 +270,10 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
 </div>
 
 <!-- Headers modal -->
-<div id="headers-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
+<div id="headers-modal" style="display:none;position:fixed;inset:0;z-index:1010;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
     <div style="background:var(--wm-surface);border:1px solid var(--wm-border);border-radius:10px;box-shadow:var(--wm-shadow);width:min(720px,96vw);max-height:80vh;display:flex;flex-direction:column">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;border-bottom:1px solid var(--wm-border)">
-            <span style="font-weight:600;font-size:.95rem">Original Email Headers</span>
+            <span id="headers-modal-title" style="font-weight:600;font-size:.95rem">Original Email Headers</span>
             <div style="display:flex;align-items:center;gap:.5rem">
                 <button id="copy-headers-btn" class="btn btn-ghost btn-sm" title="Copy headers to clipboard">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -274,6 +311,10 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 014-4h12"/></svg>
                     <span>Forward</span>
                 </a>
+                <button type="button" id="eml-modal-headers-btn" class="btn btn-ghost btn-sm" title="View .eml email headers" disabled>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    <span>Headers</span>
+                </button>
                 <a id="eml-modal-newtab" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-ghost btn-sm" title="Open in new window">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                     <span>Full Tab</span>
@@ -298,8 +339,11 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
                 <span id="eml-modal-cc" style="display:none">-</span>
                 <span style="color:var(--wm-text-muted);font-weight:600">Date:</span>
                 <span id="eml-modal-date">-</span>
+                <span id="eml-modal-auth-label" style="color:var(--wm-text-muted);font-weight:600;display:none">Auth:</span>
+                <span id="eml-modal-auth" class="wm-auth-badge" style="display:none"></span>
             </div>
         </div>
+        <div id="eml-modal-auth-banner" class="wm-auth-banner is-compact" style="display:none" role="alert"></div>
         <div id="eml-modal-nested-att" style="display:none;padding:.6rem 1.25rem;background:var(--wm-bg);border-bottom:1px solid var(--wm-border);font-size:.8rem;gap:.5rem;align-items:center;flex-wrap:wrap">
             <span style="font-weight:600;color:var(--wm-text-muted)">Nested attachments:</span>
             <div id="eml-modal-nested-list" style="display:inline-flex;gap:.4rem;flex-wrap:wrap"></div>
@@ -343,11 +387,12 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
     }
 
     // Headers modal logic
-    var btn   = document.getElementById('show-headers-btn');
-    var modal = document.getElementById('headers-modal');
-    var close = document.getElementById('headers-modal-close');
-    var pre   = document.getElementById('headers-content');
-    var loaded = false;
+    var btn          = document.getElementById('show-headers-btn');
+    var modal        = document.getElementById('headers-modal');
+    var close        = document.getElementById('headers-modal-close');
+    var pre          = document.getElementById('headers-content');
+    var headersTitle = document.getElementById('headers-modal-title');
+    var mainHeadersText = null;
     var lastEmailHtml = null;
     var lastEmlHtml = null;
     var activeEmlFrame = null;
@@ -370,18 +415,29 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
 
     if (btn && modal) {
         btn.addEventListener('click', function() {
+            if (headersTitle) headersTitle.textContent = 'Original Email Headers';
             modal.style.display = 'flex';
-            if (loaded) return;
+            if (mainHeadersText !== null) {
+                pre.setAttribute('aria-busy', 'false');
+                pre.textContent = mainHeadersText;
+                return;
+            }
+            pre.setAttribute('aria-busy', 'true');
+            pre.textContent = 'Loading…';
             fetch('?action=email_headers&folder=' + <?= json_encode($folderEnc) ?> + '&msg=<?= $msgNo ?>' + <?= json_encode($accountParam) ?>, {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             })
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                loaded = true;
+                mainHeadersText = data.ok ? data.headers : ('Error: ' + (data.error || 'Unknown error'));
                 pre.setAttribute('aria-busy', 'false');
-                pre.textContent = data.ok ? data.headers : ('Error: ' + (data.error || 'Unknown error'));
+                pre.textContent = mainHeadersText;
             })
-            .catch(function(err) { pre.setAttribute('aria-busy', 'false'); pre.textContent = 'Failed to load headers.'; });
+            .catch(function() {
+                mainHeadersText = 'Failed to load headers.';
+                pre.setAttribute('aria-busy', 'false');
+                pre.textContent = mainHeadersText;
+            });
         });
 
         close.addEventListener('click', function() { modal.style.display = 'none'; });
@@ -534,13 +590,109 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
     var emlReply = document.getElementById('eml-modal-reply');
     var emlReplyAll = document.getElementById('eml-modal-reply-all');
     var emlForward = document.getElementById('eml-modal-forward');
+    var emlHeadersBtn = document.getElementById('eml-modal-headers-btn');
+    var emlAuthLabel = document.getElementById('eml-modal-auth-label');
+    var emlAuth = document.getElementById('eml-modal-auth');
+    var emlAuthBanner = document.getElementById('eml-modal-auth-banner');
     var emlNestedAtt = document.getElementById('eml-modal-nested-att');
     var emlNestedList = document.getElementById('eml-modal-nested-list');
+    var currentEmlHeaders = '';
+    var currentEmlFilename = '';
+
+    function renderEmlAuthStatus(auth) {
+        if (!emlAuth || !emlAuthLabel || !emlAuthBanner) return;
+        emlAuth.innerHTML = '';
+        emlAuth.style.display = 'none';
+        emlAuthLabel.style.display = 'none';
+        emlAuthBanner.innerHTML = '';
+        emlAuthBanner.className = 'wm-auth-banner is-compact';
+        emlAuthBanner.style.display = 'none';
+
+        if (!auth || !auth.checks) return;
+
+        ['spf', 'dkim', 'dmarc'].forEach(function(key) {
+            var chk = auth.checks[key];
+            if (!chk) return;
+            var chip = document.createElement('span');
+            var statusCls = chk.status === 'pass' ? 'is-pass' : (chk.status === 'fail' ? 'is-fail' : 'is-warn');
+            var detailText = chk.detail || '';
+            chip.className = 'wm-auth-chip ' + statusCls;
+            chip.setAttribute('tabindex', '0');
+            if (detailText) {
+                chip.setAttribute('data-tooltip', detailText);
+            }
+            chip.setAttribute('aria-label', (chk.text || key.toUpperCase()) + (detailText ? ': ' + detailText : ''));
+            var dot = document.createElement('span');
+            dot.className = 'wm-auth-chip-dot';
+            dot.setAttribute('aria-hidden', 'true');
+            chip.appendChild(dot);
+            chip.appendChild(document.createTextNode(chk.text || key.toUpperCase()));
+            emlAuth.appendChild(chip);
+        });
+        emlAuthLabel.style.display = 'inline';
+        emlAuth.style.display = 'inline-flex';
+
+        if (auth.banner_level === 'danger' || auth.banner_level === 'warning') {
+            emlAuthBanner.classList.add(auth.banner_level === 'danger' ? 'wm-auth-banner-danger' : 'wm-auth-banner-warning');
+            var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('width', '17');
+            svg.setAttribute('height', '17');
+            svg.setAttribute('viewBox', '0 0 24 24');
+            svg.setAttribute('fill', 'none');
+            svg.setAttribute('stroke', 'currentColor');
+            svg.setAttribute('stroke-width', '2.2');
+            var p1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            p1.setAttribute('d', 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z');
+            var l1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            l1.setAttribute('x1', '12'); l1.setAttribute('y1', '8'); l1.setAttribute('x2', '12'); l1.setAttribute('y2', '12');
+            var l2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            l2.setAttribute('x1', '12'); l2.setAttribute('y1', '16'); l2.setAttribute('x2', '12.01'); l2.setAttribute('y2', '16');
+            svg.appendChild(p1); svg.appendChild(l1); svg.appendChild(l2);
+
+            var wrap = document.createElement('div');
+            var titleEl = document.createElement('div');
+            titleEl.style.fontWeight = '700';
+            titleEl.textContent = auth.banner_title || 'Authentication Warning';
+            var descEl = document.createElement('div');
+            descEl.className = 'wm-auth-banner-text';
+            descEl.textContent = auth.banner_description || '';
+            wrap.appendChild(titleEl);
+            wrap.appendChild(descEl);
+
+            emlAuthBanner.appendChild(svg);
+            emlAuthBanner.appendChild(wrap);
+            emlAuthBanner.style.display = 'flex';
+        }
+    }
 
     if (emlModal && emlClose) {
         emlClose.addEventListener('click', function() { emlModal.style.display = 'none'; });
         emlModal.addEventListener('click', function(e) { if (e.target === emlModal) emlModal.style.display = 'none'; });
-        document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && emlModal.style.display === 'flex') emlModal.style.display = 'none'; });
+        document.addEventListener('keydown', function(e) {
+            if (e.key !== 'Escape') return;
+            if (modal && modal.style.display === 'flex') {
+                modal.style.display = 'none';
+                return;
+            }
+            if (emlModal.style.display === 'flex') {
+                emlModal.style.display = 'none';
+            }
+        });
+    }
+
+    if (emlHeadersBtn && modal && pre) {
+        emlHeadersBtn.addEventListener('click', function() {
+            if (headersTitle) {
+                headersTitle.textContent = currentEmlFilename
+                    ? ('Attached Email Headers — ' + currentEmlFilename)
+                    : 'Attached Email Headers';
+            }
+            pre.setAttribute('aria-busy', 'false');
+            pre.textContent = currentEmlHeaders !== ''
+                ? currentEmlHeaders
+                : 'No headers found in this .eml attachment.';
+            modal.style.display = 'flex';
+        });
     }
 
     emlBtns.forEach(function(b) {
@@ -552,6 +704,10 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
             var acc = b.getAttribute('data-account') || '';
             var uni = b.getAttribute('data-unified') || '';
 
+            currentEmlFilename = name;
+            currentEmlHeaders = '';
+            if (emlHeadersBtn) emlHeadersBtn.disabled = true;
+
             emlFilename.textContent = name;
             emlSubject.textContent = 'Loading...';
             emlFrom.textContent = '-';
@@ -559,6 +715,7 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
             emlDate.textContent = '-';
             if (emlCc) emlCc.style.display = 'none';
             if (emlCcLabel) emlCcLabel.style.display = 'none';
+            renderEmlAuthStatus(null);
             emlBody.textContent = '';
             lastEmlHtml = null;
             activeEmlFrame = null;
@@ -594,6 +751,9 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
                     return;
                 }
                 var eml = res.eml;
+                currentEmlHeaders = typeof eml.raw_headers === 'string' ? eml.raw_headers : '';
+                if (emlHeadersBtn) emlHeadersBtn.disabled = false;
+
                 emlSubject.textContent = eml.subject || '(No subject)';
                 emlFrom.textContent = eml.from || 'Unknown';
                 emlTo.textContent = eml.to || 'Unknown';
@@ -604,6 +764,8 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
                     emlCc.style.display = 'inline';
                     emlCcLabel.style.display = 'inline';
                 }
+
+                renderEmlAuthStatus(eml.auth_status || null);
 
                 if (eml.has_html && eml.body_html) {
                     var emlFrame = document.createElement('iframe');
@@ -630,15 +792,35 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
                     emlBody.appendChild(emptyDiv);
                 }
 
-                // Nested attachments
+                // Nested attachments (downloadable)
                 if (eml.attachments && eml.attachments.length > 0) {
                     emlNestedList.innerHTML = '';
-                    eml.attachments.forEach(function(att) {
-                        var chip = document.createElement('span');
-                        chip.className = 'badge badge-neutral';
-                        chip.style.fontSize = '.75rem';
-                        chip.textContent = '📎 ' + att.filename + ' (' + (Math.round(att.size / 102.4) / 10) + ' KB)';
-                        emlNestedList.appendChild(chip);
+                    eml.attachments.forEach(function(att, idx) {
+                        var attIdx = (typeof att.index === 'number') ? att.index : idx;
+                        var link = document.createElement('a');
+                        link.className = 'badge badge-neutral wm-nested-att-link';
+                        link.href = '?action=eml_attachment&' + coreParams + '&att_index=' + encodeURIComponent(String(attIdx));
+                        link.setAttribute('download', att.filename || 'attachment');
+                        link.title = 'Download ' + (att.filename || 'attachment');
+
+                        var dlIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                        dlIcon.setAttribute('width', '12');
+                        dlIcon.setAttribute('height', '12');
+                        dlIcon.setAttribute('viewBox', '0 0 24 24');
+                        dlIcon.setAttribute('fill', 'none');
+                        dlIcon.setAttribute('stroke', 'currentColor');
+                        dlIcon.setAttribute('stroke-width', '2.2');
+                        var pPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        pPath.setAttribute('d', 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4');
+                        var poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+                        poly.setAttribute('points', '7 10 12 15 17 10');
+                        var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        line.setAttribute('x1', '12'); line.setAttribute('y1', '15'); line.setAttribute('x2', '12'); line.setAttribute('y2', '3');
+                        dlIcon.appendChild(pPath); dlIcon.appendChild(poly); dlIcon.appendChild(line);
+
+                        link.appendChild(dlIcon);
+                        link.appendChild(document.createTextNode(att.filename + ' (' + (Math.round(att.size / 102.4) / 10) + ' KB)'));
+                        emlNestedList.appendChild(link);
                     });
                     emlNestedAtt.style.display = 'flex';
                 }

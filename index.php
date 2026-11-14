@@ -2798,6 +2798,8 @@ if ($action === 'preview_eml') {
             'body_text'   => $parsed['body_text'],
             'has_html'    => !empty($safeHtml),
             'attachments' => $parsed['attachments'],
+            'raw_headers' => $parsed['raw_headers'] ?? '',
+            'auth_status' => EmailAuthAnalyzer::analyze($parsed['raw_headers'] ?? '', $parsed['from'] ?? ''),
             'filename'    => $name,
             'section'     => $section,
             'size'        => strlen($data),
@@ -2826,6 +2828,77 @@ if ($action === 'preview_eml') {
         }
         http_response_code(500);
         exit('Error previewing EML attachment.');
+    }
+}
+
+// ── Download Nested Attachment Inside .eml ────────────────────────────────────
+if ($action === 'eml_attachment') {
+    $msgNo           = (int) ($_GET['msg'] ?? 0);
+    $folder          = $_GET['folder'] ?? 'INBOX';
+    $section         = $_GET['section'] ?? '';
+    $attIndexRaw     = (string) ($_GET['att_index'] ?? '');
+    $targetAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, isset($_GET['account_id']) ? (int)$_GET['account_id'] : null);
+
+    if ($section === '' || !preg_match('/^[0-9]+(\.[0-9]+)*$/', $section)) {
+        http_response_code(400);
+        exit('Invalid attachment section.');
+    }
+    if ($attIndexRaw === '' || !ctype_digit($attIndexRaw)) {
+        http_response_code(400);
+        exit('Invalid nested attachment index.');
+    }
+    $attIndex = (int) $attIndexRaw;
+
+    ini_set('display_errors', '0');
+    error_reporting(0);
+    set_time_limit(0);
+    ini_set('memory_limit', '256M');
+
+    try {
+        $imap = $accountMgr->imapConnect($targetAccountId);
+        $folder = validateSourceFolder($imap, $folder);
+        $imap->selectFolder($folder);
+        $rawEml = $imap->fetchAttachment($msgNo, $section);
+        $imap->disconnect();
+
+        if ($rawEml === '') {
+            throw new Exception('EML attachment data is empty or could not be retrieved.');
+        }
+
+        $nested = EmlParser::extractAttachment($rawEml, $attIndex);
+        if ($nested === null || !isset($nested['content'])) {
+            if (ob_get_level()) ob_clean();
+            http_response_code(404);
+            header('Content-Type: text/plain; charset=utf-8');
+            exit('Nested attachment not found.');
+        }
+
+        $attName = basename(str_replace(["\0", "\r", "\n"], '', (string) ($nested['filename'] ?? 'attachment')));
+        if ($attName === '' || $attName === '.' || $attName === '..') {
+            $attName = 'attachment';
+        }
+        $safeName = str_replace(['"', "\r", "\n", "\0"], '', $attName);
+        $ext = strtolower(pathinfo($attName, PATHINFO_EXTENSION));
+        $ctype = ($ext === 'eml') ? 'message/rfc822' : 'application/octet-stream';
+        $payload = (string) $nested['content'];
+
+        if (ob_get_level()) ob_clean();
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: Sat, 26 Jul 1997 05:00:00 GMT');
+        header('X-Content-Type-Options: nosniff');
+        header('Content-Disposition: attachment; filename="' . $safeName . '"; filename*=UTF-8\'\'' . rawurlencode($attName));
+        header('Content-Type: ' . $ctype . '; name="' . $safeName . '"');
+        header('Content-Length: ' . strlen($payload));
+        echo $payload;
+        exit;
+    } catch (Throwable $e) {
+        error_log('Nested EML attachment download failed for user ' . $userId . ', account ' . $targetAccountId . ', folder ' . $folder . ', msg ' . $msgNo . ': ' . $e->getMessage());
+        if (ob_get_level()) ob_clean();
+        http_response_code(500);
+        header('Content-Type: text/plain; charset=utf-8');
+        header('Content-Disposition: inline');
+        exit('Error downloading nested attachment.');
     }
 }
 
