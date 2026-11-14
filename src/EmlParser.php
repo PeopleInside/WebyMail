@@ -12,9 +12,33 @@ class EmlParser
      */
     public static function parse(string $rawContent): array
     {
-        // Normalize line endings to CRLF
+        return self::parseInternal($rawContent, false);
+    }
+
+    /**
+     * Extract a single nested attachment (including binary content) by its index from raw .eml content.
+     */
+    public static function extractAttachment(string $rawContent, int $index): ?array
+    {
+        if ($index < 0) {
+            return null;
+        }
+        $parsed = self::parseInternal($rawContent, true);
+        return $parsed['attachments'][$index] ?? null;
+    }
+
+    /**
+     * Internal parser with optional inclusion of binary attachment payloads.
+     */
+    private static function parseInternal(string $rawContent, bool $includeAttachmentContent): array
+    {
+        // Normalize line endings and strip optional UTF-8 BOM / leading blank lines
+        if (str_starts_with($rawContent, "\xEF\xBB\xBF")) {
+            $rawContent = substr($rawContent, 3);
+        }
         $rawContent = str_replace(["\r\n", "\r"], "\n", $rawContent);
-        
+        $rawContent = ltrim($rawContent, "\n");
+
         // Split headers and body at the first blank line
         $parts = explode("\n\n", $rawContent, 2);
         $headerText = $parts[0] ?? '';
@@ -23,7 +47,14 @@ class EmlParser
         $headers = self::parseHeaders($headerText);
         $contentType = $headers['content-type'] ?? 'text/plain';
 
-        $parsedBody = self::parseBody($bodyText, $contentType, $headers['content-transfer-encoding'] ?? '');
+        $parsedBody = self::parseBody($bodyText, $contentType, $headers['content-transfer-encoding'] ?? '', $includeAttachmentContent);
+
+        // Assign deterministic 0-based indices for nested attachment downloads
+        $attachments = [];
+        foreach (array_values($parsedBody['attachments']) as $idx => $att) {
+            $att['index'] = $idx;
+            $attachments[] = $att;
+        }
 
         $subject   = self::decodeMimeHeader($headers['subject'] ?? '(No subject)');
         $from      = self::decodeMimeHeader($headers['from'] ?? 'Unknown');
@@ -50,9 +81,35 @@ class EmlParser
             'body_html'   => $parsedBody['html'],
             'body_text'   => $parsedBody['text'],
             'has_html'    => !empty($parsedBody['html']),
-            'attachments' => $parsedBody['attachments'],
-            'raw_headers' => $headerText,
+            'attachments' => $attachments,
+            'raw_headers' => self::ensureUtf8($headerText),
         ];
+    }
+
+    /**
+     * Ensure raw header text is valid UTF-8 so JSON encoding and HTML escaping never fail.
+     */
+    private static function ensureUtf8(string $str): string
+    {
+        if ($str === '') {
+            return '';
+        }
+        if (function_exists('mb_check_encoding') && mb_check_encoding($str, 'UTF-8')) {
+            return $str;
+        }
+        if (function_exists('mb_convert_encoding')) {
+            $converted = @mb_convert_encoding($str, 'UTF-8', 'ISO-8859-1');
+            if (is_string($converted) && $converted !== '') {
+                return $converted;
+            }
+        }
+        if (function_exists('iconv')) {
+            $converted = @iconv('UTF-8', 'UTF-8//IGNORE', $str);
+            if (is_string($converted)) {
+                return $converted;
+            }
+        }
+        return preg_replace('/[^\x09\x0A\x0D\x20-\x7E]/', '?', $str) ?? '';
     }
 
     /**
@@ -86,7 +143,7 @@ class EmlParser
     /**
      * Parse body content according to Content-Type and transfer encoding.
      */
-    private static function parseBody(string $body, string $contentTypeHeader, string $transferEncoding): array
+    private static function parseBody(string $body, string $contentTypeHeader, string $transferEncoding, bool $includeAttachmentContent = false): array
     {
         $html = '';
         $text = '';
@@ -94,53 +151,70 @@ class EmlParser
 
         // Check if multipart
         if (preg_match('/multipart\/[a-z0-9_-]+/i', $contentTypeHeader)) {
-            // Extract boundary parameter
-            if (preg_match('/boundary\s*=\s*["\']?([^"\'\s;]+)["\']?/i', $contentTypeHeader, $m)) {
-                $boundary = $m[1];
-                $parts = explode('--' . $boundary, $body);
+            // Extract boundary parameter (supports quoted boundaries with spaces)
+            if (preg_match('/boundary\s*=\s*(?:"([^"]+)"|\'([^\']+)\'|([^\s;]+))/i', $contentTypeHeader, $m)) {
+                $boundary = $m[1] !== '' ? $m[1] : (($m[2] ?? '') !== '' ? $m[2] : ($m[3] ?? ''));
+                if ($boundary !== '') {
+                    $parts = explode('--' . $boundary, $body);
 
-                foreach ($parts as $p) {
-                    $p = trim($p);
-                    if ($p === '' || $p === '--') {
-                        continue;
-                    }
-                    $subParts = explode("\n\n", $p, 2);
-                    $subHeadersText = $subParts[0] ?? '';
-                    $subContent = $subParts[1] ?? '';
+                    foreach ($parts as $idx => $p) {
+                        // Index 0 is MIME preamble before the first --boundary
+                        if ($idx === 0) {
+                            continue;
+                        }
+                        $pTrimmed = ltrim($p);
+                        if ($pTrimmed === '' || str_starts_with($pTrimmed, '--')) {
+                            if (str_starts_with($pTrimmed, '--')) {
+                                break;
+                            }
+                            continue;
+                        }
+                        $p = trim($p, "\n");
+                        $subParts = explode("\n\n", $p, 2);
+                        $subHeadersText = $subParts[0] ?? '';
+                        $subContent = $subParts[1] ?? '';
 
-                    $subHeaders = self::parseHeaders($subHeadersText);
-                    $subCtype   = $subHeaders['content-type'] ?? 'text/plain';
-                    $subEncoding = $subHeaders['content-transfer-encoding'] ?? '';
-                    $subDisp    = $subHeaders['content-disposition'] ?? '';
+                        $subHeaders = self::parseHeaders($subHeadersText);
+                        $subCtype   = $subHeaders['content-type'] ?? 'text/plain';
+                        $subEncoding = $subHeaders['content-transfer-encoding'] ?? '';
+                        $subDisp    = $subHeaders['content-disposition'] ?? '';
 
-                    // Check if attachment
-                    $filename = self::extractFilename($subDisp, $subCtype);
-                    if ($filename !== '') {
-                        $decodedAtt = self::decodeContent($subContent, $subEncoding);
-                        $attachments[] = [
-                            'filename' => $filename,
-                            'size'     => strlen($decodedAtt),
-                            'type'     => explode(';', $subCtype)[0],
-                        ];
-                        continue;
-                    }
+                        // Check if attachment (including nested message/rfc822 parts)
+                        $filename = self::extractFilename($subDisp, $subCtype);
+                        if ($filename === '' && stripos($subCtype, 'message/rfc822') !== false) {
+                            $filename = self::extractRfc822Filename($subContent);
+                        }
+                        if ($filename !== '') {
+                            $decodedAtt = self::decodeContent($subContent, $subEncoding);
+                            $attItem = [
+                                'filename' => $filename,
+                                'size'     => strlen($decodedAtt),
+                                'type'     => strtolower(trim(explode(';', $subCtype)[0])),
+                            ];
+                            if ($includeAttachmentContent) {
+                                $attItem['content'] = $decodedAtt;
+                            }
+                            $attachments[] = $attItem;
+                            continue;
+                        }
 
-                    // Check for nested multipart
-                    if (preg_match('/multipart\/[a-z0-9_-]+/i', $subCtype)) {
-                        $nested = self::parseBody($subContent, $subCtype, $subEncoding);
-                        if ($nested['html'] !== '' && $html === '') $html = $nested['html'];
-                        if ($nested['text'] !== '' && $text === '') $text = $nested['text'];
-                        $attachments = array_merge($attachments, $nested['attachments']);
-                        continue;
-                    }
+                        // Check for nested multipart
+                        if (preg_match('/multipart\/[a-z0-9_-]+/i', $subCtype)) {
+                            $nested = self::parseBody($subContent, $subCtype, $subEncoding, $includeAttachmentContent);
+                            if ($nested['html'] !== '' && $html === '') $html = $nested['html'];
+                            if ($nested['text'] !== '' && $text === '') $text = $nested['text'];
+                            $attachments = array_merge($attachments, $nested['attachments']);
+                            continue;
+                        }
 
-                    $decodedPart = self::decodeContent($subContent, $subEncoding);
-                    $decodedPart = self::convertCharset($decodedPart, $subCtype);
+                        $decodedPart = self::decodeContent($subContent, $subEncoding);
+                        $decodedPart = self::convertCharset($decodedPart, $subCtype);
 
-                    if (stripos($subCtype, 'text/html') !== false) {
-                        if ($html === '') $html = $decodedPart;
-                    } elseif (stripos($subCtype, 'text/plain') !== false) {
-                        if ($text === '') $text = $decodedPart;
+                        if (stripos($subCtype, 'text/html') !== false) {
+                            if ($html === '') $html = $decodedPart;
+                        } elseif (stripos($subCtype, 'text/plain') !== false) {
+                            if ($text === '') $text = $decodedPart;
+                        }
                     }
                 }
             }
@@ -166,6 +240,24 @@ class EmlParser
             'text'        => $text,
             'attachments' => $attachments,
         ];
+    }
+
+    /**
+     * Derive a safe .eml filename from encapsulated message/rfc822 headers.
+     */
+    private static function extractRfc822Filename(string $rawRfc822): string
+    {
+        $parts = explode("\n\n", ltrim($rawRfc822, "\n"), 2);
+        $headers = self::parseHeaders($parts[0] ?? '');
+        $subject = self::decodeMimeHeader($headers['subject'] ?? '');
+        $subject = trim(str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|', "\0", "\r", "\n"], '_', $subject));
+        if ($subject === '') {
+            return 'message.eml';
+        }
+        if (!str_ends_with(strtolower($subject), '.eml')) {
+            $subject .= '.eml';
+        }
+        return $subject;
     }
 
     /**

@@ -163,11 +163,13 @@ class ImapClient
         // Mark as read
         imap_setflag_full($this->conn, (string) $msgNo, '\\Seen');
 
+        $fromAddress = $this->addressToString($header?->from ?? []);
+
         return [
             'uid'         => imap_uid($this->conn, $msgNo),
             'msg_no'      => $msgNo,
             'subject'     => $this->decodeHeader($header?->subject ?? '(no subject)'),
-            'from'        => $this->addressToString($header?->from ?? []),
+            'from'        => $fromAddress,
             'to'          => $this->addressToString($header?->to ?? []),
             'cc'          => $this->addressToString($header?->cc ?? []),
             'reply_to'    => $this->addressToString($header?->reply_to ?? []),
@@ -178,6 +180,7 @@ class ImapClient
             'is_read'     => (bool) ($header?->Seen ?? false),
             'priority'    => $this->parsePriority($rawHeaders),
             'read_receipt_to' => $this->parseReadReceipt($rawHeaders),
+            'auth_status' => EmailAuthAnalyzer::analyze($rawHeaders, $fromAddress),
         ];
     }
 

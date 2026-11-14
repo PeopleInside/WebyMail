@@ -894,6 +894,168 @@ input:autofill {
     color: var(--wm-info);
 }
 
+/* Email authentication (SPF / DKIM / DMARC) badge & anti-spoofing banner */
+.wm-auth-banner {
+    margin: .75rem auto 0;
+    border-radius: 8px;
+    padding: .7rem 1.25rem;
+    font-size: .84rem;
+    line-height: 1.45;
+    display: flex;
+    align-items: flex-start;
+    gap: .7rem;
+    width: 100%;
+    max-width: 1100px;
+}
+
+.wm-auth-banner.is-compact {
+    margin: 0;
+    max-width: none;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+    border-top: 0;
+    padding: .65rem 1.25rem;
+}
+
+.wm-auth-banner svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.wm-auth-banner-danger {
+    background: color-mix(in srgb, var(--wm-danger) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--wm-danger) 35%, transparent);
+    color: var(--wm-danger);
+}
+
+.wm-auth-banner-warning {
+    background: color-mix(in srgb, var(--wm-warning) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--wm-warning) 35%, transparent);
+    color: var(--wm-warning);
+}
+
+.wm-auth-banner-text {
+    color: var(--wm-text);
+    font-size: .82rem;
+    margin-top: .15rem;
+}
+
+.wm-auth-badge {
+    display: inline-flex !important;
+    align-items: center;
+    gap: .3rem;
+    flex-wrap: wrap;
+    vertical-align: middle;
+}
+
+.wm-auth-chip {
+    position: relative;
+    display: inline-flex !important;
+    align-items: center;
+    gap: .25rem;
+    font-size: .72rem;
+    font-weight: 700;
+    line-height: 1.2;
+    padding: .18rem .5rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    letter-spacing: .01em;
+    white-space: nowrap;
+    word-break: normal;
+    overflow-wrap: normal;
+    cursor: pointer;
+    outline: none;
+}
+
+.wm-auth-chip:focus-visible {
+    box-shadow: 0 0 0 2px var(--wm-primary);
+}
+
+.wm-auth-chip[data-tooltip]:hover::after,
+.wm-auth-chip[data-tooltip]:focus-visible::after,
+.wm-auth-chip[data-tooltip]:focus::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: calc(100% + 7px);
+    left: 0;
+    z-index: 1200;
+    width: max-content;
+    max-width: min(300px, 80vw);
+    padding: .5rem .7rem;
+    border-radius: 8px;
+    background: var(--wm-surface);
+    color: var(--wm-text);
+    border: 1px solid var(--wm-border);
+    box-shadow: var(--wm-shadow);
+    font-size: .76rem;
+    font-weight: 500;
+    line-height: 1.4;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: break-word;
+    pointer-events: none;
+}
+
+.wm-auth-chip[data-tooltip]:hover::before,
+.wm-auth-chip[data-tooltip]:focus-visible::before,
+.wm-auth-chip[data-tooltip]:focus::before {
+    content: '';
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 12px;
+    z-index: 1201;
+    width: 8px;
+    height: 8px;
+    background: var(--wm-surface);
+    border-left: 1px solid var(--wm-border);
+    border-top: 1px solid var(--wm-border);
+    transform: rotate(45deg);
+    pointer-events: none;
+}
+
+.wm-auth-chip-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: currentColor;
+}
+
+.wm-auth-chip.is-pass {
+    background: color-mix(in srgb, var(--wm-success) 14%, transparent);
+    border-color: color-mix(in srgb, var(--wm-success) 35%, transparent);
+    color: var(--wm-success);
+}
+
+.wm-auth-chip.is-warn {
+    background: color-mix(in srgb, var(--wm-warning) 14%, transparent);
+    border-color: color-mix(in srgb, var(--wm-warning) 38%, transparent);
+    color: var(--wm-warning);
+}
+
+.wm-auth-chip.is-fail {
+    background: color-mix(in srgb, var(--wm-danger) 14%, transparent);
+    border-color: color-mix(in srgb, var(--wm-danger) 38%, transparent);
+    color: var(--wm-danger);
+}
+
+.wm-nested-att-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    text-decoration: none;
+    font-size: .75rem;
+    padding: .25rem .55rem;
+    transition: border-color .15s ease, color .15s ease, background-color .15s ease;
+}
+
+.wm-nested-att-link:hover {
+    border-color: var(--wm-primary);
+    color: var(--wm-primary);
+}
+
+
 /* ----------------------------------------------------------
    11. Composer
    ---------------------------------------------------------- */

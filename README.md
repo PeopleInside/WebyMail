@@ -58,6 +58,11 @@ https://github.com/PeopleInside/WebyMail/releases
 
 ## Changelog (Recent)
 
+### 3.6.0
+- Added raw email headers inspection (**Headers** button, modal, and copy-to-clipboard) inside both the modal and standalone (Full Tab) `.eml` attachment previews.
+- Added direct download links for nested attachments inside attached `.eml` emails (`action=eml_attachment`), with improved MIME boundary/preamble parsing and nested `message/rfc822` support in `EmlParser`.
+- Added `EmailAuthAnalyzer` to inspect `Authentication-Results` and `Received-SPF` headers: displays a 3-check authentication badge (**SPF**, **DKIM**, **DMARC** in green/orange/red) and an anti-spoofing warning banner when authentication fails, softfails, or sender domains do not align (both in message view and `.eml` previews).
+
 ### 3.5.9
 - Added missing `debugErrorMessage()` helper in `index.php` so failed login and account validation errors safely return generic messages in production without triggering HTTP 500 errors.
 - Hardened `Config::moveDatabase()` (extension checks, control-character filtering, webroot rejection) and restricted database relocation/warning dismissal to the primary administrator (`user_id === 1`), while keeping safe **Fix Permissions** and **Enable CAPTCHA** actions working for any logged-in user via the security alert banner.
