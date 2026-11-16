@@ -17,9 +17,11 @@ $accountParam    = ($targetAccountId > 0 && ($targetAccountId !== $activeSessAcc
     ? '&account_id=' . $targetAccountId
     : '';
 $unifiedParam    = $fromUnified !== '' ? '&from_unified=' . urlencode($fromUnified) : '';
-$backUrl         = $fromUnified !== '' ? '?action=unified&ufolder=' . urlencode($fromUnified) : '?action=inbox&folder=' . $folderEnc;
-$moveActionUrl   = '?action=move&folder=' . rawurlencode($folder) . '&msg=' . rawurlencode((string) $msgNo) . $accountParam . $unifiedParam;
-$copyActionUrl   = '?action=copy&folder=' . rawurlencode($folder) . '&msg=' . rawurlencode((string) $msgNo) . $accountParam . $unifiedParam;
+$mailFilter      = $mailFilter ?? 'all';
+$filterParam     = $mailFilter !== 'all' ? '&filter=' . urlencode($mailFilter) : '';
+$backUrl         = ($fromUnified !== '' ? '?action=unified&ufolder=' . urlencode($fromUnified) : '?action=inbox&folder=' . $folderEnc) . $filterParam;
+$moveActionUrl   = '?action=move&folder=' . rawurlencode($folder) . '&msg=' . rawurlencode((string) $msgNo) . $accountParam . $unifiedParam . $filterParam;
+$copyActionUrl   = '?action=copy&folder=' . rawurlencode($folder) . '&msg=' . rawurlencode((string) $msgNo) . $accountParam . $unifiedParam . $filterParam;
 $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], static function (array $item) use ($folder): bool {
     return ($item['name'] ?? '') !== $folder;
 }));
@@ -79,7 +81,7 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
         <?php endif; ?>
 
         <?php if ($isInbox): ?>
-    <form method="post" action="?action=spam&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?><?= $accountParam ?><?= $unifiedParam ?>" style="display:inline">
+    <form method="post" action="?action=spam&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?><?= $accountParam ?><?= $unifiedParam ?><?= htmlspecialchars($filterParam) ?>" style="display:inline">
         <?= csrfInput() ?>
         <button class="btn btn-ghost btn-sm text-danger" title="Mark as spam">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
@@ -88,7 +90,7 @@ $moveTargets     = array_values(array_filter($targetFolders ?? $folders ?? [], s
     </form>
     <?php endif; ?>
 
-    <form method="post" action="?action=delete&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?><?= $accountParam ?><?= $unifiedParam ?>" style="display:inline" id="delete-msg-form">
+    <form method="post" action="?action=delete&folder=<?= $folderEnc ?>&msg=<?= $msgNo ?><?= $accountParam ?><?= $unifiedParam ?><?= htmlspecialchars($filterParam) ?>" style="display:inline" id="delete-msg-form">
         <?= csrfInput() ?>
         <button class="btn btn-ghost btn-sm text-danger" title="Delete">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>

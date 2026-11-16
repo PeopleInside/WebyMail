@@ -225,6 +225,15 @@ function normalizeUnifiedFolder(string $ufolder): string
     return 'inbox';
 }
 
+function normalizeMailFilter(string $raw): string
+{
+    return match (strtolower(trim($raw))) {
+        'unread_first', 'unread-first' => 'unread_first',
+        'unread_only', 'unread-only', 'unread' => 'unread_only',
+        default => 'all',
+    };
+}
+
 function classifyFolderForUnified(array $folder): ?array
 {
     $name    = (string) ($folder['name'] ?? '');
@@ -339,7 +348,7 @@ function populateUnifiedSidebarCache(
                     $accountMgr->setValidationStatus($accId, 'valid');
                 }
                 $accFolders = $accImap->getFolders();
-                if (count($accFolders) <= 20) {
+                if (count($accFolders) <= 100) {
                     foreach ($accFolders as &$af) {
                         $af['unread'] = $accImap->getUnreadCount($af['name']);
                     }
@@ -467,6 +476,53 @@ function rebuildUnifiedFoldersFromAccountFolders(array $unifiedAccountFolders): 
     });
 
     return $unifiedFolders;
+}
+
+function syncFolderUnreadInSession(int $userId, int $targetAccountId, string $folderName, int $unreadCount): void
+{
+    $uaCache = $_SESSION['unified_account_folders'] ?? null;
+    if (!is_array($uaCache) || (int) ($uaCache['user_id'] ?? 0) !== $userId || !is_array($uaCache['accounts'] ?? null)) {
+        return;
+    }
+
+    $updated = false;
+    $accounts = $uaCache['accounts'];
+    foreach ($accounts as &$accEntry) {
+        if ((int) ($accEntry['account_id'] ?? 0) !== $targetAccountId) {
+            continue;
+        }
+        $accFolders = $accEntry['folders'] ?? [];
+        if (!is_array($accFolders)) {
+            break;
+        }
+        $total = 0;
+        foreach ($accFolders as &$af) {
+            if (($af['name'] ?? '') === $folderName) {
+                $af['unread'] = max(0, $unreadCount);
+                $updated = true;
+            }
+            $total += (int) ($af['unread'] ?? 0);
+        }
+        unset($af);
+        if ($updated) {
+            $accEntry['folders'] = $accFolders;
+            $accEntry['unread_total'] = $total;
+            $accEntry['error'] = null;
+        }
+        break;
+    }
+    unset($accEntry);
+
+    if ($updated) {
+        $_SESSION['unified_account_folders'] = [
+            'user_id'  => $userId,
+            'accounts' => $accounts,
+        ];
+        $_SESSION['unified_folders'] = [
+            'user_id' => $userId,
+            'folders' => rebuildUnifiedFoldersFromAccountFolders($accounts),
+        ];
+    }
 }
 
 function resolveTargetAccountId(Account $accountMgr, int $userId, int $defaultAccountId, ?int $requestedId = null): int
@@ -987,6 +1043,7 @@ $unifiedFolder = $action === 'unified'
     ? normalizeUnifiedFolder((string) ($_GET['ufolder'] ?? 'inbox'))
     : $fromUnified;
 $isUnified = ($action === 'unified') || ($fromUnified !== '' && in_array($action, ['view', 'compose', 'preview_eml'], true));
+$mailFilter = normalizeMailFilter((string) ($_GET['filter'] ?? $_POST['filter'] ?? 'all'));
 
 if ($action === 'unified' && count($accounts) > 1) {
     $_SESSION['unified_sidebar_open'] = [
@@ -1185,6 +1242,7 @@ if ($action === 'empty_folder' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $imap->emptyFolder($folder);
         $imap->disconnect();
+        syncFolderUnreadInSession($userId, $accountId, $folder, 0);
         flashSet('success', 'Folder "' . htmlspecialchars($folder) . '" emptied.');
     } catch (RuntimeException $e) {
         error_log('Folder empty failed for user ' . $userId . ': ' . $e->getMessage());
@@ -1331,7 +1389,7 @@ if ($action === 'inbox' || $action === 'search') {
     $isSpam = false;
     try {
         $imap = $accountMgr->imapConnect($accountId);
-        $mailData = $imap->getMessages($currentFolder, $page);
+        $mailData = $imap->getMessages($currentFolder, $page, 30, $mailFilter);
         $trash = resolveTrashFolder($imap);
         $isTrash = isTrashFolderEquivalent($currentFolder, $trash);
         $isSpam = in_array(strtoupper($currentFolder), ['SPAM', 'JUNK', 'JUNK E-MAIL'], true);
@@ -1348,6 +1406,7 @@ if ($action === 'inbox' || $action === 'search') {
     render('inbox', $layoutCommon + [
         'mailData'     => $mailData,
         'folder'       => $currentFolder,
+        'mailFilter'   => $mailFilter,
         'isTrash'      => $isTrash,
         'isSpam'       => $isSpam,
         'pageTitle'    => pageTitle($imap ? $imap->getFriendlyName($currentFolder) : $currentFolder),
@@ -1419,7 +1478,7 @@ if ($action === 'unified') {
                 $accFolders = $folders;
             } else {
                 $accFolders = $accImap->getFolders();
-                if (count($accFolders) <= 20) {
+                if (count($accFolders) <= 100) {
                     foreach ($accFolders as &$af) {
                         $af['unread'] = $accImap->getUnreadCount($af['name']);
                     }
@@ -1465,7 +1524,7 @@ if ($action === 'unified') {
 
             $targetFolders = resolveUnifiedFoldersForAccount($accImap, $ufolder, $accFolders);
             foreach ($targetFolders as $targetFolder) {
-                $res = $accImap->getMessages($targetFolder, 1, $fetchLimit);
+                $res = $accImap->getMessages($targetFolder, 1, $fetchLimit, $mailFilter);
                 $totalCount += (int) ($res['total'] ?? 0);
                 foreach (($res['messages'] ?? []) as $msg) {
                     $msg['account_id']     = $accId;
@@ -1550,7 +1609,14 @@ if ($action === 'unified') {
 
     $activeFolderLabel = $folderLabels[$ufolder] ?? ($unifiedFoldersMap[$ufolder]['label'] ?? ucfirst(str_replace('custom:', '', $ufolder)));
 
-    usort($allMessages, static function (array $a, array $b): int {
+    usort($allMessages, static function (array $a, array $b) use ($mailFilter): int {
+        if ($mailFilter === 'unread_first') {
+            $aRead = !empty($a['is_read']) ? 1 : 0;
+            $bRead = !empty($b['is_read']) ? 1 : 0;
+            if ($aRead !== $bRead) {
+                return $aRead <=> $bRead;
+            }
+        }
         $cmp = ((int) ($b['timestamp'] ?? 0)) <=> ((int) ($a['timestamp'] ?? 0));
         if ($cmp !== 0) {
             return $cmp;
@@ -1571,6 +1637,7 @@ if ($action === 'unified') {
         'page'           => $page,
         'pages'          => $pages,
         'ufolder'        => $ufolder,
+        'mailFilter'     => $mailFilter,
         'folderLabel'    => $activeFolderLabel,
         'unifiedFolders' => $unifiedFolders,
         'unifiedErrors'  => $unifiedErrors,
@@ -1620,11 +1687,16 @@ if ($action === 'unified_bulk' && isAjax() && $_SERVER['REQUEST_METHOD'] === 'PO
                         moveToTrashOrDeleteByUid($tImap, $validFolder, (int) $uid, $trash, $inTrash);
                         $succeeded++;
                     }
+                    syncFolderUnreadInSession($userId, (int) $tAccId, $validFolder, $tImap->getUnreadCount($validFolder));
+                    if (!$inTrash && $trash !== $validFolder) {
+                        syncFolderUnreadInSession($userId, (int) $tAccId, $trash, $tImap->getUnreadCount($trash));
+                    }
                 } else {
                     foreach ($uids as $uid) {
                         $tImap->markReadByUid($validFolder, (int) $uid, $act === 'read');
                         $succeeded++;
                     }
+                    syncFolderUnreadInSession($userId, (int) $tAccId, $validFolder, $tImap->getUnreadCount($validFolder));
                 }
             }
             $tImap->disconnect();
@@ -1675,17 +1747,39 @@ if ($action === 'view') {
             header('Location: ?action=compose&folder=' . $folderEnc . '&edit_draft=' . $msgNo . $extra);
             exit;
         }
+
+        // Refresh unread count now that getMessage() has marked the message as \Seen
+        $freshUnread = $imap->getUnreadCount($currentFolder);
         $imap->disconnect();
+
+        if ($targetAccountId === $accountId) {
+            foreach ($folders as &$fRef) {
+                if (($fRef['name'] ?? '') === $currentFolder) {
+                    $fRef['unread'] = $freshUnread;
+                    break;
+                }
+            }
+            unset($fRef);
+            $layoutCommon['folders'] = $folders;
+        }
+        syncFolderUnreadInSession($userId, $targetAccountId, $currentFolder, $freshUnread);
+        if (isset($_SESSION['unified_folders']['folders'])) {
+            $layoutCommon['unifiedFolders'] = $_SESSION['unified_folders']['folders'];
+        }
+        if (isset($_SESSION['unified_account_folders']['accounts'])) {
+            $layoutCommon['unifiedAccountFolders'] = $_SESSION['unified_account_folders']['accounts'];
+        }
     } catch (RuntimeException $e) {
         error_log('Message load failed for user ' . $userId . ', account ' . $targetAccountId . ', folder ' . $currentFolder . ', msg ' . $msgNo . ': ' . $e->getMessage());
         if (isImapAuthError($e->getMessage())) {
             $accountMgr->setValidationStatus($targetAccountId, 'invalid');
         }
         flashSet('danger', 'Unable to load the selected message. Please try again later.');
+        $filterQuery = $mailFilter !== 'all' ? '&filter=' . urlencode($mailFilter) : '';
         if ($fromUnified !== '') {
-            redirect('?action=unified&ufolder=' . urlencode($fromUnified));
+            redirect('?action=unified&ufolder=' . urlencode($fromUnified) . $filterQuery);
         }
-        redirect('?action=inbox&folder=' . urlencode($currentFolder));
+        redirect('?action=inbox&folder=' . urlencode($currentFolder) . $filterQuery);
     }
 
     // Detect external images / URLs in HTML body
@@ -1705,6 +1799,7 @@ if ($action === 'view') {
         'targetAccountId' => $targetAccountId,
         'targetAccount'   => $targetAccount,
         'fromUnified'     => $fromUnified,
+        'mailFilter'      => $mailFilter,
         'isTrash'         => $isTrash,
         'isDraft'         => $isDraft,
         'hasExternal'     => $hasExternal,
@@ -2366,6 +2461,7 @@ if ($action === 'import_eml' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     $imap->disconnect();
                     $flash = ['type' => 'danger', 'message' => 'Selected folder is not available.'];
                 } elseif ($imap->appendMessage($folder, $raw)) {
+                    syncFolderUnreadInSession($userId, $accountId, $folder, $imap->getUnreadCount($folder));
                     $flash = ['type' => 'success', 'message' => 'Email imported successfully.'];
                     $imap->disconnect();
                 } else {
@@ -2390,6 +2486,7 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $msgNo           = (int) ($_GET['msg']    ?? 0);
     $folder          = $_GET['folder'] ?? 'INBOX';
     $targetAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, isset($_GET['account_id']) ? (int)$_GET['account_id'] : null);
+    $filterQuery     = $mailFilter !== 'all' ? '&filter=' . urlencode($mailFilter) : '';
 
     try {
         $imap = $accountMgr->imapConnect($targetAccountId);
@@ -2397,6 +2494,10 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $trash = resolveTrashFolder($imap);
         $inTrash = isTrashFolderEquivalent($folder, $trash);
         moveToTrashOrDelete($imap, $folder, $msgNo, $trash, $inTrash);
+        syncFolderUnreadInSession($userId, $targetAccountId, $folder, $imap->getUnreadCount($folder));
+        if (!$inTrash && $trash !== $folder) {
+            syncFolderUnreadInSession($userId, $targetAccountId, $trash, $imap->getUnreadCount($trash));
+        }
         $imap->disconnect();
         flashSet('success', $inTrash ? 'Message deleted.' : 'Message moved to Trash.');
     } catch (RuntimeException $e) {
@@ -2404,9 +2505,9 @@ if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         flashSet('danger', 'Could not delete message. Please try again later.');
     }
     if ($fromUnified !== '') {
-        redirect('?action=unified&ufolder=' . urlencode($fromUnified));
+        redirect('?action=unified&ufolder=' . urlencode($fromUnified) . $filterQuery);
     }
-    redirect('?action=inbox&folder=' . urlencode($folder));
+    redirect('?action=inbox&folder=' . urlencode($folder) . $filterQuery);
 }
 
 // ── Mark as spam ──────────────────────────────────────────────────────────────
@@ -2414,12 +2515,17 @@ if ($action === 'spam' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $msgNo           = (int) ($_GET['msg']    ?? 0);
     $folder          = $_GET['folder'] ?? 'INBOX';
     $targetAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, isset($_GET['account_id']) ? (int)$_GET['account_id'] : null);
+    $filterQuery     = $mailFilter !== 'all' ? '&filter=' . urlencode($mailFilter) : '';
 
     try {
         $imap = $accountMgr->imapConnect($targetAccountId);
         $folder = validateSourceFolder($imap, $folder); // L-NEW: validate source folder
         $spam = resolveSpamFolder($imap);
         $imap->moveMessage($folder, $msgNo, $spam);
+        syncFolderUnreadInSession($userId, $targetAccountId, $folder, $imap->getUnreadCount($folder));
+        if ($spam !== $folder) {
+            syncFolderUnreadInSession($userId, $targetAccountId, $spam, $imap->getUnreadCount($spam));
+        }
         $imap->disconnect();
         flashSet('success', 'Message moved to Spam.');
     } catch (RuntimeException $e) {
@@ -2427,9 +2533,9 @@ if ($action === 'spam' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         flashSet('danger', 'Could not move message to Spam. Please try again later.');
     }
     if ($fromUnified !== '') {
-        redirect('?action=unified&ufolder=' . urlencode($fromUnified));
+        redirect('?action=unified&ufolder=' . urlencode($fromUnified) . $filterQuery);
     }
-    redirect('?action=inbox&folder=' . urlencode($folder));
+    redirect('?action=inbox&folder=' . urlencode($folder) . $filterQuery);
 }
 
 // ── Move message ─────────────────────────────────────────────────────────────────
@@ -2438,8 +2544,10 @@ if ($action === 'move' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $folder          = $_GET['folder'] ?? 'INBOX';
     $destination     = trim((string) ($_POST['destination'] ?? ''));
     $targetAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, isset($_GET['account_id']) ? (int)$_GET['account_id'] : null);
+    $filterQuery     = $mailFilter !== 'all' ? '&filter=' . urlencode($mailFilter) : '';
     $viewExtra       = ($targetAccountId !== $accountId ? '&account_id=' . $targetAccountId : '')
-                     . ($fromUnified !== '' ? '&from_unified=' . urlencode($fromUnified) : '');
+                     . ($fromUnified !== '' ? '&from_unified=' . urlencode($fromUnified) : '')
+                     . $filterQuery;
 
     if ($msgNo <= 0 || $destination === '') {
         flashSet('danger', 'Select a destination folder.');
@@ -2461,10 +2569,12 @@ if ($action === 'move' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $imap->moveMessage($folder, $msgNo, $destination);
+        syncFolderUnreadInSession($userId, $targetAccountId, $folder, $imap->getUnreadCount($folder));
+        syncFolderUnreadInSession($userId, $targetAccountId, $destination, $imap->getUnreadCount($destination));
         $imap->disconnect();
         flashSet('success', 'Message moved to "' . $destination . '".');
         if ($fromUnified !== '') {
-            redirect('?action=unified&ufolder=' . urlencode($fromUnified));
+            redirect('?action=unified&ufolder=' . urlencode($fromUnified) . $filterQuery);
         }
         redirect('?action=inbox&folder=' . urlencode($destination));
     } catch (RuntimeException $e) {
@@ -2480,8 +2590,10 @@ if ($action === 'copy' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $folder          = $_GET['folder'] ?? 'INBOX';
     $destination     = trim((string) ($_POST['destination'] ?? ''));
     $targetAccountId = resolveTargetAccountId($accountMgr, $userId, $accountId, isset($_GET['account_id']) ? (int)$_GET['account_id'] : null);
+    $filterQuery     = $mailFilter !== 'all' ? '&filter=' . urlencode($mailFilter) : '';
     $viewExtra       = ($targetAccountId !== $accountId ? '&account_id=' . $targetAccountId : '')
-                     . ($fromUnified !== '' ? '&from_unified=' . urlencode($fromUnified) : '');
+                     . ($fromUnified !== '' ? '&from_unified=' . urlencode($fromUnified) : '')
+                     . $filterQuery;
 
     if ($msgNo <= 0 || $destination === '') {
         flashSet('danger', 'Select a destination folder.');
@@ -2498,6 +2610,7 @@ if ($action === 'copy' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $imap->copyMessage($folder, $msgNo, $destination);
+        syncFolderUnreadInSession($userId, $targetAccountId, $destination, $imap->getUnreadCount($destination));
         $imap->disconnect();
         flashSet('success', 'Message copied to "' . $destination . '".');
         redirect('?action=view&folder=' . urlencode($folder) . '&msg=' . $msgNo . $viewExtra);
@@ -2532,26 +2645,46 @@ if ($action === 'check_unread' && isAjax()) {
         jsonResponse(['status' => 'error', 'message' => 'Not logged in']);
     }
 
+    if ($preImapError !== null) {
+        error_log('Unread count request failed for user ' . $userId . ', account ' . $accountId . ': ' . $preImapError);
+        jsonResponse(['status' => 'error', 'message' => 'Could not retrieve unread counts.']);
+    }
+
     try {
-        $imap = $accountMgr->imapConnect($accountId);
-        $folders = $imap->getFolders();
         $counts = [];
         $inboxUnread = 0;
-        
         foreach ($folders as $f) {
-            $count = $imap->getUnreadCount($f['name']);
+            $count = (int) ($f['unread'] ?? 0);
             $counts[$f['name']] = $count;
             if (strtoupper($f['name']) === 'INBOX') {
                 $inboxUnread = $count;
             }
         }
-        $imap->disconnect();
 
-        jsonResponse([
-            'status' => 'success',
-            'counts' => $counts,
-            'inbox_unread' => $inboxUnread
-        ]);
+        $payload = [
+            'status'       => 'success',
+            'counts'       => $counts,
+            'inbox_unread' => $inboxUnread,
+        ];
+
+        $includeUnified = !empty($_GET['include_unified']) && count($accounts) > 1;
+        if ($includeUnified) {
+            $refreshed = populateUnifiedSidebarCache($accountMgr, $accounts, $userId, $accountId, $folders);
+            $uFolders  = $refreshed['unifiedFolders'] ?? [];
+            $uaFolders = $refreshed['unifiedAccountFolders'] ?? [];
+            $uInboxUnread = 0;
+            foreach ($uFolders as $uf) {
+                if (($uf['key'] ?? '') === 'inbox') {
+                    $uInboxUnread = (int) ($uf['unread'] ?? 0);
+                    break;
+                }
+            }
+            $payload['unified_folders']         = $uFolders;
+            $payload['unified_account_folders'] = $uaFolders;
+            $payload['unified_inbox_unread']    = $uInboxUnread;
+        }
+
+        jsonResponse($payload);
     } catch (Throwable $e) {
         error_log('Unread count request failed for user ' . $userId . ', account ' . $accountId . ': ' . $e->getMessage());
         jsonResponse(['status' => 'error', 'message' => 'Could not retrieve unread counts.']);
@@ -2579,6 +2712,10 @@ if ($action === 'bulk' && isAjax()) {
             foreach ($uids as $uid) {
                 moveToTrashOrDeleteByUid($imap, $folder, $uid, $trash, $inTrash);
             }
+            syncFolderUnreadInSession($userId, $accountId, $folder, $imap->getUnreadCount($folder));
+            if (!$inTrash && $trash !== $folder) {
+                syncFolderUnreadInSession($userId, $accountId, $trash, $imap->getUnreadCount($trash));
+            }
         } elseif ($act === 'move') {
             $moveError = null;
             if ($destination === '') {
@@ -2596,6 +2733,8 @@ if ($action === 'bulk' && isAjax()) {
             foreach ($uids as $uid) {
                 $imap->moveMessageByUid($folder, $uid, $destination);
             }
+            syncFolderUnreadInSession($userId, $accountId, $folder, $imap->getUnreadCount($folder));
+            syncFolderUnreadInSession($userId, $accountId, $destination, $imap->getUnreadCount($destination));
         } elseif ($act === 'copy') {
             if ($destination === '' || !folderExists($allFolders, $destination)) {
                 $imap->disconnect();
@@ -2604,6 +2743,7 @@ if ($action === 'bulk' && isAjax()) {
             foreach ($uids as $uid) {
                 $imap->copyMessageByUid($folder, $uid, $destination);
             }
+            syncFolderUnreadInSession($userId, $accountId, $destination, $imap->getUnreadCount($destination));
         } else {
             foreach ($uids as $uid) {
                 match ($act) {
@@ -2612,6 +2752,7 @@ if ($action === 'bulk' && isAjax()) {
                     default  => null,
                 };
             }
+            syncFolderUnreadInSession($userId, $accountId, $folder, $imap->getUnreadCount($folder));
         }
         $imap->disconnect();
         $redirectUrl = $act === 'move'
@@ -3359,6 +3500,7 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $unreadCount = $imap->getUnreadCount($draftsFolder);
             $imap->disconnect();
+            syncFolderUnreadInSession($userId, $fromAccountId, $draftsFolder, $unreadCount);
             
             if ($isAjax) {
                 header('Content-Type: application/json');
@@ -3368,7 +3510,9 @@ if ($action === 'send' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     'time' => date('H:i:s'),
                     'folder' => $draftsFolder,
                     'unread_count' => $unreadCount,
-                    'draft_uid' => $newDraftUid
+                    'draft_uid' => $newDraftUid,
+                    'unified_folders' => $_SESSION['unified_folders']['folders'] ?? null,
+                    'unified_account_folders' => $_SESSION['unified_account_folders']['accounts'] ?? null,
                 ]);
                 exit;
             }

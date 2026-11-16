@@ -58,6 +58,10 @@ https://github.com/PeopleInside/WebyMail/releases
 
 ## Changelog (Recent)
 
+### 3.6.1
+- Added **Unread first** and **Unread only** message filtering across all regular folders and Unified multi-account folders, preserved across pagination and message view/actions.
+- Added automatic live unread count synchronization across all Unified folders (`#unified-subfolders`) and per-account folders (`#unified-accounts-list`), including instant updates when reading, composing drafts, deleting, moving, or receiving new emails.
+
 ### 3.6.0
 - Added raw email headers inspection (**Headers** button, modal, and copy-to-clipboard) inside both the modal and standalone (Full Tab) `.eml` attachment previews.
 - Added direct download links for nested attachments inside attached `.eml` emails (`action=eml_attachment`), with improved MIME boundary/preamble parsing and nested `message/rfc822` support in `EmlParser`.

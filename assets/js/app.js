@@ -352,9 +352,18 @@ function getCurrentAction() {
     return params.get('action') || 'inbox';
 }
 
-function getCurrentFolder() {
+function getCurrentFolderRaw() {
     const params = new URLSearchParams(window.location.search);
-    return (params.get('folder') || 'INBOX').toUpperCase();
+    return params.get('folder') || 'INBOX';
+}
+
+function getCurrentFolder() {
+    return getCurrentFolderRaw().toUpperCase();
+}
+
+function getCurrentUnifiedFolder() {
+    const params = new URLSearchParams(window.location.search);
+    return (params.get('ufolder') || 'inbox').toLowerCase();
 }
 
 function isInboxListView() {
@@ -367,6 +376,18 @@ function isInboxListView() {
     const action = params.get('action');
     // We only consider it the mailbox listing view if action is missing (default) or explicitly 'inbox'
     return !action || action === 'inbox';
+}
+
+function isUnifiedListView() {
+    if (document.getElementById('compose-form') || document.getElementById('email-body-shadow') || document.getElementById('email-frame')) {
+        return false;
+    }
+
+    return getCurrentAction() === 'unified';
+}
+
+function isMailListView() {
+    return isInboxListView() || isUnifiedListView();
 }
 
 function isSafeToRefreshInboxView() {
@@ -394,25 +415,25 @@ function isSafeToRefreshInboxView() {
 }
 
 async function refreshInboxViewPreservingState() {
-    if (inboxRefreshInFlight || !isInboxListView()) return false;
+    if (inboxRefreshInFlight || !isMailListView()) return false;
 
     const currentContainer = document.getElementById('inbox-content');
     const currentMailList = document.getElementById('mail-list');
     if (!currentContainer || !currentMailList) return false;
 
     const previousScrollTop = currentMailList.scrollTop;
-    const selectedUids = new Set(
+    const selectedKeys = new Set(
         Array.from(document.querySelectorAll('.mail-checkbox:checked'))
-            .map(cb => cb.dataset.uid)
-            .filter(Boolean)
+            .map(cb => `${cb.dataset.accountId || '0'}|${cb.dataset.folder || ''}|${cb.dataset.uid || ''}`)
+            .filter(key => !key.endsWith('|'))
     );
 
     inboxRefreshInFlight = true;
     try {
         const refreshUrl = new URL(window.location.href);
-        // Ensure we preserve currently viewed folder and page, but always force 'inbox' action
-        // in case we were on the root URL without parameters.
-        refreshUrl.searchParams.set('action', 'inbox');
+        if (!refreshUrl.searchParams.get('action')) {
+            refreshUrl.searchParams.set('action', 'inbox');
+        }
         refreshUrl.hash = '';
 
         const response = await fetch(refreshUrl.pathname + refreshUrl.search, {
@@ -424,8 +445,8 @@ async function refreshInboxViewPreservingState() {
         const doc = new DOMParser().parseFromString(html, 'text/html');
         const nextContainer = doc.getElementById('inbox-content');
         const nextTotal = doc.getElementById('inbox-total-count');
-        
-        // Safety check: if the fetched page doesn't have the mailbox content, 
+
+        // Safety check: if the fetched page doesn't have the mailbox content,
         // it means we probably got redirected to Login or something else.
         // We MUST NOT replace the current list with nothing.
         if (!nextContainer) return false;
@@ -447,7 +468,8 @@ async function refreshInboxViewPreservingState() {
         }
 
         document.querySelectorAll('.mail-checkbox').forEach(cb => {
-            if (!selectedUids.has(cb.dataset.uid)) return;
+            const key = `${cb.dataset.accountId || '0'}|${cb.dataset.folder || ''}|${cb.dataset.uid || ''}`;
+            if (!selectedKeys.has(key)) return;
             cb.checked = true;
             cb.closest('.wm-mail-row')?.classList.add('selected');
         });
@@ -465,11 +487,10 @@ async function refreshInboxViewPreservingState() {
 }
 
 function initAutoRefresh() {
-    const REFRESH_INTERVAL = 120000; // 2 minutes (reverted from 5 minutes)
+    const REFRESH_INTERVAL = 120000; // 2 minutes
 
     setInterval(() => {
-        // Only auto-refresh if we are in the INBOX folder listing. 
-        if (isInboxListView() && getCurrentFolder() === 'INBOX' && isSafeToRefreshInboxView()) {
+        if ((isUnifiedListView() || (isInboxListView() && getCurrentFolder() === 'INBOX')) && isSafeToRefreshInboxView()) {
             refreshInboxViewPreservingState();
         }
     }, REFRESH_INTERVAL);
@@ -479,69 +500,229 @@ function initAutoRefresh() {
    Sidebar unread count updates
    ============================================================= */
 window.updateFolderUnread = function(folderName, count) {
-    const badge = document.querySelector(`.badge[data-folder-unread="${folderName}"]`);
-    if (!badge) return;
-    
-    const countInt = parseInt(count, 10) || 0;
-    badge.textContent = countInt;
-    badge.style.display = countInt > 0 ? 'inline-block' : 'none';
+    const badges = document.querySelectorAll('#wm-active-account-folders .badge[data-folder-unread]');
+    for (const badge of badges) {
+        if (badge.dataset.folderUnread === folderName) {
+            const countInt = parseInt(count, 10) || 0;
+            badge.textContent = countInt;
+            badge.style.display = countInt > 0 ? 'inline-block' : 'none';
+            break;
+        }
+    }
 };
 
 /* =============================================================
    Unread Checker Polling
    ============================================================= */
 function initUnreadChecker() {
-    const CHECK_INTERVAL = 60000; // 1 minute
+    if (!document.querySelector('.wm-sidebar')) return;
+
+    const CHECK_INTERVAL = 30000; // 30 seconds
     let baseTitle = String(document.title || '').replace(/^\(\d+\)\s*/, '');
-    let lastCounts = null;
+    let lastCountsMap = null;
+    let lastUnifiedSig = null;
+    let lastUnifiedFolderMap = null;
+    let lastInboxUnread = null;
+    let lastUnifiedInboxUnread = null;
+    let checkInFlight = false;
+    let lastCheckAt = 0;
+
+    function hasUnifiedUi() {
+        return Boolean(document.getElementById('unified-subfolders') || document.getElementById('unified-accounts-list'));
+    }
+
+    function readInitialDomState() {
+        const counts = {};
+        let foundFolder = false;
+        document.querySelectorAll('#wm-active-account-folders .badge[data-folder-unread]').forEach(badge => {
+            const fName = badge.dataset.folderUnread;
+            if (!fName) return;
+            foundFolder = true;
+            const val = parseInt(badge.textContent || '0', 10) || 0;
+            counts[fName] = val;
+            if (fName.toUpperCase() === 'INBOX') {
+                lastInboxUnread = val;
+            }
+        });
+        if (foundFolder) {
+            lastCountsMap = counts;
+        }
+
+        const uMap = {};
+        const accList = [];
+        document.querySelectorAll('#unified-subfolders .badge[data-ufolder-unread]').forEach(badge => {
+            const key = badge.dataset.ufolderUnread;
+            if (!key) return;
+            const val = parseInt(badge.textContent || '0', 10) || 0;
+            uMap[key] = val;
+            if (key === 'inbox') {
+                lastUnifiedInboxUnread = val;
+            }
+        });
+        document.querySelectorAll('#unified-accounts-list .wm-acc-group').forEach(group => {
+            const accId = parseInt(group.dataset.accountId || '0', 10) || 0;
+            const accBadge = group.querySelector('.badge[data-account-unread]');
+            const hasErr = Boolean(group.querySelector('.wm-acc-error-icon'));
+            const fMap = {};
+            group.querySelectorAll('.wm-acc-group-folders .badge[data-acc-folder-unread]').forEach(fb => {
+                if (fb.dataset.accFolderUnread) {
+                    fMap[fb.dataset.accFolderUnread] = parseInt(fb.textContent || '0', 10) || 0;
+                }
+            });
+            accList.push({
+                id: accId,
+                unread: accBadge ? (parseInt(accBadge.textContent || '0', 10) || 0) : 0,
+                err: hasErr,
+                folders: fMap
+            });
+        });
+        if (Object.keys(uMap).length > 0 || accList.length > 0) {
+            lastUnifiedFolderMap = uMap;
+            lastUnifiedSig = JSON.stringify({ u: uMap, a: accList });
+        }
+    }
+
+    function buildUnifiedSignature(unifiedFolders, unifiedAccountFolders) {
+        const uMap = {};
+        if (Array.isArray(unifiedFolders)) {
+            unifiedFolders.forEach(uf => {
+                uMap[String(uf.key || 'inbox')] = parseInt(uf.unread || 0, 10) || 0;
+            });
+        }
+        const accList = [];
+        if (Array.isArray(unifiedAccountFolders)) {
+            unifiedAccountFolders.forEach(acc => {
+                const fMap = {};
+                (Array.isArray(acc.folders) ? acc.folders : []).forEach(f => {
+                    fMap[String(f.name || 'INBOX')] = parseInt(f.unread || 0, 10) || 0;
+                });
+                accList.push({
+                    id: parseInt(acc.account_id || 0, 10) || 0,
+                    unread: parseInt(acc.unread_total || 0, 10) || 0,
+                    err: Boolean(acc.error),
+                    folders: fMap
+                });
+            });
+        }
+        return {
+            uMap,
+            sig: JSON.stringify({ u: uMap, a: accList })
+        };
+    }
+
+    function syncTabTitle() {
+        const activeCount = isUnifiedListView() && lastUnifiedInboxUnread !== null
+            ? lastUnifiedInboxUnread
+            : lastInboxUnread;
+        if (activeCount === null || !Number.isFinite(activeCount)) return;
+        document.title = activeCount > 0 ? `(${activeCount}) ${baseTitle}` : baseTitle;
+    }
 
     window.wmSetBaseTitle = function(newTitle) {
         if (typeof newTitle === 'string' && newTitle !== '') {
             baseTitle = newTitle.replace(/^\(\d+\)\s*/, '');
         }
     };
+    window.wmSyncTabTitleUnread = syncTabTitle;
+
+    readInitialDomState();
 
     function check() {
-        fetch('?action=check_unread', {
+        if (checkInFlight) return;
+        checkInFlight = true;
+        lastCheckAt = Date.now();
+
+        const includeUnified = hasUnifiedUi();
+        const url = includeUnified ? '?action=check_unread&include_unified=1' : '?action=check_unread';
+
+        fetch(url, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
         .then(response => response.json())
         .then(data => {
-            if (data.status === 'success' && data.counts) {
-                const currentCounts = JSON.stringify(data.counts);
-                const countChanged = lastCounts !== null && lastCounts !== currentCounts;
-                lastCounts = currentCounts;
+            if (data.status !== 'success' || !data.counts) return;
 
-                // Update all folder badges
-                for (const [folder, count] of Object.entries(data.counts)) {
-                    window.updateFolderUnread(folder, count);
+            const prevCounts = lastCountsMap;
+            const nextCounts = data.counts;
+            const countChanged = prevCounts !== null && JSON.stringify(prevCounts) !== JSON.stringify(nextCounts);
+            const curFolderRaw = getCurrentFolderRaw();
+            const curFolderCountChanged = prevCounts !== null
+                && Object.prototype.hasOwnProperty.call(nextCounts, curFolderRaw)
+                && prevCounts[curFolderRaw] !== nextCounts[curFolderRaw];
+            lastCountsMap = nextCounts;
+
+            // Update all active-account folder badges
+            for (const [folder, count] of Object.entries(nextCounts)) {
+                window.updateFolderUnread(folder, count);
+            }
+
+            const parsedInboxUnread = parseInt(data.inbox_unread, 10);
+            if (Number.isFinite(parsedInboxUnread)) {
+                lastInboxUnread = parsedInboxUnread;
+            }
+
+            let unifiedChanged = false;
+            if (Array.isArray(data.unified_folders) && Array.isArray(data.unified_account_folders)) {
+                const { uMap, sig } = buildUnifiedSignature(data.unified_folders, data.unified_account_folders);
+                if (lastUnifiedSig !== null && lastUnifiedSig !== sig) {
+                    unifiedChanged = true;
+                }
+                const curUfolder = getCurrentUnifiedFolder();
+                const curUfolderChanged = lastUnifiedFolderMap !== null
+                    && lastUnifiedFolderMap[curUfolder] !== uMap[curUfolder];
+                if (curUfolderChanged) {
+                    unifiedChanged = true;
+                }
+                lastUnifiedFolderMap = uMap;
+                lastUnifiedSig = sig;
+
+                if (typeof window.wmUpdateUnifiedCounts === 'function') {
+                    window.wmUpdateUnifiedCounts(data.unified_folders, data.unified_account_folders);
                 }
 
-                const parsedInboxUnread = parseInt(data.inbox_unread, 10);
-                if (!Number.isFinite(parsedInboxUnread)) {
-                    console.warn('Unread checker received invalid inbox_unread value:', data.inbox_unread);
-                    return;
+                const parsedUnifiedInbox = parseInt(data.unified_inbox_unread, 10);
+                if (Number.isFinite(parsedUnifiedInbox)) {
+                    lastUnifiedInboxUnread = parsedUnifiedInbox;
                 }
-                // Update tab title
-                if (parsedInboxUnread > 0) {
-                    document.title = `(${parsedInboxUnread}) ${baseTitle}`;
-                } else {
-                    document.title = baseTitle;
-                }
+            }
 
-                if (countChanged && getCurrentFolder() === 'INBOX' && isInboxListView() && isSafeToRefreshInboxView()) {
+            syncTabTitle();
+
+            if (isSafeToRefreshInboxView()) {
+                if (isUnifiedListView() && unifiedChanged) {
+                    refreshInboxViewPreservingState();
+                } else if (isInboxListView() && (curFolderCountChanged || (getCurrentFolder() === 'INBOX' && countChanged))) {
                     refreshInboxViewPreservingState();
                 }
             }
         })
-        .catch(err => console.error('Unread check failed:', err));
+        .catch(err => console.error('Unread check failed:', err))
+        .finally(() => {
+            checkInFlight = false;
+        });
     }
 
-    // Initial check
-    check();
-    
+    window.wmCheckUnreadNow = check;
+
+    // Initial check: immediately refresh multi-account unified cache on non-unified pages
+    if (hasUnifiedUi() && !isUnifiedListView()) {
+        setTimeout(check, 1200);
+    }
+
     // Periodic check
     setInterval(check, CHECK_INTERVAL);
+
+    // Refresh unread counts when returning to tab or navigating via browser back/forward cache
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && (Date.now() - lastCheckAt) >= 10000) {
+            check();
+        }
+    });
+    window.addEventListener('pageshow', (e) => {
+        if (e.persisted) {
+            check();
+        }
+    });
 }
 
 /* =============================================================
@@ -827,7 +1008,10 @@ function initInboxView() {
     document.getElementById('bulk-move')?.addEventListener('click', bulkMove);
     document.getElementById('bulk-copy')?.addEventListener('click', bulkCopy);
     document.getElementById('bulk-delete')?.addEventListener('click', () => bulkAction('delete'));
-    document.getElementById('refresh-btn')?.addEventListener('click', reloadCurrentMailView);
+    document.getElementById('refresh-btn')?.addEventListener('click', () => {
+        reloadCurrentMailView();
+        if (typeof window.wmCheckUnreadNow === 'function') window.wmCheckUnreadNow();
+    });
 
     const importBtn   = document.getElementById('import-eml-btn');
     const importInput = document.getElementById('eml-file-input');
@@ -895,7 +1079,10 @@ function initUnifiedView() {
     document.getElementById('unified-bulk-read')?.addEventListener('click', () => runUnifiedBulk('read'));
     document.getElementById('unified-bulk-unread')?.addEventListener('click', () => runUnifiedBulk('unread'));
     document.getElementById('unified-bulk-delete')?.addEventListener('click', () => runUnifiedBulk('delete'));
-    document.getElementById('refresh-btn')?.addEventListener('click', reloadCurrentMailView);
+    document.getElementById('refresh-btn')?.addEventListener('click', () => {
+        reloadCurrentMailView();
+        if (typeof window.wmCheckUnreadNow === 'function') window.wmCheckUnreadNow();
+    });
 }
 
 /* =============================================================
@@ -959,6 +1146,23 @@ function initPartialNavigation() {
             const wasHidden = curUnifiedSub.style.display === 'none';
             curUnifiedSub.innerHTML = nextUnifiedSub.innerHTML;
             curUnifiedSub.style.display = wasHidden ? 'none' : 'block';
+        }
+
+        // Sync #unified-accounts-list unread badges & folders while preserving expanded/collapsed group states
+        const curAccList  = document.getElementById('unified-accounts-list');
+        const nextAccList = nextDoc.getElementById('unified-accounts-list');
+        const curAccSec   = document.getElementById('unified-accounts-section');
+        if (curAccList && nextAccList && nextAccList.querySelectorAll('.wm-acc-group').length > 0) {
+            curAccList.innerHTML = nextAccList.innerHTML;
+            curAccList.querySelectorAll('.wm-acc-group').forEach(g => {
+                if (typeof window.wmBindAccountGroup === 'function') {
+                    window.wmBindAccountGroup(g);
+                }
+            });
+            if (curAccSec) {
+                const isUnifiedOpen = curUnifiedSub ? curUnifiedSub.style.display !== 'none' : false;
+                curAccSec.style.display = isUnifiedOpen ? 'block' : 'none';
+            }
         }
 
         const unifiedRow  = document.querySelector('.wm-unified-row');
@@ -1086,6 +1290,9 @@ function initPartialNavigation() {
                 if (typeof window.wmSetBaseTitle === 'function') {
                     window.wmSetBaseTitle(nextDoc.title);
                 }
+                if (typeof window.wmSyncTabTitleUnread === 'function') {
+                    window.wmSyncTabTitleUnread();
+                }
             }
 
             // Sync top active account label/folders with exact scroll-delta compensation
@@ -1199,10 +1406,10 @@ function initPartialNavigation() {
         navigatePartial(urlObj.href, { pushHistory: true });
     });
 
-    // Intercept pagination, unified tabs, and back-to-folder links inside right pane
+    // Intercept pagination, unified tabs, filter buttons, and back-to-folder links inside right pane
     mainEl.addEventListener('click', (e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-        const link = e.target.closest('.wm-pagination a[href], .wm-unified-tabs a[href], .wm-toolbar a[href]');
+        const link = e.target.closest('.wm-pagination a[href], .wm-unified-tabs a[href], .wm-toolbar a[href], .wm-partial-link[href]');
         if (!link || !mainEl.contains(link)) return;
         if (link.hasAttribute('download') || (link.target && link.target !== '_self')) return;
 
