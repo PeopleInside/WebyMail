@@ -16,6 +16,8 @@ $page          = (int) ($page ?? 1);
 $pages         = (int) ($pages ?? 0);
 $ufolder       = $ufolder ?? 'inbox';
 $ufolderEnc    = urlencode($ufolder);
+$mailFilter    = $mailFilter ?? 'all';
+$filterParam   = $mailFilter !== 'all' ? '&filter=' . urlencode($mailFilter) : '';
 $folderLabel   = $folderLabel ?? 'Inbox';
 $unifiedErrors = $unifiedErrors ?? [];
 $isTrash       = ($ufolder === 'trash');
@@ -49,7 +51,7 @@ if (!empty($unifiedFolders)) {
 }
 ?>
 
-<div class="wm-toolbar" id="unified-toolbar" data-is-trash="<?= $isTrash ? '1' : '0' ?>">
+<div class="wm-toolbar" id="unified-toolbar" data-is-trash="<?= $isTrash ? '1' : '0' ?>" data-ufolder="<?= htmlspecialchars($ufolder) ?>" data-filter="<?= htmlspecialchars($mailFilter) ?>">
     <input type="checkbox" id="select-all" title="Select all">
 
     <div id="bulk-bar" style="display:none;align-items:center;gap:.5rem">
@@ -63,13 +65,25 @@ if (!empty($unifiedFolders)) {
 
     <div class="wm-unified-tabs">
         <?php foreach ($unifiedTabs as $key => $label): ?>
-        <a href="?action=unified&ufolder=<?= urlencode($key) ?>"
+        <a href="?action=unified&ufolder=<?= urlencode($key) . $filterParam ?>"
            class="btn btn-sm <?= $ufolder === $key ? 'btn-primary' : 'btn-ghost' ?>"
            target="_self"><?= htmlspecialchars($label) ?></a>
         <?php endforeach; ?>
     </div>
 
-    <span id="inbox-total-count" style="font-size:.78rem;color:var(--wm-text-muted);margin-left:auto"><?= $total ?> message<?= $total !== 1 ? 's' : '' ?></span>
+    <div class="wm-filter-group" role="group" aria-label="Filter messages">
+        <a href="?action=unified&ufolder=<?= $ufolderEnc ?>"
+           class="wm-filter-btn <?= $mailFilter === 'all' ? 'active' : '' ?>"
+           target="_self">All</a>
+        <a href="?action=unified&ufolder=<?= $ufolderEnc ?>&filter=unread_first"
+           class="wm-filter-btn <?= $mailFilter === 'unread_first' ? 'active' : '' ?>"
+           target="_self">Unread first</a>
+        <a href="?action=unified&ufolder=<?= $ufolderEnc ?>&filter=unread_only"
+           class="wm-filter-btn <?= $mailFilter === 'unread_only' ? 'active' : '' ?>"
+           target="_self">Unread only</a>
+    </div>
+
+    <span id="inbox-total-count" style="font-size:.78rem;color:var(--wm-text-muted);margin-left:auto"><?= $total ?> <?= $mailFilter === 'unread_only' ? 'unread ' : '' ?>message<?= $total !== 1 ? 's' : '' ?></span>
 
     <button class="btn btn-ghost btn-icon" title="Refresh" id="refresh-btn">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
@@ -104,7 +118,14 @@ if (!empty($unifiedFolders)) {
             <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
             <polyline points="22,6 12,13 2,6"/>
         </svg>
+        <?php if ($mailFilter === 'unread_only'): ?>
+        <p>No unread messages in Unified <?= htmlspecialchars($folderLabel) ?></p>
+        <p style="margin-top:.75rem">
+            <a href="?action=unified&ufolder=<?= $ufolderEnc ?>" class="btn btn-outline btn-sm wm-partial-link" target="_self">Show all messages</a>
+        </p>
+        <?php else: ?>
         <p>No messages in Unified <?= htmlspecialchars($folderLabel) ?></p>
+        <?php endif; ?>
     </div>
     <?php else: ?>
     <?php foreach ($messages as $msg):
@@ -114,7 +135,8 @@ if (!empty($unifiedFolders)) {
         $viewUrl = '?action=view&account_id=' . $mAccId
                  . '&folder=' . urlencode($mFolder)
                  . '&msg=' . (int) ($msg['msg_no'] ?? 0)
-                 . '&from_unified=' . $ufolderEnc;
+                 . '&from_unified=' . $ufolderEnc
+                 . $filterParam;
         $senderStr     = (string) ($msg['from'] ?? '');
         $cleanSender   = trim(preg_replace('/<.*?>/', '', $senderStr), " \t\n\r\0\x0B\"'");
         $senderInitial = strtoupper(substr($cleanSender ?: 'M', 0, 1));
@@ -169,7 +191,7 @@ if (!empty($unifiedFolders)) {
 <?php if ($pages > 1): ?>
 <div class="wm-pagination">
     <?php if ($page > 1): ?>
-    <a href="?action=unified&ufolder=<?= $ufolderEnc ?>&page=<?= $page - 1 ?>" target="_self">‹</a>
+    <a href="?action=unified&ufolder=<?= $ufolderEnc ?><?= $filterParam ?>&page=<?= $page - 1 ?>" target="_self">‹</a>
     <?php else: ?>
     <span class="disabled">‹</span>
     <?php endif; ?>
@@ -183,13 +205,13 @@ if (!empty($unifiedFolders)) {
     <?php if ($i === $page): ?>
     <span class="current"><?= $i ?></span>
     <?php else: ?>
-    <a href="?action=unified&ufolder=<?= $ufolderEnc ?>&page=<?= $i ?>" target="_self"><?= $i ?></a>
+    <a href="?action=unified&ufolder=<?= $ufolderEnc ?><?= $filterParam ?>&page=<?= $i ?>" target="_self"><?= $i ?></a>
     <?php endif; ?>
     <?php endfor; ?>
     <?php if ($end < $pages) echo '<span style="border:none;width:auto;padding:0 .25rem;color:var(--wm-text-muted)">…</span>'; ?>
 
     <?php if ($page < $pages): ?>
-    <a href="?action=unified&ufolder=<?= $ufolderEnc ?>&page=<?= $page + 1 ?>" target="_self">›</a>
+    <a href="?action=unified&ufolder=<?= $ufolderEnc ?><?= $filterParam ?>&page=<?= $page + 1 ?>" target="_self">›</a>
     <?php else: ?>
     <span class="disabled">›</span>
     <?php endif; ?>

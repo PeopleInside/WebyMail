@@ -9,7 +9,9 @@ $messages   = $mailData['messages'] ?? [];
 $total      = $mailData['total']    ?? 0;
 $page       = $mailData['page']     ?? 1;
 $pages      = $mailData['pages']    ?? 1;
+$mailFilter = $mailFilter ?? 'all';
 $folderEnc  = urlencode($folder ?? 'INBOX');
+$filterParam = $mailFilter !== 'all' ? '&filter=' . urlencode($mailFilter) : '';
 $folderDisplay = htmlspecialchars($folder ?? 'INBOX');
 $folderJs = json_encode($folder ?? 'INBOX', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 $exportZipUrl = '?action=export_zip&folder=' . rawurlencode($folder ?? 'INBOX');
@@ -21,6 +23,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
 <div class="wm-toolbar"
      id="inbox-toolbar"
      data-folder="<?= htmlspecialchars($folder ?? 'INBOX') ?>"
+     data-filter="<?= htmlspecialchars($mailFilter) ?>"
      data-is-trash="<?= ($isTrash ?? false) ? '1' : '0' ?>"
      data-export-zip-url="<?= htmlspecialchars($exportZipUrl) ?>">
     <!-- Bulk action toggle -->
@@ -46,7 +49,19 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
         </button>
     </div>
 
-    <span id="inbox-total-count" style="font-size:.78rem;color:var(--wm-text-muted);margin-left:auto"><?= $total ?> message<?= $total !== 1 ? 's' : '' ?></span>
+    <div class="wm-filter-group" role="group" aria-label="Filter messages">
+        <a href="?action=inbox&folder=<?= $folderEnc ?>"
+           class="wm-filter-btn <?= $mailFilter === 'all' ? 'active' : '' ?>"
+           target="_self">All</a>
+        <a href="?action=inbox&folder=<?= $folderEnc ?>&filter=unread_first"
+           class="wm-filter-btn <?= $mailFilter === 'unread_first' ? 'active' : '' ?>"
+           target="_self">Unread first</a>
+        <a href="?action=inbox&folder=<?= $folderEnc ?>&filter=unread_only"
+           class="wm-filter-btn <?= $mailFilter === 'unread_only' ? 'active' : '' ?>"
+           target="_self">Unread only</a>
+    </div>
+
+    <span id="inbox-total-count" style="font-size:.78rem;color:var(--wm-text-muted);margin-left:auto"><?= $total ?> <?= $mailFilter === 'unread_only' ? 'unread ' : '' ?>message<?= $total !== 1 ? 's' : '' ?></span>
 
     <button class="btn btn-ghost btn-icon" title="Refresh" id="refresh-btn">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
@@ -82,12 +97,19 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
             <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
             <polyline points="22,6 12,13 2,6"/>
         </svg>
+        <?php if ($mailFilter === 'unread_only'): ?>
+        <p>No unread messages in <?= $folderDisplay ?></p>
+        <p style="margin-top:.75rem">
+            <a href="?action=inbox&folder=<?= $folderEnc ?>" class="btn btn-outline btn-sm wm-partial-link" target="_self">Show all messages</a>
+        </p>
+        <?php else: ?>
         <p>No messages in <?= $folderDisplay ?></p>
+        <?php endif; ?>
     </div>
     <?php else: ?>
     <?php foreach ($messages as $msg): ?>
     <div class="wm-mail-row <?= $msg['is_read'] ? '' : 'unread' ?>"
-         data-href="<?= '?action=view&folder=' . $folderEnc . '&msg=' . (int)$msg['msg_no'] ?>">
+         data-href="<?= '?action=view&folder=' . $folderEnc . '&msg=' . (int)$msg['msg_no'] . $filterParam ?>">
         <div class="wm-mail-check">
             <input type="checkbox" class="mail-checkbox" data-uid="<?= (int)$msg['uid'] ?>">
         </div>
@@ -134,7 +156,7 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
 <?php if ($pages > 1): ?>
 <div class="wm-pagination">
     <?php if ($page > 1): ?>
-    <a href="?action=inbox&folder=<?= $folderEnc ?>&page=<?= $page-1 ?>" target="_self">‹</a>
+    <a href="?action=inbox&folder=<?= $folderEnc ?><?= $filterParam ?>&page=<?= $page-1 ?>" target="_self">‹</a>
     <?php else: ?>
     <span class="disabled">‹</span>
     <?php endif; ?>
@@ -148,13 +170,13 @@ $moveTargets = array_values(array_filter($folders ?? [], static function (array 
     <?php if ($i === $page): ?>
     <span class="current"><?= $i ?></span>
     <?php else: ?>
-    <a href="?action=inbox&folder=<?= $folderEnc ?>&page=<?= $i ?>" target="_self"><?= $i ?></a>
+    <a href="?action=inbox&folder=<?= $folderEnc ?><?= $filterParam ?>&page=<?= $i ?>" target="_self"><?= $i ?></a>
     <?php endif; ?>
     <?php endfor; ?>
     <?php if ($end < $pages) echo '<span style="border:none;width:auto;padding:0 .25rem;color:var(--wm-text-muted)">…</span>'; ?>
 
     <?php if ($page < $pages): ?>
-    <a href="?action=inbox&folder=<?= $folderEnc ?>&page=<?= $page+1 ?>" target="_self">›</a>
+    <a href="?action=inbox&folder=<?= $folderEnc ?><?= $filterParam ?>&page=<?= $page+1 ?>" target="_self">›</a>
     <?php else: ?>
     <span class="disabled">›</span>
     <?php endif; ?>

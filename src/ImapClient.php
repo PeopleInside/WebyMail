@@ -98,29 +98,134 @@ class ImapClient
 
     /**
      * Return paginated message summaries for a folder.
+     *
+     * @param string $folder Folder name
+     * @param int    $page   1-based page number
+     * @param int    $perPage Items per page
+     * @param string $filter 'all' | 'unread_first' | 'unread_only'
      */
-    public function getMessages(string $folder, int $page = 1, int $perPage = 30): array
+    public function getMessages(string $folder, int $page = 1, int $perPage = 30, string $filter = 'all'): array
     {
         $this->reopenFolder($folder);
 
+        $filter = in_array($filter, ['all', 'unread_first', 'unread_only'], true) ? $filter : 'all';
+        $page   = max(1, $page);
+        $perPage = max(1, $perPage);
+
         $total = imap_num_msg($this->conn);
         if ($total === 0) {
-            return ['messages' => [], 'total' => 0, 'pages' => 0];
+            return ['messages' => [], 'total' => 0, 'page' => 1, 'pages' => 0];
         }
 
-        // Messages are numbered 1..N; we list newest first
-        $from  = max(1, $total - ($page * $perPage) + 1);
-        $to    = max(1, $total - (($page - 1) * $perPage));
+        if ($filter === 'all') {
+            $pages = (int) ceil($total / $perPage);
+            $page  = min($page, $pages);
 
-        $overview = imap_fetch_overview($this->conn, "{$from}:{$to}", 0);
+            // Messages are numbered 1..N; we list newest first
+            $from  = max(1, $total - ($page * $perPage) + 1);
+            $to    = max(1, $total - (($page - 1) * $perPage));
+
+            $overview = imap_fetch_overview($this->conn, "{$from}:{$to}", 0);
+            if (!is_array($overview)) {
+                return ['messages' => [], 'total' => $total, 'page' => $page, 'pages' => $pages];
+            }
+
+            $messages = array_map([$this, 'summaryFromOverview'], $overview);
+            $this->enrichMessageSummaries($messages);
+            $messages = array_reverse($messages);
+
+            return [
+                'messages' => $messages,
+                'total'    => $total,
+                'page'     => $page,
+                'pages'    => $pages,
+            ];
+        }
+
+        // Unread-first or Unread-only across the entire folder via IMAP UNSEEN search
+        $unseenRaw = @imap_search($this->conn, 'UNSEEN');
+        @imap_errors();
+        $unseenMsgNos = is_array($unseenRaw) ? array_values(array_map('intval', $unseenRaw)) : [];
+        rsort($unseenMsgNos, SORT_NUMERIC);
+        $unreadTotal = count($unseenMsgNos);
+
+        if ($filter === 'unread_only') {
+            if ($unreadTotal === 0) {
+                return ['messages' => [], 'total' => 0, 'page' => 1, 'pages' => 0];
+            }
+            $pages        = (int) ceil($unreadTotal / $perPage);
+            $page         = min($page, $pages);
+            $offset       = ($page - 1) * $perPage;
+            $targetMsgNos = array_slice($unseenMsgNos, $offset, $perPage);
+            $filteredTotal = $unreadTotal;
+        } else {
+            // unread_first: all unread (newest first), followed by all read (newest first)
+            $pages        = (int) ceil($total / $perPage);
+            $page         = min($page, $pages);
+            $offset       = ($page - 1) * $perPage;
+            $takeUnseen   = ($offset < $unreadTotal) ? array_slice($unseenMsgNos, $offset, $perPage) : [];
+            $needRead     = $perPage - count($takeUnseen);
+            $takeRead     = [];
+
+            if ($needRead > 0) {
+                $unseenSet  = array_flip($unseenMsgNos);
+                $readOffset = max(0, $offset - $unreadTotal);
+                $skipped    = 0;
+                for ($m = $total; $m >= 1; $m--) {
+                    if (isset($unseenSet[$m])) {
+                        continue;
+                    }
+                    if ($skipped < $readOffset) {
+                        $skipped++;
+                        continue;
+                    }
+                    $takeRead[] = $m;
+                    if (count($takeRead) >= $needRead) {
+                        break;
+                    }
+                }
+            }
+
+            $targetMsgNos  = array_merge($takeUnseen, $takeRead);
+            $filteredTotal = $total;
+        }
+
+        if (empty($targetMsgNos)) {
+            return ['messages' => [], 'total' => $filteredTotal, 'page' => $page, 'pages' => $pages];
+        }
+
+        $fetchNums = $targetMsgNos;
+        sort($fetchNums, SORT_NUMERIC);
+        $overview = imap_fetch_overview($this->conn, implode(',', $fetchNums), 0);
         if (!is_array($overview)) {
-            return ['messages' => [], 'total' => $total, 'pages' => (int) ceil($total / $perPage)];
+            return ['messages' => [], 'total' => $filteredTotal, 'page' => $page, 'pages' => $pages];
         }
 
-        $messages = array_map([$this, 'summaryFromOverview'], $overview);
-        
-        // For each message, if has_attachments is false, do a quick structure check
-        // to be more reliable, but only for the current page.
+        $rawSummaries = array_map([$this, 'summaryFromOverview'], $overview);
+        $this->enrichMessageSummaries($rawSummaries);
+
+        $byMsgNo = [];
+        foreach ($rawSummaries as $summary) {
+            $byMsgNo[(int) $summary['msg_no']] = $summary;
+        }
+
+        $messages = [];
+        foreach ($targetMsgNos as $no) {
+            if (isset($byMsgNo[$no])) {
+                $messages[] = $byMsgNo[$no];
+            }
+        }
+
+        return [
+            'messages' => $messages,
+            'total'    => $filteredTotal,
+            'page'     => $page,
+            'pages'    => $pages,
+        ];
+    }
+
+    private function enrichMessageSummaries(array &$messages): void
+    {
         foreach ($messages as &$msg) {
             $rawHeaders = imap_fetchheader($this->conn, $msg['msg_no']) ?: '';
             $msg['priority'] = $this->parsePriority($rawHeaders);
@@ -137,15 +242,7 @@ class ImapClient
                 }
             }
         }
-
-        $messages = array_reverse($messages);
-
-        return [
-            'messages' => $messages,
-            'total'    => $total,
-            'page'     => $page,
-            'pages'    => (int) ceil($total / $perPage),
-        ];
+        unset($msg);
     }
 
     /**

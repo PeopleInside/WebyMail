@@ -1019,6 +1019,9 @@ $hasPrefillCc    = !empty($prefill['cc']);
                 if (fromAccountId === activeAccountId && typeof window.updateFolderUnread === 'function' && data.folder && data.unread_count !== undefined) {
                     window.updateFolderUnread(data.folder, data.unread_count);
                 }
+                if (typeof window.wmUpdateUnifiedCounts === 'function' && Array.isArray(data.unified_folders) && Array.isArray(data.unified_account_folders)) {
+                    window.wmUpdateUnifiedCounts(data.unified_folders, data.unified_account_folders);
+                }
             } else {
                 if (isAuto && draftStatus) {
                     draftStatus.textContent = 'Auto-save failed';

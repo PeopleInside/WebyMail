@@ -299,9 +299,7 @@
                 <a href="?action=unified&ufolder=<?= urlencode($uKey) ?>" class="<?= ($inUnifiedMode && $activeUfolder === $uKey) ? 'active' : '' ?>" data-ufolder="<?= htmlspecialchars($uKey) ?>" target="_self">
                     <?= $getFolderIcon($uLabel) ?>
                     <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1"><?= htmlspecialchars($uLabel) ?></span>
-                    <?php if ($uUnread > 0): ?>
-                    <span class="badge"><?= $uUnread ?></span>
-                    <?php endif; ?>
+                    <span class="badge" data-ufolder-unread="<?= htmlspecialchars($uKey) ?>" style="display:<?= $uUnread > 0 ? 'inline-block' : 'none' ?>"><?= $uUnread ?></span>
                 </a>
                 <?php endforeach; ?>
             </div>
@@ -337,9 +335,9 @@
                         <span class="wm-acc-dot" style="background:<?= $gDot ?>"></span>
                         <span class="wm-acc-label"><?= htmlspecialchars($gLabel) ?></span>
                         <?php if ($gError !== null): ?>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--wm-danger)" stroke-width="2.5" style="flex-shrink:0" title="<?= htmlspecialchars($gError) ?>"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                        <?php elseif ($gUnread > 0): ?>
-                        <span class="badge"><?= $gUnread ?></span>
+                        <svg class="wm-acc-error-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--wm-danger)" stroke-width="2.5" style="flex-shrink:0" title="<?= htmlspecialchars($gError) ?>"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <?php else: ?>
+                        <span class="badge" data-account-unread="<?= $gAccId ?>" style="display:<?= $gUnread > 0 ? 'inline-block' : 'none' ?>"><?= $gUnread ?></span>
                         <?php endif; ?>
                         <svg class="wm-acc-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                     </button>
@@ -349,6 +347,7 @@
                         <?php else: ?>
                         <?php foreach ($gFolders as $f):
                             $isGroupFolderActive = $groupHasActiveFolder && ($currentFolder ?? 'INBOX') === $f['name'];
+                            $fUnread = (int) ($f['unread'] ?? 0);
                         ?>
                         <a href="?action=inbox&account_id=<?= $gAccId ?>&folder=<?= urlencode($f['name']) ?>"
                            class="<?= $isGroupFolderActive ? 'active' : '' ?>"
@@ -358,9 +357,7 @@
                            style="display:flex;align-items:center;gap:.6rem">
                             <?= $getFolderIcon($f['name']) ?>
                             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1"><?= htmlspecialchars($f['display']) ?></span>
-                            <?php if (!empty($f['unread'])): ?>
-                            <span class="badge"><?= (int)$f['unread'] ?></span>
-                            <?php endif; ?>
+                            <span class="badge" data-acc-folder-unread="<?= htmlspecialchars($f['name']) ?>" style="display:<?= $fUnread > 0 ? 'inline-block' : 'none' ?>"><?= $fUnread ?></span>
                         </a>
                         <?php endforeach; ?>
                         <?php endif; ?>
@@ -584,12 +581,12 @@ document.addEventListener('click', function() {
             lblSpan.textContent = uLabel;
             a.appendChild(lblSpan);
 
-            if (uUnread > 0) {
-                var badge = document.createElement('span');
-                badge.className = 'badge';
-                badge.textContent = String(uUnread);
-                a.appendChild(badge);
-            }
+            var badge = document.createElement('span');
+            badge.className = 'badge';
+            badge.dataset.ufolderUnread = uKey;
+            badge.textContent = String(uUnread);
+            badge.style.display = uUnread > 0 ? 'inline-block' : 'none';
+            a.appendChild(badge);
             sub.appendChild(a);
         });
     }
@@ -660,18 +657,20 @@ document.addEventListener('click', function() {
             lbl.textContent = accGroup.label || accGroup.email || 'Account';
             btn.appendChild(lbl);
 
-            var unreadTotal = parseInt(accGroup.unread_total || 0, 10);
+            var unreadTotal = parseInt(accGroup.unread_total || 0, 10) || 0;
             if (accGroup.error) {
                 var warn = document.createElement('span');
-                warn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--wm-danger)" stroke-width="2.5" style="flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+                warn.innerHTML = '<svg class="wm-acc-error-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--wm-danger)" stroke-width="2.5" style="flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
                 if (warn.firstChild) {
                     warn.firstChild.setAttribute('title', String(accGroup.error));
                     btn.appendChild(warn.firstChild);
                 }
-            } else if (unreadTotal > 0) {
+            } else {
                 var badge = document.createElement('span');
                 badge.className = 'badge';
+                badge.dataset.accountUnread = String(gAccId);
                 badge.textContent = String(unreadTotal);
+                badge.style.display = unreadTotal > 0 ? 'inline-block' : 'none';
                 btn.appendChild(badge);
             }
 
@@ -718,13 +717,13 @@ document.addEventListener('click', function() {
                     nameSpan.textContent = String(f.display || fName);
                     a.appendChild(nameSpan);
 
-                    var fUnread = parseInt(f.unread || 0, 10);
-                    if (fUnread > 0) {
-                        var fBadge = document.createElement('span');
-                        fBadge.className = 'badge';
-                        fBadge.textContent = String(fUnread);
-                        a.appendChild(fBadge);
-                    }
+                    var fUnread = parseInt(f.unread || 0, 10) || 0;
+                    var fBadge = document.createElement('span');
+                    fBadge.className = 'badge';
+                    fBadge.dataset.accFolderUnread = fName;
+                    fBadge.textContent = String(fUnread);
+                    fBadge.style.display = fUnread > 0 ? 'inline-block' : 'none';
+                    a.appendChild(fBadge);
                     foldersDiv.appendChild(a);
                 });
             }
@@ -733,6 +732,78 @@ document.addEventListener('click', function() {
             accList.appendChild(group);
             bindAccountGroup(group);
         });
+    }
+
+    function updateUnifiedCounts(unifiedFolders, unifiedAccountFolders) {
+        if (sub && Array.isArray(unifiedFolders) && unifiedFolders.length > 0) {
+            var existingLinks = Array.from(sub.querySelectorAll('a[data-ufolder]'));
+            var canPatchSub = existingLinks.length === unifiedFolders.length && unifiedFolders.every(function(uf, idx) {
+                return existingLinks[idx] && existingLinks[idx].dataset.ufolder === String(uf.key || 'inbox');
+            });
+            if (canPatchSub) {
+                unifiedFolders.forEach(function(uf, idx) {
+                    var link = existingLinks[idx];
+                    var uUnread = parseInt(uf.unread || 0, 10) || 0;
+                    var badge = link.querySelector('.badge[data-ufolder-unread]');
+                    if (badge) {
+                        badge.textContent = String(uUnread);
+                        badge.style.display = uUnread > 0 ? 'inline-block' : 'none';
+                    }
+                });
+            } else {
+                populateUnifiedSubfolders(unifiedFolders);
+            }
+        }
+
+        if (accList && Array.isArray(unifiedAccountFolders)) {
+            var existingGroups = Array.from(accList.querySelectorAll('.wm-acc-group'));
+            var canPatchAcc = existingGroups.length === unifiedAccountFolders.length && unifiedAccountFolders.every(function(acc, idx) {
+                var g = existingGroups[idx];
+                if (!g || parseInt(g.dataset.accountId || '0', 10) !== parseInt(acc.account_id || 0, 10)) {
+                    return false;
+                }
+                var hasErrIcon = !!g.querySelector('.wm-acc-error-icon');
+                var hasErrNow = !!acc.error;
+                if (hasErrIcon !== hasErrNow) return false;
+                var folderLinks = Array.from(g.querySelectorAll('.wm-acc-group-folders a[data-folder]'));
+                var gFolders = Array.isArray(acc.folders) ? acc.folders : [];
+                if (folderLinks.length !== gFolders.length) return false;
+                return gFolders.every(function(f, fIdx) {
+                    return folderLinks[fIdx] && folderLinks[fIdx].dataset.folder === String(f.name || 'INBOX');
+                });
+            });
+
+            if (canPatchAcc) {
+                unifiedAccountFolders.forEach(function(acc, idx) {
+                    var g = existingGroups[idx];
+                    var accBadge = g.querySelector('.badge[data-account-unread]');
+                    if (accBadge) {
+                        var totalUnread = parseInt(acc.unread_total || 0, 10) || 0;
+                        accBadge.textContent = String(totalUnread);
+                        accBadge.style.display = totalUnread > 0 ? 'inline-block' : 'none';
+                    }
+                    var folderLinks = Array.from(g.querySelectorAll('.wm-acc-group-folders a[data-folder]'));
+                    (Array.isArray(acc.folders) ? acc.folders : []).forEach(function(f, fIdx) {
+                        var link = folderLinks[fIdx];
+                        if (!link) return;
+                        var fBadge = link.querySelector('.badge[data-acc-folder-unread]');
+                        if (fBadge) {
+                            var fUnread = parseInt(f.unread || 0, 10) || 0;
+                            fBadge.textContent = String(fUnread);
+                            fBadge.style.display = fUnread > 0 ? 'inline-block' : 'none';
+                        }
+                    });
+                });
+            } else {
+                populateAccountGroups(unifiedAccountFolders);
+            }
+
+            if (accSection && toggle) {
+                var isUnifiedExpanded = toggle.classList.contains('expanded');
+                var hasGroups = accList.querySelectorAll('.wm-acc-group').length > 0;
+                accSection.style.display = (isUnifiedExpanded && hasGroups) ? 'block' : 'none';
+            }
+        }
     }
 
     function persistUnifiedSidebarState(open) {
@@ -764,17 +835,7 @@ document.addEventListener('click', function() {
 
         return persistUnifiedSidebarState(nextOpen).then(function(res) {
             if (nextOpen && res && res.ok) {
-                if (Array.isArray(res.unifiedFolders) && res.unifiedFolders.length > 0) {
-                    populateUnifiedSubfolders(res.unifiedFolders);
-                }
-                if (accSection && accList) {
-                    if (accList.querySelectorAll('.wm-acc-group').length === 0 && Array.isArray(res.unifiedAccountFolders) && res.unifiedAccountFolders.length > 0) {
-                        populateAccountGroups(res.unifiedAccountFolders);
-                    }
-                    if (accList.querySelectorAll('.wm-acc-group').length > 0) {
-                        accSection.style.display = 'block';
-                    }
-                }
+                updateUnifiedCounts(res.unifiedFolders, res.unifiedAccountFolders);
             }
             if (typeof window.wmRestoreSidebarScroll === 'function') {
                 window.wmRestoreSidebarScroll();
@@ -807,6 +868,7 @@ document.addEventListener('click', function() {
 
     document.querySelectorAll('.wm-acc-group').forEach(bindAccountGroup);
     window.wmBindAccountGroup = bindAccountGroup;
+    window.wmUpdateUnifiedCounts = updateUnifiedCounts;
 })();
 
 // Folder management
