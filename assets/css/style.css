@@ -886,6 +886,15 @@ input:autofill {
     border-radius: 0 0 8px 8px;
 }
 
+/* Compact variant used inside .eml previews (modal and standalone page) */
+.wm-img-banner.wm-img-banner-compact {
+    max-width: none;
+    margin: 0;
+    border-radius: 0;
+    border-width: 0 0 1px 0;
+    padding: .6rem 1.25rem;
+}
+
 .wm-read-receipt-banner {
     margin-top: 1rem;
     border-radius: 8px;

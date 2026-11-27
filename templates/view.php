@@ -346,6 +346,11 @@ if (!empty($authStatus['has_auth']) && in_array($authStatus['banner_level'] ?? '
             </div>
         </div>
         <div id="eml-modal-auth-banner" class="wm-auth-banner is-compact" style="display:none" role="alert"></div>
+        <div id="eml-modal-img-banner" class="wm-img-banner wm-img-banner-compact" style="display:none" role="status">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>External images have been blocked to protect your privacy.</span>
+            <button type="button" class="btn btn-outline btn-sm" id="eml-modal-show-images-btn" style="margin-left:auto">Show images</button>
+        </div>
         <div id="eml-modal-nested-att" style="display:none;padding:.6rem 1.25rem;background:var(--wm-bg);border-bottom:1px solid var(--wm-border);font-size:.8rem;gap:.5rem;align-items:center;flex-wrap:wrap">
             <span style="font-weight:600;color:var(--wm-text-muted)">Nested attachments:</span>
             <div id="eml-modal-nested-list" style="display:inline-flex;gap:.4rem;flex-wrap:wrap"></div>
@@ -598,6 +603,56 @@ if (!empty($authStatus['has_auth']) && in_array($authStatus['banner_level'] ?? '
     var emlAuthBanner = document.getElementById('eml-modal-auth-banner');
     var emlNestedAtt = document.getElementById('eml-modal-nested-att');
     var emlNestedList = document.getElementById('eml-modal-nested-list');
+    var emlImgBanner = document.getElementById('eml-modal-img-banner');
+    var emlShowImagesBtn = document.getElementById('eml-modal-show-images-btn');
+    var currentEmlBaseParams = '';
+    var currentEmlCoreParams = '';
+    var currentEmlExtraUni = '';
+    var currentEmlImagesAllowed = false;
+
+    // Reply / Reply all / Forward links: remote images are only kept in the quoted body
+    // when the user explicitly accepted them (same behaviour as the normal message view).
+    function updateEmlComposeLinks() {
+        var img = currentEmlImagesAllowed ? '1' : '0';
+        if (emlReply) emlReply.href = '?action=compose&reply_eml=1&' + currentEmlCoreParams + '&images=' + img + currentEmlExtraUni;
+        if (emlReplyAll) emlReplyAll.href = '?action=compose&reply_eml=1&reply_all=1&' + currentEmlCoreParams + '&images=' + img + currentEmlExtraUni;
+        if (emlForward) emlForward.href = '?action=compose&forward_eml=1&' + currentEmlCoreParams + '&images=' + img + currentEmlExtraUni;
+    }
+
+    function setEmlImgBanner(visible) {
+        if (!emlImgBanner) return;
+        emlImgBanner.style.display = visible ? 'flex' : 'none';
+        if (emlShowImagesBtn) {
+            emlShowImagesBtn.disabled = false;
+            emlShowImagesBtn.textContent = 'Show images';
+        }
+    }
+
+    if (emlShowImagesBtn) {
+        emlShowImagesBtn.addEventListener('click', function() {
+            if (!currentEmlBaseParams || !activeEmlFrame) return;
+            var frame = activeEmlFrame;
+            emlShowImagesBtn.disabled = true;
+            emlShowImagesBtn.textContent = 'Loading…';
+            fetch('?action=preview_eml&' + currentEmlBaseParams + '&json=1&images=1', {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (!res.ok || !res.eml || !res.eml.body_html) throw new Error('load failed');
+                if (frame !== activeEmlFrame) return; // another .eml was opened meanwhile
+                lastEmlHtml = String(res.eml.body_html);
+                frame.srcdoc = applyThemeToEmailHtml(lastEmlHtml, getResolvedTheme());
+                currentEmlImagesAllowed = true;
+                updateEmlComposeLinks();
+                setEmlImgBanner(false);
+            })
+            .catch(function() {
+                emlShowImagesBtn.disabled = false;
+                emlShowImagesBtn.textContent = 'Show images';
+            });
+        });
+    }
     var currentEmlHeaders = '';
     var currentEmlFilename = '';
 
@@ -718,6 +773,8 @@ if (!empty($authStatus['has_auth']) && in_array($authStatus['banner_level'] ?? '
             if (emlCc) emlCc.style.display = 'none';
             if (emlCcLabel) emlCcLabel.style.display = 'none';
             renderEmlAuthStatus(null);
+            setEmlImgBanner(false);
+            currentEmlImagesAllowed = false;
             emlBody.textContent = '';
             lastEmlHtml = null;
             activeEmlFrame = null;
@@ -732,9 +789,10 @@ if (!empty($authStatus['has_auth']) && in_array($authStatus['banner_level'] ?? '
 
             emlNewTab.href = '?action=preview_eml&' + baseParams + extraUni;
             emlDownload.href = '?action=attachment&' + baseParams;
-            if (emlReply) emlReply.href = '?action=compose&reply_eml=1&' + coreParams + '&images=1' + extraUni;
-            if (emlReplyAll) emlReplyAll.href = '?action=compose&reply_eml=1&reply_all=1&' + coreParams + '&images=1' + extraUni;
-            if (emlForward) emlForward.href = '?action=compose&forward_eml=1&' + coreParams + '&images=1' + extraUni;
+            currentEmlBaseParams = baseParams;
+            currentEmlCoreParams = coreParams;
+            currentEmlExtraUni = extraUni;
+            updateEmlComposeLinks();
 
             emlModal.style.display = 'flex';
 
@@ -779,6 +837,7 @@ if (!empty($authStatus['has_auth']) && in_array($authStatus['banner_level'] ?? '
                     activeEmlFrame = emlFrame;
                     emlFrame.srcdoc = applyThemeToEmailHtml(lastEmlHtml, getResolvedTheme());
                     emlBody.appendChild(emlFrame);
+                    setEmlImgBanner(!!eml.has_remote_images && !eml.images_allowed);
                 } else if (eml.body_text) {
                     var p = document.createElement('pre');
                     p.style.whiteSpace = 'pre-wrap';

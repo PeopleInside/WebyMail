@@ -58,6 +58,9 @@ https://github.com/PeopleInside/WebyMail/releases
 
 ## Changelog (Recent)
 
+### 3.6.2
+- `.eml` attachment previews (modal and standalone Full Tab) now block remote images by default, show the **"External images have been blocked"** banner with a **Show images** button (same behaviour as normal messages), and only load them after an explicit request. Reply / Reply All / Forward on an attached `.eml` keep remote images in the quoted body only if they were accepted.
+
 ### 3.6.1
 - Added **Unread first** and **Unread only** message filtering across all regular folders and Unified multi-account folders, preserved across pagination and message view/actions.
 - Added automatic live unread count synchronization across all Unified folders (`#unified-subfolders`) and per-account folders (`#unified-accounts-list`), including instant updates when reading, composing drafts, deleting, moving, or receiving new emails.
