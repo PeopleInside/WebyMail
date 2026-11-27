@@ -18,7 +18,10 @@ $accountParam    = ($targetAccountId > 0 && ($targetAccountId !== $activeSessAcc
 $unifiedParam    = $fromUnified !== '' ? '&from_unified=' . urlencode($fromUnified) : '';
 $downloadUrl     = '?action=attachment&folder=' . $folderEnc . '&msg=' . (int)$msgNo . '&section=' . $sectionEnc . '&name=' . urlencode($filename) . $accountParam;
 $backUrl         = '?action=view&folder=' . $folderEnc . '&msg=' . (int)$msgNo . $accountParam . $unifiedParam;
-$replyBase       = 'folder=' . $folderEnc . '&msg=' . (int)$msgNo . '&section=' . $sectionEnc . '&images=1' . $accountParam . $unifiedParam;
+$showImages      = !empty($showImages);
+$hasRemoteImages = !empty($hasRemoteImages);
+$replyBase       = 'folder=' . $folderEnc . '&msg=' . (int)$msgNo . '&section=' . $sectionEnc . '&images=' . ($showImages ? '1' : '0') . $accountParam . $unifiedParam;
+$showImagesUrl   = '?action=preview_eml&folder=' . $folderEnc . '&msg=' . (int)$msgNo . '&section=' . $sectionEnc . '&name=' . urlencode($filename) . $accountParam . $unifiedParam . '&images=1';
 $rawHeaders      = (string) ($eml['raw_headers'] ?? '');
 ?>
 <div class="wm-toolbar">
@@ -118,6 +121,14 @@ $rawHeaders      = (string) ($eml['raw_headers'] ?? '');
                 <div style="font-weight:700"><?= htmlspecialchars((string) ($emlAuth['banner_title'] ?? 'Authentication Warning')) ?></div>
                 <div class="wm-auth-banner-text"><?= htmlspecialchars((string) ($emlAuth['banner_description'] ?? '')) ?></div>
             </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if ($hasRemoteImages && !$showImages && !empty($eml['has_html'])): ?>
+        <div class="wm-img-banner wm-img-banner-compact" id="eml-standalone-img-banner" role="status">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>External images have been blocked to protect your privacy.</span>
+            <a href="<?= htmlspecialchars($showImagesUrl) ?>" class="btn btn-outline btn-sm" style="margin-left:auto" target="_self">Show images</a>
         </div>
         <?php endif; ?>
 

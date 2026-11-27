@@ -1999,6 +1999,30 @@ function sanitizeInlineCss(string $css, bool $showImages): string
 }
 
 /**
+ * Detects whether an HTML body references remote (http/https) images, either via <img src>,
+ * legacy background attributes or CSS url(...) declarations. Used to decide whether to show
+ * the "remote images blocked" banner. Conservative and read-only: it never alters the HTML.
+ */
+function htmlHasRemoteImages(string $html): bool
+{
+    if ($html === '') {
+        return false;
+    }
+    $decoded = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $decoded = (string) preg_replace('/[\x00-\x20\x7F]+/', ' ', $decoded);
+    if (preg_match('/<img\b[^>]*\ssrc\s*=\s*["\']?\s*https?:\/\//i', $decoded)) {
+        return true;
+    }
+    if (preg_match('/\sbackground\s*=\s*["\']?\s*https?:\/\//i', $decoded)) {
+        return true;
+    }
+    if (preg_match('/url\s*\(\s*["\']?\s*https?:\/\//i', $decoded)) {
+        return true;
+    }
+    return false;
+}
+
+/**
  * Strict fail-closed, allowlist-based HTML sanitization for email bodies, drafts, and signatures.
  */
 function sanitizeHtml(string $html, bool $showImages, string $theme, bool $stripRemoteImages = false, bool $isOutgoing = false): string
@@ -2925,7 +2949,12 @@ if ($action === 'preview_eml') {
 
         $parsed = EmlParser::parse($data);
         $theme = $session['theme'] ?? ($_COOKIE['wm_theme'] ?? 'system');
-        $safeHtml = $parsed['body_html'] !== '' ? sanitizeHtml($parsed['body_html'], true, $theme) : '';
+
+        // Remote images are blocked by default (same privacy behaviour as normal messages);
+        // they are only rendered after an explicit request (?images=1).
+        $showImages      = !empty($_GET['images']) && $_GET['images'] === '1';
+        $hasRemoteImages = $parsed['body_html'] !== '' && htmlHasRemoteImages($parsed['body_html']);
+        $safeHtml        = $parsed['body_html'] !== '' ? sanitizeHtml($parsed['body_html'], $showImages, $theme) : '';
 
         $emlData = [
             'subject'     => $parsed['subject'],
@@ -2938,6 +2967,8 @@ if ($action === 'preview_eml') {
             'body_html'   => $safeHtml,
             'body_text'   => $parsed['body_text'],
             'has_html'    => !empty($safeHtml),
+            'has_remote_images' => $hasRemoteImages,
+            'images_allowed'    => $showImages,
             'attachments' => $parsed['attachments'],
             'raw_headers' => $parsed['raw_headers'] ?? '',
             'auth_status' => EmailAuthAnalyzer::analyze($parsed['raw_headers'] ?? '', $parsed['from'] ?? ''),
@@ -2959,6 +2990,8 @@ if ($action === 'preview_eml') {
             'section'         => $section,
             'targetAccountId' => $targetAccountId,
             'fromUnified'     => $fromUnified,
+            'showImages'      => $showImages,
+            'hasRemoteImages' => $hasRemoteImages,
             'pageTitle'       => pageTitle('Preview .eml - ' . $parsed['subject']),
         ], true);
         exit;
